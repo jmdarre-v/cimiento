@@ -1,6 +1,7 @@
 // Vercel provider. Fills the hosting slot, and is the env store every secret with the hosting
 // sink lands in. The CLI owns login and deploy, the REST API owns projects, links and env vars.
 
+import { sameResource } from '../../core/state'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
@@ -483,7 +484,7 @@ async function ensureProject(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult
   const existing = await getProject(ctx, spec, name)
   if (existing) {
     return {
-      action: known ? 'noop' : 'adopted',
+      action: sameResource(known?.externalId, existing.id) ? 'noop' : 'adopted',
       externalId: existing.id,
       url: dashboardUrl(existing),
       outputs: projectOutputs(existing),

@@ -360,3 +360,7 @@ One line per decision the spec does not cover, with the reasoning.
   projects and organizations are "another project", Pro Org or Free Org. The GitHub handle
   jmdarre-v stays: it owns the public repository. This repository commits as
   190653303+jmdarre-v@users.noreply.github.com.
+- 2026-10-17 BUG-57: the GitHub repository, the Vercel project and the Turnstile widget compare
+  the id they find by name with the id state recorded; a different id, or none recorded, is
+  adopted, which replaces the record (new createdAt, no old outputs) so down never deletes it.
+  Deployments keep their noop, because their id changes with every deploy.

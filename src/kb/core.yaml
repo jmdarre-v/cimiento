@@ -106,6 +106,8 @@
     - "type the project name"
   hint: Run cimiento down in a terminal and type the project name when it asks, or pass --yes when you are sure.
   fix: down deletes real resources in real accounts, so it never runs on a single keypress. --yes skips the question for scripted cleanup such as field tests.
+  seen: Goal 4, 2026-10-17 (BUG-57). After the private repository was renamed and a new public one took its name, up kept the state entry as noop, with no origin, so down would have deleted the new public repository as one cimiento created. A repository, Vercel project or Turnstile widget found under the recorded name with a different id is now adopted, and down keeps it.
+
 
 - code: BILLING_APPROVAL_NEEDED
   provider: core

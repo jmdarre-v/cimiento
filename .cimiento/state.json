@@ -1,24 +1,25 @@
 {
   "version": 1,
-  "manifestHash": "24ee6fecc33901b5b5d83a55837f5eb1c27d5d867af762488d29911d8bb1b366",
+  "manifestHash": "223e66623d64f7462eb7b4715b010554e3ddf1e5a33e437feea616f85edf0c6e",
   "resources": {
     "github.check.repo": {
       "createdAt": "2026-09-22T00:30:54.124Z",
-      "verifiedAt": "2026-09-22T00:30:56.220Z"
+      "verifiedAt": "2026-10-17T23:45:31.799Z"
     },
     "github.repo": {
-      "createdAt": "2026-09-22T00:30:52.088Z",
-      "externalId": "R_EXAMPLEPRIVATEREPO",
+      "createdAt": "2026-10-17T23:45:30.615Z",
+      "origin": "adopted",
+      "externalId": "R_kgDOVN4WAw",
       "url": "https://github.com/jmdarre-v/cimiento",
       "outputs": {
         "fullName": "jmdarre-v/cimiento",
         "repoUrl": "https://github.com/jmdarre-v/cimiento",
         "cloneUrl": "https://github.com/jmdarre-v/cimiento.git",
         "defaultBranch": "main",
-        "nodeId": "R_EXAMPLEPRIVATEREPO",
-        "visibility": "PRIVATE"
+        "nodeId": "R_kgDOVN4WAw",
+        "visibility": "PUBLIC"
       },
-      "verifiedAt": "2026-09-22T00:30:54.123Z"
+      "verifiedAt": "2026-10-17T23:45:31.138Z"
     },
     "github.session": {
       "createdAt": "2026-09-22T00:30:48.096Z",
@@ -26,21 +27,22 @@
       "outputs": {
         "account": "jmdarre-v"
       },
-      "verifiedAt": "2026-09-22T00:30:49.934Z"
+      "verifiedAt": "2026-10-17T23:45:29.935Z"
     },
     "github.tool.gh": {
       "createdAt": "2026-09-22T00:30:46.120Z",
       "outputs": {
-        "version": "2.97.0"
+        "version": "2.97.0",
+        "latest": "2.102.0"
       },
-      "verifiedAt": "2026-09-22T00:30:46.158Z"
+      "verifiedAt": "2026-10-17T23:45:28.650Z"
     },
     "github.tool.git": {
       "createdAt": "2026-09-22T00:30:46.193Z",
       "outputs": {
         "version": "2.54.0"
       },
-      "verifiedAt": "2026-09-22T00:30:46.226Z"
+      "verifiedAt": "2026-10-17T23:45:28.697Z"
     }
   },
   "manualDone": []

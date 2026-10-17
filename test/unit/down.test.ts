@@ -179,3 +179,33 @@ describe('cimiento down', () => {
     expect(cloud.execCalls.filter((c) => c.startsWith('gh repo delete'))).toEqual([])
   })
 })
+
+describe('BUG-57: a different repository under the same name was kept as the one cimiento created', () => {
+  it('is adopted with its new id, and down keeps it', async () => {
+    useFakeTokens()
+    const root = tempDir()
+    const dir = join(root, 'my-app')
+    const configDir = tempDir('cimiento-config-')
+    process.env.CIMIENTO_CONFIG_DIR = configDir
+    try {
+      const cloud = new FakeCloud({ ghDeleteScope: true })
+      const writer = new CaptureWriter()
+      await run(['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], { io: cloud, cwd: root, writer, interactive: false, onManual: personDoesIt })
+      const state = () => JSON.parse(readFileSync(join(dir, '.cimiento', 'state.json'), 'utf8'))
+      expect(state().resources['github.repo'].origin).toBe('created')
+      // The repository is replaced by another one with the same name, as the public repository
+      // of cimiento itself replaced the private one in Goal 4.
+      const repo = cloud.repos.get('test-handle/my-app')!
+      repo.id = 'R_another_repository'
+      expect(await run(['up', '--json', '--yes'], { io: cloud, cwd: dir, writer: new CaptureWriter(), interactive: false })).toBe(ExitCode.ok)
+      expect(state().resources['github.repo']).toMatchObject({ externalId: 'R_another_repository', origin: 'adopted' })
+      const down = new CaptureWriter()
+      await run(['down', '--yes', '--json'], { io: cloud, cwd: dir, writer: down, interactive: false })
+      expect(cloud.repos.has('test-handle/my-app')).toBe(true)
+      expect((down.jsonObjects().pop() as { released: string[] }).released).toContain('github.repo')
+    } finally {
+      removeDir(root)
+      removeDir(configDir)
+    }
+  })
+})

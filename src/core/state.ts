@@ -112,9 +112,20 @@ export function writeProjectState(cwd: string, state: ProjectState): void {
 }
 
 /** Records the result of an ensure call. Secret outputs are dropped, never stored. */
+/**
+ * Whether the resource found by name is the one state recorded. A different id, or no id to
+ * compare, means cimiento cannot claim it, so it is adopted and down never deletes it (BUG-57).
+ */
+export function sameResource(recorded: string | undefined, found: string): boolean {
+  return recorded !== undefined && recorded === found
+}
+
 export function applyEnsureToState(state: ProjectState, spec: ResourceSpec, result: EnsureResult): ProjectState {
   const now = new Date().toISOString()
-  const previous = state.resources[spec.id]
+  const recorded = state.resources[spec.id]
+  // An adopted resource with another id replaces the record: its dates and outputs are not ours.
+  const replaced = result.action === 'adopted' && recorded?.externalId !== undefined && result.externalId !== undefined && recorded.externalId !== result.externalId
+  const previous = replaced ? undefined : recorded
   const entry: StateResource = {
     ...previous,
     createdAt: previous?.createdAt ?? now,

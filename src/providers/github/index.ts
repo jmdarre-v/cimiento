@@ -1,6 +1,7 @@
 // GitHub provider. Fills the repo slot. Everything goes through the gh CLI, which owns token
 // storage and gives structured output with --json.
 
+import { sameResource } from '../../core/state'
 import { githubLoginStep, githubSignupStep } from '../../core/person-steps'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
@@ -296,7 +297,8 @@ async function ensureRepo(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   if (existing) {
     await ensureLocalRemote(ctx, existing)
     return {
-      action: known ? 'noop' : 'adopted',
+      // Another repository answering to the same name is adopted, never taken for ours (BUG-57).
+      action: sameResource(known?.externalId, existing.id) ? 'noop' : 'adopted',
       externalId: existing.id,
       url: existing.url,
       outputs: repoOutputs(existing),

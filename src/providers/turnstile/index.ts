@@ -2,6 +2,7 @@
 // project. wrangler owns the Cloudflare login, the Cloudflare API owns the widget, and the site key
 // and secret key reach the hosting env through the hosting + turnstile wiring rule.
 
+import { sameResource } from '../../core/state'
 import { CimientoError } from '../../core/errors'
 import type { ProjectState } from '../../core/state'
 import {
@@ -456,7 +457,7 @@ async function ensureWidget(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult>
   const existing = await findWidget(ctx, spec, { withSecret: true })
   if (existing) {
     return {
-      action: known ? 'noop' : 'adopted',
+      action: sameResource(known?.externalId, existing.sitekey) ? 'noop' : 'adopted',
       externalId: existing.sitekey,
       url: dashboardUrl(ctx, spec, existing.sitekey),
       outputs: widgetOutputs(ctx, existing),

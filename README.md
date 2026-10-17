@@ -164,4 +164,4 @@ pnpm install && pnpm build && pnpm test
 | Resource | URL | Id |
 |---|---|---|
 | `github.session` |  | jmdarre-v |
-| `github.repo` | <https://github.com/jmdarre-v/cimiento> | R_EXAMPLEPRIVATEREPO |
+| `github.repo` | <https://github.com/jmdarre-v/cimiento> | R_kgDOVN4WAw |
