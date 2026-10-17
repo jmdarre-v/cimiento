@@ -99,3 +99,17 @@ describe('explain coverage', () => {
     }
   })
 })
+
+describe('docs/TROUBLESHOOTING.md', () => {
+  it('is generated from the knowledge base and up to date, with one section per code', async () => {
+    const { spawnSync } = await import('node:child_process')
+    const { readFileSync } = await import('node:fs')
+    const { join } = await import('node:path')
+    const root = join(__dirname, '../..')
+    const check = spawnSync('node', [join(root, 'scripts/troubleshooting.mjs'), '--check'], { encoding: 'utf8' })
+    expect(check.status, check.stderr).toBe(0)
+    const text = readFileSync(join(root, 'docs/TROUBLESHOOTING.md'), 'utf8')
+    for (const code of ERROR_CODES) expect(text, code).toContain(`### ${code}\n`)
+    expect(text).not.toContain(EM_DASH)
+  })
+})

@@ -6,46 +6,70 @@ them together, pushes secrets, deploys, and proves the result works.
 
 Everything runs on your machine with your own accounts. There is no hosted service.
 
-## Five minute quick start, expert path
+## Install
 
-You need macOS, Node 22 and a GitHub account. Everything else cimiento installs for you.
-
-```bash
-npm install -g cimiento
-```
-
-You do not need to log in to anything first. The first time cimiento needs GitHub, Vercel or
-Supabase, it opens that service's own login in your browser and waits while you approve it. You
-never type a password or paste a token into cimiento.
-
-Create a project. `--preset fullstack` selects GitHub for the repository, Vercel for hosting, and
-Supabase for the database and auth through the Vercel Marketplace.
+On a Mac, one line installs Homebrew if it is missing, then git, node, pnpm, gh, vercel,
+supabase, Claude Code and cimiento, and logs you in to Claude Code at the end:
 
 ```bash
-cimiento new my-app --preset fullstack
+curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/install.sh | bash
 ```
 
-cimiento asks where to keep projects the first time, prints a plan, waits for one confirmation,
-asks which Vercel team to use if you have more than one, and stops once at the Vercel Marketplace
-page, which it opens for you, because only a person can accept terms. When it finishes
-it prints the production URL and a receipt for every resource it touched.
+It skips whatever is already installed and ends with a table of every tool. Claude Code needs a
+Claude Pro or Max plan. If you already have Node 22, `npm install -g cimiento` installs cimiento
+alone.
 
-Check the environment at any time. It re-probes reality, it does not trust the state file.
+## Guided path, for a first project
+
+```bash
+cimiento new my-site --guided --lang es --preset designer
+```
+
+cimiento asks one question at a time, in Spanish here or in English without `--lang es`. It
+explains each step a person has to do before asking for it, lists all of them first, and then
+says the rest runs on its own. Each step gives the full link, the clicks in order, each field and
+its value, the button and what you will see when it worked; you press Enter to open the page and
+Enter when you are done, and cimiento checks it. If you have no GitHub or Vercel account yet, it
+walks you through creating one.
+
+The designer preset makes a website on GitHub and Vercel with a `design/` folder for Claude
+Design exports. When you change the site:
+
+```bash
+cimiento publish
+```
+
+It commits your changes, pushes them, waits for Vercel to deploy them and prints the address.
+
+## Expert path
+
+```bash
+cimiento new my-app --preset fullstack --allow-billing
+```
+
+`--preset fullstack` selects GitHub, Vercel, Supabase, Inngest, Turnstile and Anthropic. cimiento
+asks for the logins and account choices before it prints the plan, so every billing line names
+who pays and on which plan, then waits for one confirmation and runs the rest unattended. It ends
+with the production URL and a receipt for every resource it touched.
 
 ```bash
 cimiento doctor
 ```
 
-Pull the environment variables for local development. This is the only place secrets touch disk,
-and the file is gitignored.
+`doctor` re-probes reality instead of trusting the state file. Every command takes `--json` for
+agents and scripts. Pull the environment variables for local work with `cimiento env pull`, the
+only place secrets touch disk, in a gitignored file, and start everything locally with
+`cimiento dev`.
 
-```bash
-cimiento env pull
+## Claude Code plugin
+
+```
+/plugin marketplace add jmdarre-v/cimiento
+/plugin install cimiento@cimiento
 ```
 
-```bash
-pnpm dev
-```
+Skills `/cimiento:setup`, `/cimiento:new-project`, `/cimiento:explain` and `/cimiento:secrets`,
+and a hook that blocks Claude from reading, searching or printing `.env` files.
 
 ## What it made
 
@@ -68,8 +92,13 @@ works, and `cimiento doctor` will tell you about it the next time you run it.
 | `cimiento env print` | Non secret outputs and URLs |
 | `cimiento secret set NAME` | Hidden prompt, then push to every declared destination |
 | `cimiento secret check` | Prove every declared secret exists, without printing one |
+| `cimiento join` | On a fresh clone: tools, logins, access, env pull and checks |
+| `cimiento dev` | Local database, jobs dev server and app on fixed ports, one Ctrl+C |
+| `cimiento publish` | Commit every change, push, wait for the deploy, print the URL |
+| `cimiento secret rotate NAME` | A new value, written over every destination |
+| `cimiento secret remove NAME` | Take a secret out of the project and every destination |
 | `cimiento down` | Delete everything in state, after you type the project name back |
-| `cimiento accounts set <provider>` | Pick the GitHub account, Vercel team or Supabase organization again |
+| `cimiento accounts set <provider>` | Pick the GitHub account, Vercel team, Supabase organization or Cloudflare account again |
 | `cimiento explain <id>` | Plain language for a resource or an error, `--lang es` |
 
 Every command takes `--json`. Exit codes are 0 ok, 1 failed, 2 needs human, 3 blocked.
@@ -120,28 +149,6 @@ scaffold:
 `accounts` pins which account each provider must be logged in as. A session for a different
 account stops the run instead of deploying your project somewhere you did not mean.
 
-## Guided path
-
-```bash
-bash scripts/install.sh
-cimiento new --guided --lang es
-```
-
-`scripts/install.sh` installs Homebrew when it is missing (it asks for the Mac password once),
-then git, node, pnpm, gh, vercel, supabase, Claude Code and cimiento, skipping whatever is already
-there, and ends with a table. `--guided` asks one question at a time, explains
-every step a person has to do before it, and ends every failure with one next command.
-
-## Claude Code plugin
-
-```
-/plugin marketplace add jmdarre-v/cimiento
-/plugin install cimiento@cimiento
-```
-
-Skills `/cimiento:setup`, `/cimiento:new-project`, `/cimiento:explain` and `/cimiento:secrets`,
-and a hook that blocks Claude from reading, searching or printing `.env` files.
-
 ## What is in this release
 
 Providers: GitHub, Vercel, Supabase (both `via-hosting` and `direct`), Inngest, Turnstile and
@@ -154,6 +161,8 @@ and the Claude Code plugin.
 
 `docs/SPEC.md` is the source of truth. `docs/GOALS.md` has the goals and their acceptance
 criteria, and `docs/DECISIONS.md` records anything the spec did not cover.
+`docs/TROUBLESHOOTING.md` lists every error and what to do about it, and `CHANGELOG.md` what
+each release brought.
 
 ```bash
 pnpm install && pnpm build && pnpm test
