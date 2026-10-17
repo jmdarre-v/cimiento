@@ -1,0 +1,26 @@
+- code: TURNSTILE_API_ERROR
+  provider: turnstile
+  title: the Cloudflare API refused a Turnstile request
+  signatures:
+    - "Cloudflare answered"
+    - "does not allow"
+  hint: Run cimiento up again; it retries safely and finds the widget by name. The message carries the Cloudflare error.
+  fix: cimiento reads its Cloudflare token from the wrangler login, so a refused call is usually a missing permission (cimiento up logs in again asking for it) or a Cloudflare outage. A widget whose domains miss the production host is updated by up.
+
+- code: TURNSTILE_WIDGET_NOT_FOUND
+  provider: turnstile
+  title: the Turnstile widget of this project is gone
+  signatures:
+    - "No Turnstile widget named"
+  hint: Run cimiento up. It creates the widget again and rewrites both keys in the hosting env.
+  fix: The widget is found by the sitekey in state, or by the project slug as its name. A widget deleted in the Cloudflare dashboard is created again; the old keys stop working, which is why up rewrites them.
+
+- code: TURNSTILE_SECRET_REJECTED
+  provider: turnstile
+  title: siteverify does not accept the secret key
+  signatures:
+    - "did not accept the secret key"
+    - "could not read the secret key"
+  hint: Run cimiento up. It reads the widget again and rewrites the keys, then cimiento doctor repeats the check.
+  fix: bot_protection.verify sends a dummy token with the secret key. Cloudflare answers invalid-input-response for a good key and invalid-input-secret for a bad one, so only a live key passes.
+  seen: Field test 2, 2026-10-17 (BUG-49). The receipt for this check showed the widget as ****, because the public site key was registered with the redactor when it was written to the Vercel env. A binding marked public is no longer masked; the secret key still is.

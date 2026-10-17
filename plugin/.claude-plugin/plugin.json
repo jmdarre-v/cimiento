@@ -1,0 +1,8 @@
+{
+  "name": "cimiento",
+  "description": "Drive cimiento from Claude Code: set up and repair a project environment, start a new project, explain any step or error, and keep secrets out of the chat.",
+  "author": { "name": "jmdarre-v" },
+  "repository": "https://github.com/jmdarre-v/cimiento",
+  "license": "UNLICENSED",
+  "keywords": ["setup", "vercel", "supabase", "github", "secrets"]
+}

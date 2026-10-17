@@ -1,0 +1,43 @@
+# cimiento manifest. The only file you edit by hand.
+# Values for secrets never live here, only their names and destinations.
+version: 1
+name: cimiento
+slug: cimiento
+slots:
+  repo: github
+  hosting: none
+  database: none
+  auth: none
+  jobs: none
+  bot_protection: none
+  email: none
+  payments: none
+  analytics: none
+  ai: none
+accounts:
+  github: jmdarre-v
+  supabase: via-hosting
+environments:
+  - dev
+  - preview
+  - production
+options:
+  github:
+    visibility: public
+    defaultBranch: main
+    description: ""
+  vercel:
+    plan: hobby
+    deployment_protection: standard
+    framework: nextjs
+  supabase:
+    region: us-east-1
+    migrations: supabase/migrations
+  turnstile:
+    mode: managed
+secrets: []
+domain: null
+scaffold:
+  template: none
+  claude_md: true
+  ci: false

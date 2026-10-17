@@ -1,0 +1,16 @@
+- code: ANTHROPIC_KEY_INVALID
+  provider: anthropic
+  title: the Anthropic API refused the key
+  signatures:
+    - "api.anthropic.com refused"
+    - "authentication_error"
+  hint: Create a new key in the Anthropic Console, then run cimiento secret rotate ANTHROPIC_API_KEY in a terminal.
+  fix: The check calls GET /v1/models, which is read only and free. A 401 means the key is wrong or revoked; rotate replaces it in the keychain and in every hosting environment at once, and up deploys again so the app reads it.
+
+- code: ANTHROPIC_API_ERROR
+  provider: anthropic
+  title: the Anthropic API answered with an error that is not about the key
+  signatures:
+    - "to a read only call"
+  hint: Run cimiento doctor again. A billing error needs credit added in the Anthropic Console first.
+  fix: Anything but a 401 or 403 is either billing (402, add credit) or the service itself (429 or 5xx, retry later). The key is fine in both cases.

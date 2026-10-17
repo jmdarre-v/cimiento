@@ -1,0 +1,112 @@
+- code: SUPABASE_TOKEN_MISSING
+  provider: supabase
+  title: no Supabase access token for the API
+  signatures:
+    - "could not find a Supabase access token"
+    - "found no Supabase login"
+  hint: cimiento up opens the Supabase login in your browser. On a machine with no browser, set SUPABASE_ACCESS_TOKEN in the environment.
+  fix: Supabase CLI v2 keeps its login in the macOS Keychain, service Supabase CLI, account supabase. cimiento reads it from there, then from the old token file, then from the environment. It never asks you to paste a token into chat.
+  seen: Goal 1 Part A, 2026-09-25. The machine was logged in through the Keychain, cimiento only looked for the token file, so it reported no session and started a second login that then failed.
+
+- code: SUPABASE_API_ERROR
+  provider: supabase
+  title: Supabase returned an unexpected error
+  signatures:
+    - "Supabase answered"
+    - "is INACTIVE"
+    - "is PAUSED"
+  hint: Read the Supabase message in the error, then run cimiento doctor --json.
+  fix: A free tier project pauses after a week without traffic. Restore it from the dashboard before running up again.
+
+- code: SUPABASE_PROJECT_CREATE_FAILED
+  provider: supabase
+  title: Supabase refused to create the project
+  signatures:
+    - "Creating the Supabase project"
+    - "free plan"
+    - "project limit"
+  hint: The Supabase message in the error says why. cimiento up retries safely once that is fixed.
+  fix: The free project limit has its own code, SUPABASE_FREE_PROJECT_LIMIT. This one covers every other refusal.
+
+- code: SUPABASE_PROJECT_NOT_FOUND
+  provider: supabase
+  title: no Supabase project with this name
+  signatures:
+    - "No Supabase project named"
+    - "no Supabase project named"
+  hint: On the direct path run cimiento up. On the via-hosting path finish the Vercel Marketplace step first.
+  fix: With accounts.supabase set to via-hosting, the Vercel Marketplace creates the project and names it after the Vercel project. If the names differ, set accounts.supabase to direct.
+
+- code: SUPABASE_ORG_MISSING
+  provider: supabase
+  title: cimiento cannot pick a Supabase organization
+  signatures:
+    - "has no organization"
+    - "organizations, so cimiento cannot pick"
+  hint: Set options.supabase.organization_id in stack.yaml to the organization you want.
+  fix: With exactly one organization cimiento uses it. With none or several it refuses to guess, because the choice decides who pays.
+
+- code: SUPABASE_MIGRATION_FAILED
+  provider: supabase
+  title: the migrations did not apply
+  signatures:
+    - "supabase db push failed"
+    - "supabase link"
+    - "could not read the migration history"
+  hint: cimiento up applies the migrations again and shows the message Postgres gives back.
+  fix: The message comes from Postgres, not from cimiento. The usual causes are a syntax error in a migration file or a migration that assumes a table an earlier one never created. cimiento applies migrations through the Management API, which records each one by name, so no database password is needed.
+  seen: Goal 1 attended run, 2026-09-25. supabase.check.migrated passed with no migration files at all, proving nothing. The nextjs-app scaffold now ships a baseline migration, up writes it into projects scaffolded before it existed, and the check fails without migrations, requires every file in the history, and queries the table the baseline creates.
+
+- code: SUPABASE_AUTH_URL_FAILED
+  provider: supabase
+  title: the Supabase Site URL does not match production
+  signatures:
+    - "Supabase Site URL is"
+    - "Setting the Supabase Site URL"
+  hint: Run cimiento up to set it, or set it by hand under Authentication, URL Configuration.
+  fix: When the Site URL drifts from the production URL, sign in links and password resets send real users to the wrong address, and nothing in the application logs an error.
+
+- code: SUPABASE_DUPLICATE_REFUSED
+  provider: supabase
+  title: the hosting env already points at a database this login cannot see
+  signatures:
+    - "will not create a second database"
+  hint: Run cimiento up in a terminal. It asks you to give this Supabase login access to the organization that holds the database, then adopts it.
+  fix: The database a project uses is the one its hosting env points at. cimiento reads the ref from SUPABASE_URL in the Vercel env, adopts that database whatever its name, and while the env points at a database it cannot see, it plans needs-human instead of create. It never creates a second database.
+  seen: Goal 1 Part B, 2026-09-25. The Marketplace Install created a database named after another project in another organization. cimiento looked for one named cimiento-test-1, found none, and planned to create a second database next to it.
+
+- code: SUPABASE_ADOPTION_CONFIRMATION_NEEDED
+  provider: supabase
+  title: the hosting env points at a database older than the project
+  signatures:
+    - "does not adopt an older database"
+  hint: Run cimiento up in a terminal and answer yes only if that database belongs to this project. Otherwise disconnect it from the hosting project and cimiento creates a new one.
+  fix: Adopting a database lets cimiento change its Auth URLs, and it used to let down delete it. An older database found through the hosting env now needs a person's yes, adopted resources are recorded with origin adopted in state, and down never deletes an adopted resource.
+  seen: Goal 1 Part B, 2026-09-25. Link Existing Supabase Account connected another project's database, created 2026-01-25 for another purpose, to cimiento-test-1. The plan was to adopt it, re-point its Auth URLs and later delete it with down. Caught by checking its creation date before running up.
+
+- code: SUPABASE_KEYS_MISSING
+  provider: supabase
+  title: the Supabase keys never reached the hosting environment
+  signatures:
+    - "No Supabase URL or key is present"
+  hint: Run cimiento up, which installs the Supabase integration from the Vercel Marketplace.
+  fix: On the via-hosting path the keys arrive by themselves after the integration is installed. If they do not, switch accounts.supabase to direct and let cimiento push them.
+  seen: Goal 1 Part A, 2026-09-25, found in review. The install ran vercel install supabase with vendor defaults, which name the database at random, so cimiento could not find it by name, and pull env into .env.local. It now runs integration add supabase --name with the slug and --no-env-pull, after linking the folder explicitly.
+
+- code: SUPABASE_FREE_PROJECT_LIMIT
+  provider: supabase
+  title: the person already has two active free Supabase projects
+  signatures:
+    - "maximum limits for the number of active free projects"
+  hint: Free a slot by pausing or deleting a project in the Supabase dashboard, or run cimiento accounts set supabase and pick a paid-plan or new organization, then run cimiento up again.
+  fix: The limit is two active free projects per person, counted across every organization they own or administer, not per organization. In a terminal cimiento lists the projects that count with their last API request, and offers two choices, freeing a slot in the dashboard or using a paid-plan or new organization, then checks again on Enter and continues. cimiento never pauses or deletes a project it did not create. Without a terminal it stops with exit code 2 and the same list.
+  seen: Goal 1 Part B, 2026-09-25. Creating cimiento-test-1 in a free organization was refused because two databases of other projects were active. The old hint said the limit was per organization, which is wrong.
+
+- code: SUPABASE_CONFIGURATION_CHOICE_NEEDED
+  provider: vercel
+  title: a Supabase Marketplace configuration on the team already serves other projects
+  signatures:
+    - "vercel integration add would put the"
+  hint: Run cimiento up in a terminal. Before the plan it shows the configuration with the databases and projects it serves, and asks whether to reuse it or create the database directly in the organization stack.yaml pins.
+  fix: vercel integration add supabase takes the first Marketplace configuration on the team without asking, so a new database lands in that configuration's Vercel-managed organization whatever stack.yaml pins. Reusing it is recorded as options.supabase.marketplace_configuration; choosing the direct path sets accounts.supabase to direct. Either way down deletes only the database cimiento created, through its Marketplace resource, and never uninstalls a configuration.
+  seen: Field test 2, 2026-10-17 (BUG-46). The cimiento-test-2 database example-db-test-2 landed in organization vercel_icfg_EXAMPLESHARED through configuration icfg_EXAMPLESHARED, which already served another project, although the person had picked a new organization.

@@ -1,0 +1,146 @@
+- code: MANIFEST_INVALID
+  provider: core
+  title: stack.yaml does not pass validation
+  signatures:
+    - "is not valid"
+    - "Unrecognized key"
+  hint: Fix every field the message lists, then run cimiento plan again.
+  fix: Compare stack.yaml with docs/SPEC.md section 4. The message names each field and the rule it broke.
+
+- code: MANIFEST_NOT_FOUND
+  provider: core
+  title: no stack.yaml in this folder
+  signatures:
+    - "No stack.yaml in"
+  hint: Run cimiento init here, or cimiento new <name> to create a project folder.
+  fix: cimiento only manages folders that declare what they need. init writes the declaration without touching your code.
+
+- code: MANIFEST_UNKNOWN_PROVIDER
+  provider: core
+  title: a slot names a provider this build does not ship
+  signatures:
+    - "No provider module named"
+  hint: Set that slot to none in stack.yaml, or upgrade cimiento.
+  fix: This build ships github, vercel, supabase, inngest, turnstile and anthropic. resend, stripe and posthog arrive in a later release.
+
+- code: PLAN_CYCLE
+  provider: core
+  title: two steps wait on each other
+  signatures:
+    - "Dependency cycle"
+  hint: This is a bug in cimiento. Run cimiento plan --json and open an issue with the output.
+  fix: Nothing to do in your project. The dependency graph a provider or wiring rule declares has a loop in it.
+
+- code: PLAN_UNKNOWN_DEPENDENCY
+  provider: core
+  title: a step waits on something nothing produces
+  signatures:
+    - "which no provider or wiring rule produces"
+  hint: This is a bug in cimiento. Run cimiento plan --json and open an issue with the output.
+  fix: Nothing to do in your project. A provider declared a dependency on a resource id that is never emitted.
+  seen: Goal 1 Part B, 2026-09-25. --only and --skip raised this whenever a kept step waited on a step of a filtered provider. Filtering now keeps the order among the kept steps and reads the filtered provider's values from state.
+
+- code: DEFERRED_UNRESOLVED
+  provider: core
+  title: a value that only exists after an earlier step
+  signatures:
+    - "needs values that do not exist yet"
+  hint: Run cimiento up so the earlier step produces the value, then run the command again.
+  fix: The production URL exists only after the first deployment, and the Supabase keys only after the project is created. plan shows these as blocked, which is correct, not an error.
+
+- code: STATE_UNREADABLE
+  provider: core
+  title: the state file is damaged
+  signatures:
+    - "Could not read"
+  hint: Delete the state file and run cimiento plan again.
+  fix: State is rebuilt by adoption. Everything that already exists is found by name and re-recorded, nothing is created twice.
+
+- code: STATE_VERSION_UNSUPPORTED
+  provider: core
+  title: the state file comes from a newer cimiento
+  signatures:
+    - "this build understands version"
+  hint: Upgrade cimiento, or delete the state file and let plan rebuild it.
+  fix: Install the latest cimiento with npm install -g cimiento@latest, then run the same command again.
+
+- code: SCAFFOLD_TARGET_EXISTS
+  provider: scaffold
+  title: the target folder is not empty
+  signatures:
+    - "already exists and is not empty"
+  hint: Pick another name, or run cimiento init inside the folder you already have.
+  fix: cimiento never writes over existing work. init adds stack.yaml to a project that is already started.
+
+- code: SCAFFOLD_TEMPLATE_UNKNOWN
+  provider: scaffold
+  title: no such starter template
+  signatures:
+    - "No template named"
+  hint: Use scaffold.template nextjs-app, designer-site, or none.
+  fix: nextjs-app is the full app starter, designer-site is a site with a design/ folder for Claude Design exports, and none leaves your own code untouched.
+
+- code: CHECK_FAILED
+  provider: core
+  title: a probe came back negative
+  signatures:
+    - "did not verify"
+    - "cimiento expects 200"
+  hint: Run cimiento doctor --json to see which item failed, then cimiento explain <resource>.
+  fix: A check proves function, not existence. The message names the thing that could not be proved.
+
+- code: MANUAL_STEP_PENDING
+  provider: core
+  title: a step only a person can do
+  signatures:
+    - "has not been confirmed yet"
+    - "still does not look done"
+  hint: Run cimiento up in a terminal. It opens the page in your browser, waits for Enter, then checks the step really is done.
+  fix: Accepting vendor terms and approving an integration cannot be automated. cimiento opens the page, waits, and proves the result with a probe before it continues. A step that already verifies is never asked for, and a step still waiting is asked once per run, not once per pass.
+  seen: Goal 3 close, 2026-10-17 (BUG-54). The plugin new-project skill could not run cimiento new, so it could not start the person steps either. It may now run cimiento new and cimiento up and open each step page, and it hands logins and secrets to the person terminal. Goal 3 close, 2026-10-17 (BUG-51 to 53). Account choices listed Name and Plan as fields although their pages have nothing to fill in; the GitHub step for Vercel carried two pages in one step; and the walk printed Press Enter to open it twice, once in the block and once as the prompt. Choices now list no fields, each page is its own step asked in turn in the same run, and the prompts alone say each Enter. Field test 2, 2026-10-17 (BUG-42). Person steps were spread through the run, so the person had to stay for all of it. An attended up now lists every person step first, runs them all before anything unattended, and then says the rest is unattended with an estimate in minutes. Field test 2, 2026-10-17 (BUG-41). Person steps were a sentence or two each, with links to copy by hand and the page opened before the person had read what to do. Every step (logins for Vercel, GitHub, Supabase and Cloudflare, the Vercel team, Supabase organization and Cloudflare account choices, the free limit, the Marketplace, GitHub access, the Inngest integration and every secret prompt) is now one PersonStep, in English and Spanish, with the full clickable link, Enter to open it, the clicks in order, each field with its value, the button, what success looks like, and Enter when done before the verify. Field test 2, 2026-10-17. The first unattended run of cimiento new cimiento-test-2 said cimiento had opened the Inngest and Marketplace pages in the browser, in a run with no terminal that opened nothing, and named the Vercel team by its id. Goal 1 Part B, 2026-09-25. The re-run of up in cimiento-test-1 reported each pending session twice, one per executor pass, which in a terminal would have repeated the question. The attended run then printed the Marketplace instructions twice, once from the event and once from the logger, and doctor failed the same step that plan showed as done because doctor never ran its verify.
+
+- code: DOWN_CONFIRMATION_NEEDED
+  provider: core
+  title: cimiento down needs the project name typed back
+  signatures:
+    - "type the project name"
+  hint: Run cimiento down in a terminal and type the project name when it asks, or pass --yes when you are sure.
+  fix: down deletes real resources in real accounts, so it never runs on a single keypress. --yes skips the question for scripted cleanup such as field tests.
+
+- code: BILLING_APPROVAL_NEEDED
+  provider: core
+  title: the plan creates billable resources nobody approved
+  signatures:
+    - "can cost money"
+    - "bills to"
+  hint: Approve with --allow-billing, or run cimiento up in a terminal and answer the question.
+  fix: Each billable item gets one warning naming the account or organization it bills to and that account's plan, with an explicit note when the plan is paid. The same database is one item, not two.
+  seen: Field test 2, 2026-10-17 (BUG-44). The Supabase organization was asked after the plan was printed, so the billing line could not name it. Logins and account choices now come before the plan. Goal 1 Part B, 2026-09-25. plan printed every billing warning twice in two phrasings, counted the Marketplace install and the database it creates as two billable things, and never said whose account would pay. Then, with --allow-billing already on the command line, the warning still told the person to approve with --allow-billing; it now says the item is approved for this run.
+
+- code: DOWN_LEFTOVER
+  provider: core
+  title: down left something it created but cannot delete
+  signatures:
+    - "cannot delete organizations"
+    - "cannot delete or archive apps"
+  hint: Delete it at the dashboard link down prints, when you no longer need it.
+  fix: The Supabase Management API has no way to delete an organization, so down lists an organization cimiento created as a leftover with its dashboard link, keeps the record in state, and drops it once the organization is gone. The Inngest API cannot delete or archive an app either, so down lists the Inngest app in the run that removes its endpoint.
+  seen: Goal 1 Part B, 2026-09-25. With organization creation offered in the account and free limit steps, down needed to account for organizations cimiento created. In the Goal 1 cleanup, down said nothing about the organization while the repository was waiting on the delete_repo permission; leftovers are now listed in every run.
+
+- code: DEV_SERVICE_FAILED
+  provider: core
+  title: cimiento dev could not start a local service
+  signatures:
+    - "Docker is not running"
+    - "stopped on its own"
+    - "supabase start failed"
+  hint: Read the line above it, which names the service. For the local database, Docker Desktop has to be running; cimiento dev opens it on a Mac and waits.
+  fix: cimiento dev runs the local Supabase database on Docker, the Inngest dev server on port 8288 and the app on port 3000. When one stops, it stops the others so nothing is left running in the background.
+
+- code: JOIN_NO_STATE
+  provider: core
+  title: there is nothing in this folder to join
+  signatures:
+    - "has no .cimiento/state.json"
+  hint: Pull the latest commit of the repository, which carries .cimiento/state.json. If the project was never set up, run cimiento up instead.
+  fix: join connects a new machine to resources that already exist, and state is the list of them. Without it there is nothing to verify; up is the command that creates them.

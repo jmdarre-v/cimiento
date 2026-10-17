@@ -1,0 +1,30 @@
+- code: INNGEST_KEYS_MISSING
+  provider: inngest
+  title: the Inngest keys are not where the app reads them
+  signatures:
+    - "could not read INNGEST_EVENT_KEY"
+    - "is live but reports"
+  hint: Run cimiento up in a terminal. It checks the Inngest integration, asks you to approve it if needed, and deploys again once the keys are in the env.
+  seen: Field test 2, 2026-10-17 (BUG-45). The integration step did not say whether to pick Create New or Link Existing Inngest Account. A team without the integration is now told Create New Inngest Account, which Vercel manages and bills; a team that has it only adds the project, with no account choice.
+  fix: The Inngest Vercel integration puts INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY into the project. A deployment built before that has neither, and up deploys again whenever the env is newer than the live deployment.
+
+- code: INNGEST_ENDPOINT_UNREACHABLE
+  provider: inngest
+  title: Inngest cannot reach /api/inngest on the production address
+  signatures:
+    - "deployment protection is keeping Inngest out"
+    - "/api/inngest answered"
+  hint: Keep options.vercel.deployment_protection at standard, which leaves production public, and keep app/api/inngest/route.ts in the app. Then run cimiento up.
+  fix: Inngest calls the app at its production address. Standard protection on Vercel guards previews only, so production stays reachable; stricter protection blocks Inngest unless a bypass is configured, which v1 does not do.
+  seen: Field test 2, 2026-10-17 (BUG-48). https://cimiento-test-2.vercel.app/api/inngest answered 401 with x-inngest-sdk-handled true, and cimiento blamed Vercel deployment protection. inngest 3.54 refuses unsigned introspection in cloud mode; cimiento now signs the GET with the signing key from the Vercel env and reports an SDK refusal as a key problem.
+
+
+- code: INNGEST_ROUNDTRIP_FAILED
+  provider: inngest
+  title: an event reached Inngest but no run completed
+  signatures:
+    - "no run completed within"
+    - "did not accept the cimiento/roundtrip event"
+    - "ended Failed"
+  hint: Run cimiento up, which registers the app with Inngest again, then cimiento doctor to repeat the check.
+  fix: jobs.roundtrip sends cimiento/roundtrip with the event key, waits for the cimiento-roundtrip function to run, and asks the Inngest API with the signing key for the run status. The app must be synced in Inngest with that function, which the scaffold ships.

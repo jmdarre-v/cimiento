@@ -1,0 +1,111 @@
+- code: VERCEL_TOKEN_MISSING
+  provider: vercel
+  title: no Vercel token for the API
+  signatures:
+    - "could not find a Vercel token"
+  hint: cimiento up opens the Vercel login in your browser. On a machine with no browser, set VERCEL_TOKEN in the environment.
+  fix: cimiento reads the token the Vercel CLI stores after a browser login. It never asks you to paste one into chat.
+
+- code: VERCEL_API_ERROR
+  provider: vercel
+  title: Vercel returned an unexpected error
+  signatures:
+    - "Vercel answered"
+  hint: Read the Vercel message in the error, then run cimiento doctor --json.
+  fix: A 403 almost always means the login belongs to a different team than accounts.vercel in stack.yaml.
+
+- code: VERCEL_PROJECT_CREATE_FAILED
+  provider: vercel
+  title: Vercel refused to create the project
+  signatures:
+    - "Creating the Vercel project"
+    - "A project with the provided name already exists"
+  hint: Pick another name in stack.yaml, or check accounts.vercel points at a team you belong to.
+  fix: Project names are unique per team. cimiento adopts a project it can see, so a name that is taken but invisible belongs to another team.
+
+- code: VERCEL_PROJECT_NOT_FOUND
+  provider: vercel
+  title: no Vercel project with this name
+  signatures:
+    - "No Vercel project named"
+  hint: Run cimiento up to create it, or fix accounts.vercel in stack.yaml.
+  fix: With no accounts.vercel, cimiento looks in your personal scope. A project that lives in a team is invisible from there.
+
+- code: VERCEL_GIT_LINK_FAILED
+  provider: vercel
+  title: the project is not connected to the repository
+  signatures:
+    - "Linking the Vercel project"
+    - "points at no repository"
+    - "To link a GitHub repository"
+  hint: Vercel's GitHub app cannot see this repository yet. Give it access at https://github.com/apps/vercel, then cimiento up continues.
+  fix: Vercel can only connect to repositories its GitHub app can see. On a personal account the app often has access to selected repositories only.
+  docsUrl: https://vercel.com/docs/deployments/git
+
+- code: VERCEL_ENV_WRITE_FAILED
+  provider: vercel
+  title: writing an environment variable failed
+  signatures:
+    - "Writing"
+    - "to the production environment of the Vercel project failed"
+  hint: Run cimiento secret set NAME again, or add it by hand in the Vercel project settings.
+  fix: Only the name is ever printed. The value is masked in every log line and in json output.
+
+- code: VERCEL_DEPLOY_FAILED
+  provider: vercel
+  title: the deployment did not finish
+  signatures:
+    - "vercel deploy --prod failed"
+    - "Build failed"
+  hint: Open the build log the message links to.
+  fix: A failing build is almost always an application error. Run the build locally first with pnpm build.
+  seen: Goal 1 Part B, 2026-09-25, found in review before the real run. vercel deploy waits for the build and ran under the 120 second exec timeout, which would have killed a first Next.js build. It now has 15 minutes.
+
+- code: VERCEL_DEPLOYMENT_NOT_READY
+  provider: vercel
+  title: no ready production deployment
+  signatures:
+    - "No production deployment exists"
+    - "is BUILDING"
+    - "is QUEUED"
+  hint: Wait for the build to finish, then run cimiento doctor again.
+  fix: A first build on a cold project can take a couple of minutes. doctor is safe to run repeatedly.
+
+- code: VERCEL_PLAN_REQUIRED
+  provider: vercel
+  title: this needs a paid Vercel plan
+  signatures:
+    - "requires a Pro plan"
+    - "not available on the Hobby plan"
+  hint: Set options.vercel.plan to hobby in stack.yaml, or upgrade the account.
+  fix: Team projects and the stricter deployment protection settings are paid features.
+
+- code: VERCEL_MARKETPLACE_TERMS_PENDING
+  provider: vercel
+  title: the Marketplace terms have not been accepted
+  signatures:
+    - "marketplace"
+    - "terms"
+    - "must accept"
+  hint: Run cimiento up in a terminal. It opens the Supabase page of the Vercel Marketplace and waits while you install it.
+  fix: Once per Vercel team. cimiento opens the page, waits for Enter, then proves the step by finding the Supabase integration installed on the team, instead of taking the person's word for it.
+  seen: Goal 1 Part A, 2026-09-25. The manual step verified as ok whenever the person pressed Enter, with no probe behind it. Goal 1 Part B, 2026-09-25. The instructions did not mention the Install dialog choice between Create New Supabase Account and Link Existing Supabase Account; they now say Link Existing and name the organization to grant when a Supabase login and a pinned organization exist, and Create New otherwise.
+
+- code: VERCEL_GITHUB_CONNECTION_NEEDED
+  provider: vercel
+  title: the Vercel account has no GitHub Login Connection
+  signatures:
+    - "add a Login Connection to your GitHub account"
+  hint: Connect GitHub under Login Connections at https://vercel.com/account/authentication, then run cimiento up again.
+  fix: Linking a Vercel project to a repository goes through the person's own GitHub connection on Vercel, separate from the Vercel GitHub app. It is a one time browser step per Vercel account.
+  seen: Goal 1 Part B, 2026-09-25. Linking cimiento-test-1 failed with Vercel 400 asking for a Login Connection. The old hint pointed at the GitHub app page, which does not fix it.
+
+- code: VERCEL_GITHUB_ACCESS_NEEDED
+  provider: vercel
+  title: Vercel cannot see the private repository yet
+  signatures:
+    - "cannot link"
+    - "install the GitHub integration first"
+  hint: Run cimiento up in a terminal. It opens the page for what is missing, explains both requirements with their links, and waits for Enter.
+  fix: Linking a private repository needs a GitHub Login Connection on the Vercel account and the Vercel GitHub app installed with access to that repository. cimiento checks both before trying, through the endpoints the Vercel import screen uses, asks for whatever is missing in one person step, recommends Only select repositories with this repository added, then verifies and continues.
+  seen: Goal 3 close, 2026-10-17 (BUG-52). With no GitHub Login Connection, one step named both the Vercel connections page and the GitHub app page. They are now two steps, vercel.github-connection then vercel.github-access, asked one after the other in the same run. Goal 1 attended run, 2026-09-25. cimiento found the missing Login Connection and the missing app access one link attempt at a time, each reported as a failure telling the person to run cimiento up again.

@@ -1,0 +1,52 @@
+- code: GITHUB_REPO_CREATE_FAILED
+  provider: github
+  title: gh repo create failed
+  signatures:
+    - "gh repo create"
+    - "GraphQL: Resource not accessible"
+    - "Author identity unknown"
+    - "first commit of the scaffold failed"
+  hint: cimiento doctor shows which account gh is logged in as and whether it can create repositories.
+  fix: For an organization, an owner may have to approve repository creation. A personal account needs the repo scope, which the cimiento login asks for.
+  docsUrl: https://cli.github.com/manual/gh_repo_create
+  seen: Goal 3, 2026-10-17, found before the fresh-machine test. A new Mac account has no git identity, so the scaffold commit would fail unnoticed and gh would push without a credential helper. cimiento now commits as the GitHub login with its noreply address when git has no identity, checks the commit, and runs gh auth setup-git before the first push.
+
+
+- code: GITHUB_REPO_NOT_FOUND
+  provider: github
+  title: the repository is not visible to this account
+  signatures:
+    - "No repository"
+    - "Could not resolve to a Repository"
+    - "has no default branch"
+  hint: cimiento doctor shows which account gh is logged in as. A private repository in another account looks the same as one that does not exist.
+  fix: A private repository in another account looks identical to one that does not exist. Check accounts.github in stack.yaml against gh auth status.
+
+- code: GITHUB_REPO_NAME_TAKEN
+  provider: github
+  title: the repository name is already in use
+  signatures:
+    - "already exists"
+    - "name already"
+  hint: Pick a different name in stack.yaml, or log in as the owner of the existing repository.
+  fix: cimiento adopts a repository it can see. A name that is taken but invisible means it belongs to another account.
+
+- code: GITHUB_PERMISSION_DENIED
+  provider: github
+  title: the GitHub token lacks a scope
+  signatures:
+    - "Must have admin rights"
+    - "delete_repo"
+    - "HTTP 403"
+  hint: Only an owner or admin of the repository can do this. cimiento doctor shows which account gh is logged in as.
+  fix: A missing scope is GITHUB_SCOPE_MISSING, which cimiento fixes itself. This code means the account itself lacks the right.
+  docsUrl: https://cli.github.com/manual/gh_auth_refresh
+
+- code: GITHUB_SCOPE_MISSING
+  provider: github
+  title: the GitHub login lacks the delete_repo permission
+  signatures:
+    - "delete_repo"
+    - "needs the delete_repo permission"
+  hint: Run cimiento down in a terminal. It asks GitHub for the permission in your browser, then deletes the repository.
+  fix: gh never requests delete_repo at login. cimiento runs gh auth refresh with that scope in the foreground when a person is there, and waits on them otherwise.

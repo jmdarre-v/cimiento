@@ -1,0 +1,12 @@
+{
+  "name": "cimiento",
+  "description": "The cimiento plugin for Claude Code.",
+  "owner": { "name": "jmdarre-v" },
+  "plugins": [
+    {
+      "name": "cimiento",
+      "source": "./plugin",
+      "description": "Set up, repair and explain a cimiento project from Claude Code, with secrets kept out of the chat."
+    }
+  ]
+}

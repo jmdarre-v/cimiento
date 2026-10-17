@@ -1,0 +1,362 @@
+# Decisions
+
+One line per decision the spec does not cover, with the reasoning.
+
+- 2026-09-21 The GitHub repository for cimiento was created by hand with `gh repo create` because
+  the tool did not exist yet. Step 12 of Goal 0 replaces this with the tool adopting the repo
+  through its own `stack.yaml`, after which the repo is managed by cimiento like any other.
+
+- 2026-09-21 `docs/SPEC.md` and `docs/GOALS.md` were moved from the repository root into `docs/`,
+  which is where section 16 of the spec says they live and where every goal block reads them from.
+
+- 2026-09-21 The `fullstack` preset ships only the providers v0 implements: github, vercel and
+  supabase. The spec section 4 fragment also names inngest, turnstile and anthropic, and Goal 2
+  adds them back to the preset once those modules exist. A preset that selects a provider the
+  build cannot plan would make the Goal 0 end to end test impossible to pass honestly.
+
+- 2026-09-21 `cimiento plan` always exits 0 when it managed to produce a plan. The exit codes in
+  spec section 10 describe the outcome of applying, and a blocked item is the normal shape of a
+  plan for a project that does not exist yet, not a failure. `up` and `doctor` carry 1, 2 and 3.
+
+- 2026-09-21 Statuses `tool` and `session` are reported as `noop` when the probe passes, never as
+  `adopt`. cimiento never owns a tool or a login, so there is nothing to take over: the tool is
+  either good enough already or it has to be installed.
+
+- 2026-09-21 Vercel and Supabase tokens are read from the vendor CLI's own stored credentials, or
+  from `VERCEL_TOKEN` and `SUPABASE_ACCESS_TOKEN` for a machine with no browser. The spec asks for
+  the vendor CLI for auth and the vendor API for resources, and this is the seam between them.
+  cimiento never prompts for a token.
+
+- 2026-09-21 Deferred values that are secret, such as the Supabase anon and service role keys, are
+  resolved from the producing provider's `outputs` and held in memory for one run. State holds the
+  non secret outputs only, per spec section 7, so a secret can never be resolved through it.
+
+- 2026-09-21 The Supabase database password generated at project creation is returned as a secret
+  output. It is kept in memory for the run, never written to state or logs, and is not recoverable
+  afterwards. Rotate it from the Supabase dashboard if it is ever needed.
+
+- 2026-09-21 `secrets` entries carry an optional `source` field, defaulting to `prompt`. Spec
+  section 4 shows only names and sinks, and section 8 lists four sources, so the manifest needs
+  somewhere to say which one a given secret uses.
+
+- 2026-09-21 The `hosting.deployed` check requires a 200, and requires the scaffold marker only
+  when `scaffold.template` is not `none`. Requiring the marker forever would fail the check the
+  first time somebody replaces the generated home page, which is the point of the scaffold.
+
+- 2026-09-21 The supabase provider needs a session on the `via-hosting` path too, even though the
+  Marketplace creates the project and delivers its keys. Setting the Auth Site URL from the
+  production URL is a Management API call, and that rule applies to any hosting plus supabase pair.
+
+- 2026-09-21 `github.repo` takes its owner from `accounts.github` when the manifest pins one, and
+  otherwise from the resolved GitHub session as a deferred value. This keeps a manifest with no
+  accounts section working while still failing loudly when a pinned account does not match.
+
+- 2026-09-21 Wiring rules contribute dependency edges as well as resources, so a rule can make an
+  existing resource wait on something it added. Without this, `vercel.deployment` could not be
+  made to wait for the repository link, which no single provider knows about.
+
+- 2026-09-25 Every vendor login and every other vendor command that may open a browser runs
+  through `io.interactive`: stdin, stdout and stderr inherited, nothing captured, capped at 15
+  minutes. Part A showed that a captured exec hides the device code and kills a slow approval.
+
+- 2026-09-25 In a run with no terminal (`--json`, an agent, CI), cimiento never starts a login,
+  an account question or a browser step. Those raise a code from `PERSON_CODES`, which the
+  executor records as pending with exit code 2, never as a failure with exit code 1. The hint
+  names the attended `cimiento up` command and folder, never a vendor command.
+
+- 2026-09-25 Accounts are pinned into `stack.yaml` the first time a session exists: the GitHub
+  handle without asking, the Vercel team when there is one or after asking when there are
+  several, and the Supabase organization the same way. The organization goes to
+  `options.supabase.organization_id`, because `accounts.supabase` already holds the path.
+
+- 2026-09-25 Pinning only fills an empty slot and never overwrites a value already in the file.
+  A session that disagrees with a pinned value is `SESSION_ACCOUNT_MISMATCH`.
+
+- 2026-09-25 The Marketplace manual step is verified by finding the Supabase integration in
+  `GET /v1/integrations/configurations?view=account`. The exact response shape is an assumption,
+  matched on `slug` or `integration.slug`, and is the first thing to confirm in the next attended
+  run. A step that already verifies is never asked for, in plan or in up.
+
+- 2026-09-25 The via-hosting install uses `vercel integration add supabase --name <slug>
+  --no-env-pull`. `--name` gives the database the name cimiento looks it up by, and
+  `--no-env-pull` stops the vendor default from writing `.env.local`, which spec section 8
+  reserves for `cimiento env pull`.
+
+- 2026-09-25 cimiento runs `vercel link --yes --project <slug>` itself before any vendor command
+  that acts on the linked project (integration add, deploy, env pull), instead of letting the CLI
+  guess from the folder name or telling the person to link by hand.
+
+- 2026-09-25 The Supabase token is read from the environment, then the macOS Keychain (service
+  `Supabase CLI`, account `supabase`, the default profile name, go-keyring base64 encoded), then
+  the old token file. The Keychain item's attributes were confirmed on this machine; its value was
+  never read by hand.
+
+- 2026-09-25 `cimiento down` without `--yes` asks for the project name typed back. With no terminal
+  and no `--yes` it stops with `DOWN_CONFIRMATION_NEEDED`, exit code 2. When GitHub refuses a delete
+  for lack of `delete_repo`, cimiento runs `gh auth refresh --scopes delete_repo` in the foreground
+  and retries.
+
+- 2026-09-25 Unit tests never run with the repository as their working directory. A test that did
+  let the new pinning code write a fake handle into cimiento's own `stack.yaml`; it was restored
+  from git before any commit.
+
+- 2026-09-25 The Supabase database a project uses is the one its hosting env points at. cimiento
+  reads the ref from `SUPABASE_URL` (then `NEXT_PUBLIC_SUPABASE_URL`) in the Vercel env, fetching
+  that one variable and decrypting nothing else, and adopts that database whatever its name.
+  Lookup order is the ref in state, the ref in the hosting env, then a project named like the slug.
+  Renaming the adopted database is not attempted.
+
+- 2026-09-25 While the hosting env points at a Supabase database the current login cannot see,
+  `supabase.project` verifies as `SUPABASE_DUPLICATE_REFUSED`, a person code: plan shows
+  needs-human, up waits with exit code 2, and nothing ever posts a new project. This holds on the
+  direct path too.
+
+- 2026-09-25 One database, one billing warning: `vercel.binding.supabase-install` is no longer
+  billable, because it creates the database `supabase.project` stands for. Providers may implement
+  an optional `billing()` returning the account and plan an item bills to; the planner prints one
+  warning per billable item with it. Refusing `up` for lack of `--allow-billing` has its own code,
+  `BILLING_APPROVAL_NEEDED`, instead of borrowing `MANUAL_STEP_PENDING`.
+
+- 2026-09-25 A plan counts as paid unless it is `free`, `hobby` or unknown. The Supabase plan is
+  read from `GET /v1/organizations/{id}`, since the list endpoint has none, and the Vercel plan from
+  `billing.plan` on the team. Both shapes were confirmed against the real accounts, printing only
+  names and plans.
+
+- 2026-09-25 The Supabase organization question always offers creating a new organization, named
+  after the slug unless the person types another, through `POST /v1/organizations`. A single free
+  organization is pinned without asking; a single paid one is asked about. Organization creation
+  was not exercised against the real account in this goal.
+
+- 2026-09-25 The Marketplace instructions are computed when the step is asked, from the provider's
+  verify, so they can name the pinned team and organization and say Link Existing Supabase Account
+  (with a Supabase login and a pinned organization) or Create New Supabase Account (without). The
+  step now waits on `supabase.session` and `vercel.project`. The old advice to close the database
+  dialog is gone: a database created there is adopted.
+
+- 2026-09-25 `--only` and `--skip` keep dependency order among the kept steps and ignore edges to
+  filtered providers, whose deferred values come from state.
+
+- 2026-09-25 State records `origin: created | adopted` per resource. `cimiento down` deletes only
+  what cimiento created; an adopted resource is released from state and left in place, because it
+  existed before the project and may hold another application's data. This narrows spec section 9,
+  "destroys everything in state", on purpose.
+
+- 2026-09-25 A database reached through the hosting env that is older than the hosting project is
+  adopted only after a person says yes (`SUPABASE_ADOPTION_CONFIRMATION_NEEDED`, a person code). A
+  database the install step itself created in this project's name counts as created, via the
+  install binding's `installedBy` output.
+
+- 2026-09-25 `cimiento accounts set <provider> [--to <id>]` is the one way to change a pinned
+  account. It always asks, even when there is a single option, overwrites the value in
+  `stack.yaml`, and makes state follow. `--to` is for runs with no terminal; without it they stop
+  with `ACCOUNT_CHOICE_NEEDED`. For GitHub the pin follows whoever gh is logged in as.
+
+- 2026-09-25 stack.yaml is the source of truth for pinned accounts. Every time a project is opened,
+  state's copies (the session entries' `account`, `team` and `organizationId`) are reconciled to
+  it, so a value removed or changed by hand can never linger in state.
+
+- 2026-09-25 "Last activity" for a Supabase project is the last day with API requests in
+  `usage.api-counts?interval=7day`. The Management API has no last-activity field. A project with no
+  requests in that window is shown as such.
+
+- 2026-09-25 The free project limit step counts active projects in free organizations the login
+  can see, retries the create after the person frees a slot or picks another organization, and
+  gives up to the person step after five rounds without progress. cimiento never calls pause or
+  delete on a project it did not create.
+
+- 2026-09-25 The Supabase Management API cannot delete organizations (its OpenAPI spec lists GET
+  and POST only). An organization cimiento created is recorded in state and listed by down as a
+  `DOWN_LEFTOVER` with its dashboard link on every down until it is gone.
+
+- 2026-09-25 The Supabase session reports and verifies the organization stack.yaml pins, read with
+  `GET /v1/organizations/{id}`. An inaccessible pinned organization fails the session with
+  `SESSION_ACCOUNT_MISMATCH` rather than falling back to whatever organization comes first.
+
+- 2026-09-25 Migrations are applied through `POST /v1/projects/{ref}/database/migrations`, one per
+  file, named after the file without its version, with an Idempotency-Key per file, and compared
+  by name against `GET` of the same path. No database password or CLI link is needed. The
+  nextjs-app scaffold ships `20250101000000_cimiento_baseline.sql`; up writes it into a project
+  scaffolded before it existed; database.migrated fails with no files and queries the baseline
+  table when the baseline is present.
+
+- 2026-09-25 GitHub access for Vercel is checked before any link attempt with the endpoints the
+  Vercel import screen uses, `GET /v1/integrations/git-namespaces?provider=github` and
+  `GET /v1/integrations/search-repo`, both without a team scope, which they refuse. They are not in
+  Vercel's published API reference; a 5xx from them lets the link step decide instead of asking.
+
+- 2026-09-25 A newer tool version is reported, never blocking. The latest version comes from the
+  tool's own update notice, then Homebrew's metadata when `which` resolves under a Homebrew prefix,
+  then npm for npm packages, looked up once per run. up offers the upgrade once, in a terminal only.
+
+- 2026-10-17 The Anthropic key check is GET /v1/models through io.http with x-api-key, not the SDK:
+  every external call goes through io.ts so tests replay it, and the call is read only and free.
+- 2026-10-17 Turnstile widget domains are the production host only; preview and dev get
+  Cloudflare's documented test keys. Turnstile has no wildcard hostnames and Vercel preview hosts
+  are not subdomains of production, and adding vercel.app would let any Vercel site use the key.
+- 2026-10-17 The widget is created before the first deployment with `<slug>.vercel.app` as its
+  domain, so NEXT_PUBLIC_TURNSTILE_SITE_KEY is in the build; turnstile.binding.domains then adds
+  the real production host once it is known.
+- 2026-10-17 wrangler owns the Cloudflare login, with `--scopes account:read user:read
+  challenge-widgets.write offline_access`; cimiento reads the token from `wrangler auth token
+  --json` once per run and pins the account id to `accounts.cloudflare`.
+- 2026-10-17 bot_protection.verify posts a dummy token with the widget's secret to siteverify and
+  passes on invalid-input-response, fails on invalid-input-secret. A real token needs a browser.
+- 2026-10-17 Inngest has no session in cimiento: the Vercel integration is the one person step,
+  proved by the integration configuration plus INNGEST_EVENT_KEY and INNGEST_SIGNING_KEY in the
+  project's production env. The first deployment waits for it so the build has both keys.
+- 2026-10-17 Deployment protection for Inngest: standard protection leaves production public, which
+  is where Inngest calls the app, so v1 adds no bypass; a 401 or 403 on /api/inngest is reported.
+- 2026-10-17 The app is registered with a PUT on `<production>/api/inngest`, which the Inngest
+  serve handler signs with its own key; the integration also syncs on deploy, and PUT is idempotent.
+- 2026-10-17 jobs.roundtrip reads both Inngest keys from the Vercel production env, sends
+  cimiento/roundtrip to inn.gs, and polls GET api.inngest.com/v1/events/{id}/runs with the signing
+  key for up to 120 s until the scaffolded cimiento-roundtrip run is Completed.
+- 2026-10-17 down lists the Inngest app as a leftover in the run that removes its endpoint: the
+  Inngest API has no delete or archive for apps, and no later run can tell it still exists.
+- 2026-10-17 vercel.deployment deploys again when a production env key is newer than the live
+  deployment, because Vercel bakes env into each build; doctor reports that drift. This is how a
+  rotated secret or a late integration key reaches the app.
+- 2026-10-17 The keychain source reads with `security find-generic-password -w` and writes with
+  `security -i`, the command on stdin, so the value never appears in argv or ps. A missing value is
+  asked for once at a hidden prompt in a terminal and stored; without a terminal it is a step
+  waiting on a person (SECRET_MISSING joined PERSON_CODES).
+- 2026-10-17 The 1password source requires `ref: op://vault/item/field` on the secret, validated
+  in stack.yaml, and reads with `op read --no-newline`; a missing op is installed with
+  `brew install --cask 1password-cli` in a terminal only.
+- 2026-10-17 secret set and secret rotate both read a fresh value: prompt and keychain secrets at a
+  hidden prompt (keychain stores it over the old one), env and 1password from where they live.
+  rotate PATCHes the existing Vercel env entry and leaves the redeploy to up.
+- 2026-10-17 join runs tools and sessions through the executor, then verify for everything, then
+  env pull when the Vercel project verifies. It never creates a cloud resource.
+- 2026-10-17 dev uses fixed ports 3000 (app), 8288 (Inngest dev, inngest-cli 1.46.0 through npx)
+  and the Supabase CLI defaults (54321); local Supabase keys and declared secrets reach the app
+  through its process env in memory, which Next.js prefers over .env.local.
+- 2026-10-17 The anthropic check depends on the ANTHROPIC_API_KEY env bindings, so a key nobody
+  has typed is one step waiting on a person rather than a failed check as well.
+- 2026-10-17 BUG-40: the fullstack preset declares ANTHROPIC_API_KEY only. TYPESAFE_API_KEY and
+  XPOZ_API_KEY were SPEC section 4's example of per-project secrets; a preset holds what every
+  project on the stack needs, and the ai slot is what needs the Anthropic key.
+- 2026-10-17 `cimiento secret remove NAME`, beyond the set/rotate/check of spec section 9, is how a
+  declared secret leaves a project: it validates stack.yaml without the secret first (refusing
+  ANTHROPIC_API_KEY while ai is anthropic), then deletes the hosting env entries, the keychain
+  value cimiento stored, the state entries and the .env.example line, and edits stack.yaml in
+  place so comments survive. The command itself is the confirmation: it removes one named secret.
+- 2026-10-17 A name stack.yaml does not declare is SECRET_NOT_DECLARED in set, rotate and remove,
+  not SECRET_MISSING, which now means only a declared secret with no value.
+- 2026-10-17 BUG-47: the Cloudflare login is a plain `wrangler login`. wrangler 4 asks for
+  challenge-widgets.write by default, a narrower --scopes would drop permissions a person uses for
+  Workers, and wrangler rejects offline_access as a --scopes key. The cause of a failed login is
+  read from wrangler's debug log in a WRANGLER_LOG_PATH folder of cimiento's own, because the login
+  keeps the person's terminal. The turnstile resources take the account from the session output,
+  so a login with one account is planned and pinned without a question.
+- 2026-10-17 BUG-46: on the via-hosting path, a Marketplace configuration that already serves
+  another project's database is shown with what it serves and settled by the person before the
+  plan: reuse (options.supabase.marketplace_configuration) or the direct path. One that serves
+  nothing else, such as one installed for this project, is used without a question. down deletes
+  a Marketplace-created database with `vercel integration-resource remove <name> --disconnect-all`,
+  which removes that one resource, refuses when names collide, and never uninstalls a configuration.
+- 2026-10-17 BUG-41: one PersonStep shape for every step only a person can do, rendered the same
+  in the terminal (with an OSC 8 link whose text is the full address) and in hints and --json
+  (plain text plus the structured step). The walk is: show, Enter to open (or to start the vendor
+  command that opens the page), Enter when done, then verify. Account choices get a step too,
+  with the vendor page listing the options to compare, then the numbered question. Labels of
+  pages behind a login come from the vendor flows as known on 2026-10-17; the field test checks
+  them. A secret declaration may carry url: for the page that issues it.
+- 2026-10-17 BUG-45: the Inngest step picks Create New Inngest Account on a team without the
+  integration (Vercel manages and bills it, free plan), and only adds the project, with no account
+  choice, on a team that has it. cimiento cannot see a person's other Inngest accounts, so it
+  never sends them to Link Existing.
+- 2026-10-17 BUG-42: an attended up runs in four parts: one tool question, the list of person
+  steps, the logins and account choices (and the Supabase configuration choice) before the plan,
+  then after the confirmation the person steps that need a resource (Marketplace, GitHub access,
+  Inngest, secrets) with what they depend on, then the unattended rest. The estimate counts 180 s
+  per deployment, 120 s per database, 30 s per tool or roundtrip, 20 s for migrations and 5 s for
+  anything else. --json runs ask nothing and emit the person-steps list as their first event.
+- 2026-10-17 BUG-43: tool upgrades are one question before the plan; a skip is stored per binary
+  and version in machine.json toolSkips; ensure never asks; doctor lists outdated tools in its
+  output and asks nothing.
+- 2026-10-17 BUG-44: logins and account choices, the Supabase organization among them, run before
+  the plan, so the billing warning names the organization and its plan.
+- 2026-10-17 BUG-48: inngest.app signs its introspection GET with the INNGEST_SIGNING_KEY read
+  from the Vercel env (x-inngest-signature, HMAC SHA-256 of the empty body and the timestamp, key
+  without its signkey-env- prefix), as inngest 3.54 requires in cloud mode. A 401 or 403 carrying
+  x-inngest-sdk-handled is the SDK refusing the key; any other is Vercel deployment protection.
+- 2026-10-17 BUG-49: an env binding with input public: 'true' (the Turnstile site key) is not
+  registered with the redactor; every other value still is.
+- 2026-10-17 Goal 3, guided mode: --guided changes what is printed, not what runs. The printer
+  explains each failure in plain words (the code's explain text), the hint, and one next command
+  taken from the hint (cimiento doctor when the hint names none). The person-step walker prints
+  the explain text before each step, and up explains every billable item before apply. The words
+  cimiento prints itself live in src/cli/i18n.ts in en and es and follow --lang in both modes;
+  hints and vendor messages stay in English, with the plain-words line in Spanish.
+- 2026-10-17 Goal 3, new --guided asks the name, the folder on first use (default ~/Code.nosync,
+  with the iCloud reason in one sentence), what is being made (designer, fullstack, or each piece) and,
+  for each piece, one slot at a time with the providers this build implements. The answers become
+  the flags an expert would pass.
+- 2026-10-17 Goal 3, designer-site is the nextjs-app base with its own page and design/exports
+  (gitignored zips) and design/current (the committed unzipped export). The designer preset uses
+  it. Keeping Next.js means the same Vercel framework setting and the same scaffold marker check.
+- 2026-10-17 Goal 3, install.sh picks one of three modes: brew (Homebrew present and writable),
+  admin (no Homebrew, administrator account: install Homebrew, which asks for the password once),
+  and user (a standard account, or Homebrew owned by another account: node 22, gh and supabase from
+  their vendors' releases checked against the published SHA-256, and npm tools under
+  ~/.cimiento/tools with NPM_CONFIG_PREFIX, no password). A second account on a Mac whose Homebrew
+  belongs to the first can never use that Homebrew, and a standard account cannot install it.
+- 2026-10-17 Goal 3, install.sh takes --from <tarball> for cimiento itself, because npm holds only
+  the 0.0.0 placeholder until Goal 4 and the repository is private. Without --from it installs
+  cimiento@latest from npm.
+- 2026-10-17 Goal 3, the plugin's .env rule is a PreToolUse hook in node (a plugin cannot ship
+  permission rules, and a fresh Mac has no jq). It blocks Read, Edit, Write, Grep, Glob and Bash
+  calls naming a .env file and allows .env.example, which holds names only. The scaffold's
+  .claude/settings.json deny rule stays the hard guarantee in each project.
+- 2026-10-17 Goal 3, the repository root carries .claude-plugin/marketplace.json named cimiento
+  with the plugin at ./plugin, so /plugin marketplace add jmdarre-v/cimiento and /plugin install
+  cimiento@cimiento install it; both manifests pass claude plugin validate.
+- 2026-10-17 Goal 3, for a fresh Mac account: when git has no user.email, the scaffold commit
+  passes -c user.name=<GitHub login> -c user.email=<login>@users.noreply.github.com for that one
+  commit and leaves the person's git configuration alone; the commit result is checked; and
+  gh auth setup-git runs before gh repo create --push so the HTTPS push has credentials.
+- 2026-10-17 Goal 3 close: field tests run on the existing profile and its sessions; the fresh
+  macOS account, the VM, timing by hand and the one-hour and ten-minute targets are dropped. The
+  from-nothing test is user zero, the first beginner on her own Mac after Goal 4, recorded by her
+  run logs. This replaces the Goal 3 fresh-machine procedure and its /Users/Shared kit.
+- 2026-10-17 Goal 3 close: install.sh has one path, Homebrew. The per-account mode (vendor
+  downloads into ~/.cimiento/tools), --from and the /Users/Shared kit are removed: a beginner on
+  her own Mac is an administrator and installs Homebrew, and a Homebrew owned by another account is
+  refused with what to do instead. Brew locations are overridable (CIMIENTO_BREW_CANDIDATES) only
+  so tests never touch the real Homebrew. This replaces the earlier three-mode and --from decisions.
+- 2026-10-17 Goal 3 close, run logs: every LogEvent carries ts (UTC ISO 8601), stamped by the
+  logger. Each command writes ~/.cimiento/runs/<UTC start>-<command>.jsonl (CIMIENTO_RUNS_DIR
+  overrides it, and tests always do) with start, every log event, every line and json payload
+  shown, every prompt with its options, every answer and the exit code. Lines are redacted when
+  written, the file is 0600, and a hidden answer is written as ****. install.sh writes
+  <UTC>-install.jsonl the same way. There is no runs command; the files are the record.
+- 2026-10-17 BUG-51 to 53: a person step has exactly one URL and lists only real fields; a manual
+  resource that needs two pages returns one step per page from its verify, and the executor asks
+  the next one in the same run (at most three in a row); the walk renders the block without the
+  two Enter lines because the prompts say them, while hints and --json keep them.
+- 2026-10-17 Goal 3 close, beginner gaps: in a terminal, before the GitHub and Vercel logins,
+  cimiento asks whether the account exists and walks the sign-up step when it does not; the
+  Vercel login waits on the GitHub one so Continue with GitHub works. install.sh ends with the
+  Claude Code login as a person step (claude auth login --claudeai, checked with claude auth
+  status --json), saying it needs Claude Pro or Max; without a terminal it says how to do it later.
+- 2026-10-17 Goal 3 close, cimiento publish: git add -A, commit with --message (asked in a terminal,
+  default Update the site), gh auth setup-git, push to the current branch, then wait for the Vercel
+  deployment whose meta.githubCommitSha is that commit (5 s polls, 15 min), and print the
+  production URL. Nothing to commit is not an error. Vercel builds the push by itself, so
+  publish never runs vercel deploy.
+- 2026-10-17 BUG-55: test/setup.ts pins the test environment: LANG=en_US.UTF-8 with LC_ALL and
+  LC_MESSAGES removed (a developer's Spanish locale turned cimiento's output Spanish and failed the
+  BUG-42 test and twelve others), and vendor tokens such as CLOUDFLARE_API_TOKEN removed so none
+  reaches the fake cloud. Tests accept xdg-open where macOS has open, and the read-only Homebrew
+  test uses a prefix that does not exist, which root cannot write either. Verified on macOS in an
+  English and a Spanish locale and on Linux in the node:22 Docker image.
+- 2026-10-17 BUG-56: package.json is the one version (0.1.0), read at runtime by src/version.ts,
+  whose relative path is the same in the repository and in the installed package; plugin.json
+  carries no version of its own.
+- 2026-10-17 Goal 4, before publication: the preset juan is fullstack, with no alias. Real ids in
+  the field test records, the knowledge base and the tests are clearly fake placeholders
+  (icfg_EXAMPLESHARED, example-org-test-2, example-db-other, 01EXAMPLEEVENT and so on), and other
+  projects and organizations are "another project", Pro Org or Free Org. The GitHub handle
+  jmdarre-v stays: it owns the public repository. This repository commits as
+  190653303+jmdarre-v@users.noreply.github.com.

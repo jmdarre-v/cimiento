@@ -1,0 +1,17 @@
+{
+  "description": "cimiento: .env files hold secret values, so Claude never reads, searches, edits or prints them. .env.example holds names only and stays readable.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/deny-env.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
