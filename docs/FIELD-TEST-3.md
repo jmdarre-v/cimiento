@@ -40,8 +40,10 @@ From the first and last line of each run log.
 
 ## Bugs found in Goal 3
 
-Ids continue from BUG-49 in `docs/FIELD-TEST-2.md`. None came from the field run itself; these
-were found in review, from the Goal 3 close findings, and in the Linux and locale runs of the tests.
+Ids continue from BUG-49 in `docs/FIELD-TEST-2.md`. None came from the field run itself; BUG-50
+to 56 were found in review, from the Goal 3 close findings, and in the Linux and locale runs of
+the tests, and BUG-57 in Goal 4. Fix commits up to f4589fa are in the private pre-release history;
+the public history starts at 07d5c2b.
 
 | Id | Description | Fix commit |
 |---|---|---|
@@ -52,3 +54,4 @@ were found in review, from the Goal 3 close findings, and in the Linux and local
 | BUG-54 | The plugin's new-project skill could not run cimiento new, so it could not start the person steps | 614454b |
 | BUG-55 | Tests depended on the developer's locale: under a Spanish LANG, cimiento's output turned Spanish and the goal-2.test.ts BUG-42 test and twelve others failed | f4589fa |
 | BUG-56 | The version lived in two places, the CLI source and package.json | f4589fa |
+| BUG-57 | Found in Goal 4 by cimiento up in this repository: after the private repository was renamed and a new public one took its name, up kept the record as its own, and down would have deleted the public repository | 7393f81 |
