@@ -946,6 +946,7 @@ export async function netlifyLiveCommit(ctx: Ctx, spec: ResourceSpec, siteId: st
   // Not listDeploys, which reads a failed lookup as no deploys.
   const result = await netlifyCall<NetlifyDeploy[]>(ctx, spec.id, 'GET', `/sites/${encodeURIComponent(siteId)}/deploys?per_page=50&production=true`)
   if (!result.ok) return { known: false, reason: `Netlify answered ${result.status} to the deploys lookup` }
-  return { known: true, commit: (result.body ?? []).find((d) => d.state === 'ready' && d.context === 'production')?.commit_ref ?? undefined }
+  const commit = (result.body ?? []).find((d) => d.state === 'ready' && d.context === 'production')?.commit_ref ?? undefined
+  return { known: true, commit, ...(commit ? { source: 'git' as const } : {}) }
 }
 

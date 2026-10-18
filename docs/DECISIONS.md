@@ -546,3 +546,8 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 8: new with --template (other than none) writes scaffold.ci true, as the presets
   do (BUG-98). Projects made by 0.4.0 or older get the preview database workflow only by copying
   it from a new scaffold: up never adds scaffold files.
+- 2026-10-18 Goal 8: .cimiento/ is not the app. A Vercel CLI deploy stamps HEAD when every changed
+  path is under .cimiento/, and publish skips the deploy wait when git diff from the live commit to
+  HEAD touches only .cimiento/; the state commit is still made and pushed, and the hosting may
+  build it, which publish does not wait for. Netlify builds every deploy from the repository, so
+  its commit_ref is always the commit; it needs no stamp.

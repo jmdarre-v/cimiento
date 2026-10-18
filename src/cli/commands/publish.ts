@@ -21,6 +21,14 @@ export async function publishCommand(session: Session): Promise<number> {
   const git = (args: string[]) => session.io.exec('git', args, { cwd: session.cwd })
   const stages: { commit: Stage; push: Stage; deploy: Stage } = { commit: 'skipped', push: 'skipped', deploy: 'skipped' }
 
+  /** Whether every change from the given commit to HEAD is under .cimiento. */
+  const onlyStateSince = async (from: string): Promise<boolean> => {
+    const diff = await git(['diff', '--name-only', from, 'HEAD'])
+    if (diff.code !== 0) return false
+    const paths = diff.stdout.split('\n').map((p) => p.trim()).filter(Boolean)
+    return paths.length > 0 && paths.every((p) => p.startsWith('.cimiento/'))
+  }
+
   const status = await git(['status', '--porcelain'])
   if (status.code !== 0) {
     throw new CimientoError({
@@ -108,7 +116,9 @@ export async function publishCommand(session: Session): Promise<number> {
     })
   }
   let deployed: { url: string; productionUrl?: string } | undefined
-  if (live.commit !== sha) {
+  // A HEAD that only adds cimiento's own state on top of the live commit is the live app (BUG-100).
+  const stateOnly = live.commit !== undefined && live.commit !== sha && (await onlyStateSince(live.commit))
+  if (live.commit !== sha && !stateOnly) {
     if (!session.json) {
       session.printer.line(
         es ? `${sha.slice(0, 7)} esta en ${branch}. Esperando el despliegue de ${vendor}...` : `${sha.slice(0, 7)} is on ${branch}. Waiting for ${vendor} to deploy it...`,
@@ -129,6 +139,7 @@ export async function publishCommand(session: Session): Promise<number> {
       branch,
       ...(message ? { message } : {}),
       stages,
+      live: { commit: deployed ? sha : (live.commit ?? null), source: deployed ? 'git' : (live.source ?? null) },
       deploymentUrl: deployed?.url ?? null,
       productionUrl: deployed?.productionUrl ?? hostingProductionUrl(ctx, hosting) ?? null,
     })

@@ -224,4 +224,4 @@ export function isDeferred(v: Value | undefined): v is { deferred: string } {
  * The commit a live site is built from, as the hosting answered. A failed lookup is unknown and is
  * never filled from what state recorded earlier (BUG-87).
  */
-export type LiveCommit = { known: true; commit?: string } | { known: false; reason: string }
+export type LiveCommit = { known: true; commit?: string; source?: 'git' | 'cimiento stamp' } | { known: false; reason: string }

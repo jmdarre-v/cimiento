@@ -14,6 +14,13 @@
 - `new` with `--template` writes `scaffold.ci: true`, so a project made from flags gets its
   workflows, as the presets do.
 
+### Publish
+
+- The commit stamp on Vercel CLI deploys now applies after any cimiento run: a tree where only
+  `.cimiento/` changed counts as clean. `publish` treats a HEAD that only adds cimiento state on
+  top of the live commit as live: it commits and pushes the state and waits for no deploy.
+  `publish --json` reports the live commit it read and its source, `git` or `cimiento stamp`.
+
 ### Speed
 
 - A noop `up` asks each tool for its version and each vendor CLI who is logged in once per run,

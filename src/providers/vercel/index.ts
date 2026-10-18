@@ -1200,6 +1200,14 @@ function isReady(deployment: VercelDeployment): boolean {
   return state === 'READY'
 }
 
+/** The paths of git status --porcelain that are the app's, leaving out cimiento's own state. */
+export function appChanges(porcelain: string): string[] {
+  return porcelain
+    .split('\n')
+    .map((line) => line.slice(3).trim())
+    .filter((path) => path !== '' && !path.startsWith('.cimiento/') && !path.startsWith('".cimiento/'))
+}
+
 /** The deployment meta key a CLI deploy from a clean tree carries its commit in. */
 const COMMIT_META = 'cimientoCommit'
 
@@ -1235,10 +1243,11 @@ async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureRes
   if (account) args.push('--scope', account)
   // An upload from the CLI records no commit on Vercel. With a clean tree the upload is exactly
   // HEAD, so the deployment carries it, and publish reads it from Vercel, not from state (BUG-87).
+  // cimiento's own state is not the app: a tree where only .cimiento changed is clean (BUG-99).
   const head = await ctx.io.exec('git', ['rev-parse', 'HEAD'], { cwd: ctx.cwd }).catch(() => undefined)
   const dirty = await ctx.io.exec('git', ['status', '--porcelain'], { cwd: ctx.cwd }).catch(() => undefined)
   const sha = head?.code === 0 ? head.stdout.trim() : ''
-  if (sha && dirty?.code === 0 && dirty.stdout.trim() === '') args.push('--meta', `${COMMIT_META}=${sha}`)
+  if (sha && dirty?.code === 0 && appChanges(dirty.stdout).length === 0) args.push('--meta', `${COMMIT_META}=${sha}`)
   // deploy waits for the build to finish. A first Next.js build takes minutes, far past the
   // default exec timeout that killed the Vercel login in Goal 1 Part A.
   const result = await ctx.io.exec('vercel', args, { cwd: ctx.cwd, timeoutMs: DEPLOY_TIMEOUT_MS })
@@ -1680,6 +1689,8 @@ export async function vercelLiveCommit(ctx: Ctx, spec: ResourceSpec, projectId: 
   )
   if (!list.ok) return { known: false, reason: `Vercel answered ${list.status} to the deployments lookup` }
   const ready = (list.body?.deployments ?? []).find((d) => (d.readyState ?? d.state ?? '').toUpperCase() === 'READY')
-  return { known: true, commit: ready?.meta?.githubCommitSha ?? ready?.meta?.[COMMIT_META] }
+  const git = ready?.meta?.githubCommitSha
+  const stamped = ready?.meta?.[COMMIT_META]
+  return { known: true, commit: git ?? stamped, ...(git ? { source: 'git' as const } : stamped ? { source: 'cimiento stamp' as const } : {}) }
 }
 

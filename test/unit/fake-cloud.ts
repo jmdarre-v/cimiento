@@ -164,6 +164,10 @@ export class FakeCloud implements Io {
   githubLoggedIn: boolean
   /** The working tree has changes git status would list. */
   gitDirty = false
+  /** The changed paths git status shows, when a test needs other than app/page.tsx. */
+  gitDirtyPaths: string[] | undefined
+  /** The paths each commit changed, by commit number, for git diff --name-only. */
+  readonly commitPaths = new Map<number, string[]>()
   gitCommits = 0
   /** The checked out branch, and every branch pushed to the repository with its head commit. */
   gitBranch = 'main'
@@ -429,7 +433,16 @@ export class FakeCloud implements Io {
       return ok(`Switched to branch '${this.gitBranch}'`)
     }
     if (args[0] === 'rev-parse') return this.gitCommits > 0 ? ok(`${this.gitSha()}\n`) : fail('fatal: Needed a single revision')
-    if (args[0] === 'status') return ok(this.gitDirty ? ' M app/page.tsx\n' : '')
+    if (args[0] === 'status') {
+      const paths = this.gitDirtyPaths ?? (this.gitDirty ? ['app/page.tsx'] : [])
+      return ok(paths.map((p) => ` M ${p}\n`).join(''))
+    }
+    if (args[0] === 'diff' && args.includes('--name-only')) {
+      const [from, to] = args.filter((a) => /fakesha/.test(a)).map((sha) => Number(sha.slice(0, 4)))
+      const paths = new Set<string>()
+      for (let n = (from ?? 0) + 1; n <= (to ?? this.gitCommits); n += 1) for (const path of this.commitPaths.get(n) ?? ['app/page.tsx']) paths.add(path)
+      return ok([...paths].map((p) => `${p}\n`).join(''))
+    }
     if (args[0] === 'ls-remote') {
       const branch = (args[args.length - 1] ?? '').replace('refs/heads/', '')
       const sha = this.pushedBranches.get(branch)
@@ -468,6 +481,8 @@ export class FakeCloud implements Io {
         return fail('Author identity unknown\n\n*** Please tell me who you are.')
       }
       this.gitCommits += 1
+      this.commitPaths.set(this.gitCommits, this.gitDirtyPaths ?? ['app/page.tsx'])
+      this.gitDirtyPaths = undefined
       this.gitDirty = false
       return ok(`[main ${this.gitSha().slice(0, 7)}] commit`)
     }

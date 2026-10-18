@@ -295,3 +295,41 @@ describe('BUG-98: a project made from flags with a template got no workflows', (
     expect(readFileSync(join(dir, '.github/workflows/preview-database.yml'), 'utf8')).toContain('NEON_API_KEY')
   })
 })
+
+describe('BUG-99 and BUG-100: the commit stamp on CLI deploys works with cimiento state changed', () => {
+  async function demo(cloud: FakeCloud): Promise<void> {
+    await made(cloud, ['--preset', 'designer'])
+    const file = join(dir, 'stack.yaml')
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/^secrets: \[\]\n/m, 'secrets:\n  - name: DEMO_TOKEN\n    sinks: [hosting]\n    environments: [production]\n    source: env\n'))
+    process.env.DEMO_TOKEN = 'demo-first-value-not-a-real-key'
+    expect((await cli(cloud, ['up', '--json', '--yes'])).code).toBe(ExitCode.ok)
+    // Everything committed and pushed, as after a publish.
+    cloud.gitDirtyPaths = ['stack.yaml', '.cimiento/state.json']
+    expect((await cli(cloud, ['publish', '--json'])).code).toBe(ExitCode.ok)
+  }
+
+  afterEach(() => {
+    delete process.env.DEMO_TOKEN
+  })
+
+  it('a deploy from a tree where only .cimiento changed carries the commit, and publish reads it back', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await demo(cloud)
+    const head = cloud.gitSha()
+    // secret set writes state, then deploys again from the CLI.
+    process.env.DEMO_TOKEN = 'demo-second-value-not-a-real-key'
+    cloud.gitDirtyPaths = ['.cimiento/state.json']
+    const set = await cli(cloud, ['secret', 'set', 'DEMO_TOKEN', '--json'])
+    expect(set.code, set.writer.outText.slice(-600)).toBe(ExitCode.ok)
+    const project = [...cloud.vercelProjects.values()][0]
+    const cliDeploy = (cloud.deployments.get(project.id) ?? []).find((d) => d.readyState === 'READY' && d.target === 'production')!
+    expect((cliDeploy.meta as Record<string, string> | undefined)?.cimientoCommit).toBe(head)
+
+    // publish commits the state, pushes it, and needs no deploy: the app is the stamped commit.
+    const publish = await cli(cloud, ['publish', '--json'])
+    expect(publish.code, publish.writer.outText.slice(-600)).toBe(ExitCode.ok)
+    const result = publish.writer.jsonObjects().pop() as { stages: Record<string, string>; live: { commit: string; source: string } }
+    expect(result.stages).toMatchObject({ commit: 'done', push: 'done', deploy: 'skipped' })
+    expect(result.live).toMatchObject({ commit: head, source: 'cimiento stamp' })
+  })
+})
