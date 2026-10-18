@@ -25,7 +25,7 @@
     - "brew: command not found"
   hint: The installer message in the error says what went wrong. cimiento up retries the install safely.
   fix: On a fresh Mac the usual cause is that Homebrew itself is missing. Install it from https://brew.sh first. On Ubuntu, also under WSL, install.sh first installs with apt what Homebrew needs (build-essential, procps, curl, file, git) and libsecret-tools for keychain secrets, asking for the sudo password once.
-  seen: Goal 5, 2026-10-18 (BUG-58, BUG-59). install.sh --dry-run in an Ubuntu 24.04 container still ran curl to fetch the Homebrew installer, because the command substitution ran before the dry-run check, and its table said installed for everything it would only install. A dry run now names the Homebrew installer without fetching it, and the table says would be installed.
+  seen: Goal 5, 2026-10-18 (BUG-58, BUG-59). install.sh --dry-run in an Ubuntu 24.04 container still ran curl to fetch the Homebrew installer, because the command substitution ran before the dry-run check, and its table said installed for everything it would only install. A dry run now names the Homebrew installer without fetching it, and the table says would be installed. Goal 5 CI, 2026-10-18 (BUG-65). The first GitHub Actions run failed on ubuntu-latest: the installer tests put /usr/bin on PATH, and the runner ships gh there, so gh counted as already installed. The tests now run with a folder of only the system utilities the script needs.
 
 - code: SESSION_MISSING
   provider: core

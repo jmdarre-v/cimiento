@@ -116,7 +116,8 @@ From the first and last line of each run log.
 
 Ids continue from BUG-57 in `docs/FIELD-TEST-3.md`. Each has a knowledge base entry or `seen:` note
 and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-60 to 64 in
-`test/unit/goal-5-field.test.ts` (BUG-63 also in `test/unit/goal-2.test.ts`).
+`test/unit/goal-5-field.test.ts` (BUG-63 also in `test/unit/goal-2.test.ts`), BUG-65 in
+`test/unit/install-script.test.ts`.
 
 | Id | Description | Fix commit |
 |---|---|---|
@@ -127,6 +128,7 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 | BUG-62 | secret rotate on a Netlify project said Vercel reads env when it builds | f120fac |
 | BUG-63 | secret set and rotate wrote the hosting env but did not deploy again, so the live app kept the old value and a fresh join failed vercel.deployment | 4d59548 |
 | BUG-64 | The DNS step named cname.vercel-dns.com while Vercel recommends a project specific CNAME first, and could not name a TXT challenge | 4c88d5c |
+| BUG-65 | The first CI run failed on ubuntu-latest: the installer tests used the machine's /usr/bin, where the GitHub runner has gh, so gh counted as already installed | see git log |
 
 ## Left for a person
 

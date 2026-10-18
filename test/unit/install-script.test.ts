@@ -2,7 +2,7 @@
 // temporary HOME, so no test installs anything or reaches the network.
 
 import { spawnSync } from 'node:child_process'
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { removeDir, tempDir } from './helpers'
@@ -11,6 +11,21 @@ const SCRIPT = resolve(__dirname, '../../scripts/install.sh')
 
 let home: string
 let stubs: string
+let sysbin: string
+
+/**
+ * Only the system utilities install.sh and the stubs use, so a tool the machine running the tests
+ * happens to have in /usr/bin (gh and git on a GitHub runner) never counts as already installed.
+ */
+const SYSTEM_TOOLS = ['bash', 'sh', 'sed', 'grep', 'awk', 'tr', 'head', 'tail', 'date', 'mkdir', 'env', 'cat', 'chmod', 'basename', 'dirname', 'rm', 'sleep', 'echo', 'printf']
+
+function linkSystemTools(dir: string): void {
+  mkdirSync(dir, { recursive: true })
+  for (const name of SYSTEM_TOOLS) {
+    const found = ['/usr/bin', '/bin'].map((d) => join(d, name)).find((p) => existsSync(p))
+    if (found) symlinkSync(found, join(dir, name))
+  }
+}
 let prefix: string
 let log: string
 
@@ -74,7 +89,7 @@ function ubuntu(opts: { id?: string; wsl?: boolean; installed?: string[] } = {})
 function install(args: string[] = [], env: Record<string, string> = {}) {
   const result = spawnSync('/bin/bash', [SCRIPT, ...args], {
     // Never the real Homebrew of the machine running the tests.
-    env: { HOME: home, PATH: `${stubs}:/usr/bin:/bin`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'brew-installed', 'brew'), ...env },
+    env: { HOME: home, PATH: `${stubs}:${sysbin}`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'brew-installed', 'brew'), ...env },
     encoding: 'utf8',
   })
   return { code: result.status, out: `${result.stdout}${result.stderr}`, calls: existsSync(log) ? readFileSync(log, 'utf8') : '' }
@@ -83,6 +98,8 @@ function install(args: string[] = [], env: Record<string, string> = {}) {
 beforeEach(() => {
   home = tempDir('cimiento-install-home-')
   stubs = join(home, 'stubs')
+  sysbin = join(home, 'sysbin')
+  linkSystemTools(sysbin)
   prefix = join(home, 'homebrew')
   log = join(home, 'calls.log')
   mkdirSync(stubs, { recursive: true })
@@ -209,6 +226,11 @@ describe('scripts/install.sh', () => {
     expect(calls).not.toMatch(/^brew install/m)
   })
 
+  it('BUG-65: runs with only the system tools it needs, never the gh or git of the machine running the tests', () => {
+    const result = spawnSync('/bin/bash', ['-c', 'command -v gh || command -v git || command -v brew || echo none'], { env: { PATH: `${stubs}:${sysbin}` }, encoding: 'utf8' })
+    expect(result.stdout.trim()).toBe('none')
+  })
+
   it('is valid bash 3.2, the bash every Mac ships', () => {
     const result = spawnSync('/bin/bash', ['-n', SCRIPT], { encoding: 'utf8' })
     expect(result.status, result.stderr).toBe(0)
@@ -220,7 +242,7 @@ describe('the install run log', () => {
     setup({ brew: true, present: ALL })
     const runs = join(home, 'runs')
     const result = spawnSync('/bin/bash', [SCRIPT], {
-      env: { HOME: home, PATH: `${stubs}:/usr/bin:/bin`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'none'), CIMIENTO_RUNS_DIR: runs },
+      env: { HOME: home, PATH: `${stubs}:${sysbin}`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'none'), CIMIENTO_RUNS_DIR: runs },
       encoding: 'utf8',
     })
     expect(result.status).toBe(0)
@@ -253,7 +275,7 @@ describe('Claude Code login at the end of install.sh', () => {
 
   function attended(lang?: string) {
     const result = spawnSync('/bin/bash', [SCRIPT, ...(lang ? ['--lang', lang] : [])], {
-      env: { HOME: home, PATH: `${stubs}:/usr/bin:/bin`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'none'), CIMIENTO_INTERACTIVE: '1' },
+      env: { HOME: home, PATH: `${stubs}:${sysbin}`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'none'), CIMIENTO_INTERACTIVE: '1' },
       input: '\n\n',
       encoding: 'utf8',
     })
