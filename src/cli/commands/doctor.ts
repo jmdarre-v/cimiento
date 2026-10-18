@@ -65,8 +65,9 @@ export async function doctorCommand(session: Session): Promise<number> {
       stale,
       outdated,
       summary: {
-        ok: reports.filter((r) => r.ok).length,
-        failed: reports.filter((r) => !r.ok).length,
+        ok: reports.filter((r) => r.status === 'ok').length,
+        failed: reports.filter((r) => r.status === 'failed').length,
+        unknown: reports.filter((r) => r.status === 'unknown').length,
         total: reports.length,
       },
     })

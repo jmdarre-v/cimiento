@@ -147,6 +147,14 @@ export async function runUp(
           // Someone may already have done it, on another project or by hand. Never ask a person
           // for something that already verifies.
           const already = await safeVerify(provider, spec, runCtx)
+          if (!already.ok && already.unknown) {
+            // The provider could not tell. The step that needs it says if something is really
+            // missing, so nobody is asked for what may already be done; nothing is recorded.
+            completed.add(spec.id)
+            progressed = true
+            emit({ event: 'verified', id: spec.id, provider: spec.provider, message: `could not check ${spec.id} (${already.error?.message ?? 'no answer'}); the next step checks it` })
+            continue
+          }
           if (!already.ok && already.error?.hint) instructions = already.error.hint
           // The step's verify knows which page the person needs first, when there are several.
           if (!already.ok && already.error?.docsUrl) url = already.error.docsUrl
@@ -347,11 +355,15 @@ export async function runUp(
   }
 }
 
+export type VerifyStatus = 'ok' | 'failed' | 'unknown'
+
 export interface VerifyReport {
   id: string
   provider: string
   kind: ResourceSpec['kind']
   ok: boolean
+  /** ok only on a live check that passed; unknown when the provider could not tell (BUG-75). */
+  status: VerifyStatus
   evidence?: string
   error?: CimientoErrorFields
 }
@@ -377,37 +389,8 @@ export async function runVerifyAll(
         provider: original.provider,
         kind: original.kind,
         ok: false,
+        status: 'failed',
         error: unknownProviderError(original).toJSON(),
-      })
-      continue
-    }
-    if (original.kind === 'manual') {
-      // Verified live, like plan does. Trusting manualDone alone made doctor fail a Marketplace
-      // step that plan reported as done, in the Goal 1 run.
-      const live = await safeVerify(provider, original, ctx)
-      if (live.ok) {
-        results.push({ id: original.id, provider: original.provider, kind: original.kind, ok: true, ...(live.evidence ? { evidence: live.evidence } : {}) })
-        continue
-      }
-      const done = ctx.state.manualDone.includes(original.id)
-      results.push({
-        id: original.id,
-        provider: original.provider,
-        kind: original.kind,
-        ok: done,
-        ...(done
-          ? { evidence: 'confirmed earlier, recorded in manualDone' }
-          : {
-              error: {
-                code: 'MANUAL_STEP_PENDING',
-                provider: original.provider,
-                resource: original.id,
-                message: `${original.id} has not been confirmed yet.`,
-                hint: original.manual?.instructions ?? 'Run cimiento up and follow the step in the browser.',
-                retryable: true,
-                needsHuman: true,
-              },
-            }),
       })
       continue
     }
@@ -418,6 +401,7 @@ export async function runVerifyAll(
         provider: spec.provider,
         kind: spec.kind,
         ok: false,
+        status: 'failed',
         error: {
           code: 'DEFERRED_UNRESOLVED',
           provider: spec.provider,
@@ -430,17 +414,44 @@ export async function runVerifyAll(
       })
       continue
     }
+    if (original.kind === 'manual') {
+      // Verified live, every time. manualDone is history: a step confirmed once can stop being
+      // true, as when access granted to the Vercel GitHub app is later revoked (BUG-75).
+      // Resolved first like every other item; checked on the raw spec, the repository name was
+      // empty and only the manualDone fallback hid it.
+      const live = await safeVerify(provider, spec, ctx)
+      results.push({
+        id: original.id,
+        provider: original.provider,
+        kind: original.kind,
+        ok: live.ok,
+        status: statusOf(live),
+        ...(live.evidence ? { evidence: live.evidence } : {}),
+        ...(live.error ? { error: live.error.toJSON() } : {}),
+      })
+      continue
+    }
     const check = await safeVerify(provider, spec, ctx)
     results.push({
       id: spec.id,
       provider: spec.provider,
       kind: spec.kind,
       ok: check.ok,
+      status: statusOf(check),
       ...(check.evidence ? { evidence: check.evidence } : {}),
       ...(check.error ? { error: check.error.toJSON() } : {}),
     })
   }
   return results
+}
+
+/** Codes that say the provider could not be asked, not that the answer was no. */
+const UNKNOWN_CODES = new Set(['HTTP_TIMEOUT', 'HTTP_UNREACHABLE'])
+
+export function statusOf(check: { ok: boolean; unknown?: boolean; error?: CimientoError }): VerifyStatus {
+  if (check.ok) return 'ok'
+  if (check.unknown || (check.error && UNKNOWN_CODES.has(check.error.code))) return 'unknown'
+  return 'failed'
 }
 
 function filterSpecs(specs: ResourceSpec[], options: { only?: string[]; skip?: string[] }): ResourceSpec[] {
@@ -455,12 +466,14 @@ async function safeVerify(
   provider: Provider,
   spec: ResourceSpec,
   ctx: Ctx,
-): Promise<{ ok: boolean; error?: CimientoError; evidence?: string }> {
+): Promise<{ ok: boolean; error?: CimientoError; evidence?: string; unknown?: boolean }> {
   try {
     return await provider.verify(spec, ctx)
   } catch (err) {
     return {
       ok: false,
+      // A check that threw did not get an answer.
+      unknown: true,
       error: asCimientoError(err, {
         code: 'CHECK_FAILED',
         provider: spec.provider,

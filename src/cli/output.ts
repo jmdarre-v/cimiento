@@ -128,7 +128,11 @@ export class Printer {
         ok: reports.every((r) => r.ok),
         command: 'doctor',
         items: reports,
-        summary: { ok: reports.filter((r) => r.ok).length, failed: reports.filter((r) => !r.ok).length },
+        summary: {
+          ok: reports.filter((r) => r.status === 'ok').length,
+          failed: reports.filter((r) => r.status === 'failed').length,
+          unknown: reports.filter((r) => r.status === 'unknown').length,
+        },
       })
       return
     }
@@ -136,7 +140,12 @@ export class Printer {
     this.line(
       table(
         [t(this.lang, 'status'), t(this.lang, 'resource'), t(this.lang, 'provider'), t(this.lang, 'detail')],
-        reports.map((r) => [r.ok ? (this.lang === 'es' ? 'bien' : 'ok') : this.lang === 'es' ? 'falla' : 'failed', r.id, r.provider, r.ok ? (r.evidence ?? '') : (r.error?.message ?? '')]),
+        reports.map((r) => [
+          r.status === 'ok' ? (this.lang === 'es' ? 'bien' : 'ok') : r.status === 'unknown' ? (this.lang === 'es' ? 'sin saber' : 'unknown') : this.lang === 'es' ? 'falla' : 'failed',
+          r.id,
+          r.provider,
+          r.ok ? (r.evidence ?? '') : (r.error?.message ?? ''),
+        ]),
       ),
     )
     const failed = reports.filter((r) => !r.ok)

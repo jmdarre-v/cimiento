@@ -90,12 +90,12 @@ describe('plan statuses', () => {
     expect(manual.manual?.url).toContain('vercel.com/marketplace/supabase')
   })
 
-  it('marks the same manual step noop once state records it', async () => {
+  it('BUG-75: a manual step recorded in manualDone is still probed live; history alone is not done', async () => {
     const manifest = manifestFor({}, 'fullstack')
     const state = { ...emptyProjectState(), manualDone: ['vercel.marketplace-terms'] }
     const t = testContext(manifest, { state })
     const plan = await buildPlan({ ...t.ctx, dryRun: true }, t.providers, t.specs)
-    expect(plan.items.find((i) => i.id === 'vercel.marketplace-terms')!.status).toBe('noop')
+    expect(plan.items.find((i) => i.id === 'vercel.marketplace-terms')!.status).toBe('needs-human')
   })
 
   it('warns about billable creates and counts them in the summary', async () => {

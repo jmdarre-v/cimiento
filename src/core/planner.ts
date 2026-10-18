@@ -95,10 +95,12 @@ export async function buildPlan(
     }
 
     if (spec.kind === 'manual') {
-      let done = ctx.state.manualDone.includes(spec.id)
+      // Probed live every time: manualDone is history, and access confirmed once can be revoked
+      // (BUG-75). A step already done on this account, for an earlier project or by hand, is not
+      // asked for.
+      let done = false
       let probeError: CimientoErrorFields | undefined
-      // A step already done on this account, for an earlier project or by hand, is not asked for.
-      if (!done && blockedBy.length === 0 && unresolved.length === 0) {
+      if (blockedBy.length === 0 && unresolved.length === 0) {
         const probe: CheckResult = await provider.verify(spec, ctx).catch(() => ({ ok: false }))
         done = probe.ok
         probeError = probe.error?.toJSON()

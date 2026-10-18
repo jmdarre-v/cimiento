@@ -73,6 +73,8 @@ export interface CheckResult {
   ok: boolean
   error?: CimientoError
   evidence?: string
+  /** The provider could not tell, such as a 5xx or a timeout: neither ok nor failed (BUG-75). */
+  unknown?: boolean
 }
 
 /**

@@ -447,4 +447,9 @@ One line per decision the spec does not cover, with the reasoning.
   no longer selects, are listed by plan, deleted by down in the account they were made in, and
   decided by up before anything changes: --orphans retain, release or destroy, one question in a
   terminal, or ORPHANS_DECISION_NEEDED (exit 2). Never a default destroy.
+- 2026-10-18 Goal 6: doctor reports ok, failed or unknown per item. ok only from a live check that
+  passed; unknown when the provider could not tell (a 5xx, a timeout, a check that threw), which
+  doctor counts as not ok. manualDone is history: plan and doctor probe manual steps live. In up,
+  an unknown on a manual step lets the run go on without asking and without recording it, because
+  the step that needs it checks again.
 

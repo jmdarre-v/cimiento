@@ -279,3 +279,42 @@ describe('BUG-74: plan, up and down cover every resource in state, even one stac
     for (const value of ['fake-anthropic-api-key-not-a-real-credential', 'signkey-', 'fake-supabase-service-role', 'eyJ']) expect(raw, value).not.toContain(value)
   })
 })
+
+describe('BUG-75: doctor and plan report a failed live check as failed or unknown, never ok', () => {
+  type Report = { id: string; ok: boolean; status?: string; evidence?: string; error?: { code: string } }
+  async function designer(cloud: FakeCloud): Promise<void> {
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+  }
+  const item = (w: CaptureWriter, id: string): Report => ((w.jsonObjects().pop() as { items: Report[] }).items.find((i) => i.id === id))!
+
+  it('GitHub access revoked after it was confirmed: doctor fails the step instead of saying confirmed earlier', async () => {
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    cloud.githubAppRepos = []
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    const access = item(doctor.writer, 'vercel.github-access')
+    expect(access.ok).toBe(false)
+    expect(access.status).toBe('failed')
+    expect(access.error?.code).toBe('VERCEL_GITHUB_ACCESS_NEEDED')
+    expect(doctor.code).not.toBe(ExitCode.ok)
+  })
+
+  it('and plan asks for the step again instead of calling it done', async () => {
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    cloud.githubAppRepos = []
+    const plan = await cli(cloud, ['plan', '--json'])
+    expect((plan.writer.jsonObjects().pop() as { items: { id: string; status: string }[] }).items.find((i) => i.id === 'vercel.github-access')?.status).toBe('needs-human')
+  })
+
+  it('a provider answering 503 to a check is unknown, not ok', async () => {
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    cloud.httpFaults.push({ method: 'GET', match: /git-namespaces/, status: 503 })
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    const access = item(doctor.writer, 'vercel.github-access')
+    expect(access.ok).toBe(false)
+    expect(access.status).toBe('unknown')
+  })
+})

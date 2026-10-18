@@ -914,7 +914,19 @@ async function verifyGithubAccess(spec: ResourceSpec, ctx: Ctx): Promise<CheckRe
   if (namespaces.status >= 500) {
     // Vercel is having trouble, which says nothing about access. The link step reports any real
     // problem, so this does not ask the person for something that may already be done.
-    return { ok: true, evidence: `could not pre-check GitHub access (Vercel answered ${namespaces.status}); the link step checks it` }
+    return {
+      ok: false,
+      unknown: true,
+      error: new CimientoError({
+        code: 'VERCEL_API_ERROR',
+        provider: ID,
+        resource: spec.id,
+        message: `Could not check GitHub access: Vercel answered ${namespaces.status}.`,
+        hint: 'This is on the Vercel side. Run cimiento doctor again in a minute; the repository link step checks access too.',
+        retryable: true,
+        needsHuman: false,
+      }),
+    }
   }
   const connected = namespaces.ok
   const namespace = connected
