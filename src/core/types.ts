@@ -75,6 +75,20 @@ export interface CheckResult {
   evidence?: string
 }
 
+/**
+ * Whether a resource still exists, by the id state recorded. absent only when an authenticated
+ * lookup of that id said not found; an auth error, a timeout or a provider error is unknown, and
+ * down keeps the record (BUG-73).
+ */
+export type Presence = 'present' | 'absent' | 'unknown'
+
+/** The presence an http status of a by-id lookup proves. */
+export function presenceFromStatus(status: number): Presence {
+  if (status >= 200 && status < 300) return 'present'
+  if (status === 404 || status === 410) return 'absent'
+  return 'unknown'
+}
+
 export interface Detection {
   installed: boolean
   version?: string
@@ -176,6 +190,8 @@ export interface Provider {
   ensure(r: ResourceSpec, ctx: Ctx): Promise<EnsureResult>
   verify(r: ResourceSpec, ctx: Ctx): Promise<CheckResult>
   destroy(r: ResourceSpec, ctx: Ctx): Promise<void>
+  /** Whether a resource this provider destroys still exists, looked up by its recorded id. */
+  presence?(r: ResourceSpec, ctx: Ctx): Promise<Presence>
   outputs(r: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>>
   explain(key: string, lang: Lang): string
   /** Optional beyond spec section 5: the account and plan a billable resource bills to. */

@@ -8,7 +8,7 @@ import { asCimientoError, CimientoError, ExitCode, needsPerson, type CimientoErr
 import { topoSort } from '../../core/graph'
 import { OutputResolver } from '../../core/resolve'
 import { hashManifest, writeProjectState, type ProjectState } from '../../core/state'
-import type { Leftover, ResourceSpec } from '../../core/types'
+import type { Leftover, Presence, ResourceSpec } from '../../core/types'
 import { ask } from '../../secrets/prompt'
 import { createdOrganizationLeftovers, type OrganizationLeftover } from '../../providers/supabase'
 import { openProject, type Session } from '../context'
@@ -158,16 +158,25 @@ export async function downCommand(session: Session): Promise<number> {
 
   // Prove it is gone, once everything has been asked to go. A deployment only disappears with its
   // project, so checking each delete on its own would report it as surviving.
+  // Forgotten only on a confirmed absent, looked up by the recorded id. An auth error, a timeout or
+  // a provider error says nothing about whether it is gone, so the record stays and the run fails;
+  // the next down looks again (BUG-73).
   for (const spec of attempted) {
     const provider = byProvider.get(spec.provider)!
-    const still = await provider.verify(spec, { ...ctx, state }).catch(() => ({ ok: false }))
-    if (still.ok) {
+    const presence: Presence = provider.presence ? await provider.presence(spec, { ...ctx, state }).catch((): Presence => 'unknown') : 'unknown'
+    if (presence !== 'absent') {
       const error = new CimientoError({
-        code: 'CHECK_FAILED',
+        code: presence === 'present' ? 'CHECK_FAILED' : 'DOWN_UNCONFIRMED',
         provider: spec.provider,
         resource: spec.id,
-        message: `${spec.id} was deleted but still answers.`,
-        hint: 'Some providers delete in the background. Run cimiento down again in a minute; it only touches what is still there.',
+        message:
+          presence === 'present'
+            ? `${spec.id} was deleted but still answers.`
+            : `cimiento asked ${spec.provider} to delete ${spec.id} but could not confirm it is gone, so it stays in state.`,
+        hint:
+          presence === 'present'
+            ? 'Some providers delete in the background. Run cimiento down again in a minute; it only touches what is still there.'
+            : `Run cimiento down again once ${spec.provider} answers; it looks the resource up by its id and forgets it only when ${spec.provider} says it is gone.`,
         retryable: true,
         needsHuman: false,
       })
@@ -177,6 +186,7 @@ export async function downCommand(session: Session): Promise<number> {
     }
     destroyed.push(spec.id)
     state = forget(state, spec.id, project.specs)
+    writeProjectState(ctx.cwd, state)
     emit({ event: 'destroyed', id: spec.id, provider: spec.provider })
   }
 

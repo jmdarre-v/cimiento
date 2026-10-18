@@ -437,4 +437,8 @@ One line per decision the spec does not cover, with the reasoning.
   file inside .git when there is one. The project lock lives in ~/.cimiento/locks keyed by the
   project's real path, so publish's git add -A can never commit it; a dead process's lock is
   reported as stale and taken over, a live one stops the run with PROJECT_LOCKED.
+- 2026-10-18 Goal 6: presence is a provider method looking a resource up by the id state recorded
+  (never by name: a lookup in the wrong team or organization would look absent). 2xx is present,
+  404 or 410 is absent, anything else, an exception included, is unknown. down forgets only on
+  absent; a deployment or migrations record follows its project's presence.
 

@@ -178,6 +178,7 @@ export const ERROR_CODES = [
   'HTTP_TIMEOUT',
   'HTTP_UNREACHABLE',
   'PROJECT_LOCKED',
+  'DOWN_UNCONFIRMED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

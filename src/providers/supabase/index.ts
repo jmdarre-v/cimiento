@@ -2,6 +2,7 @@
 // via-hosting, where the Vercel Marketplace creates the project, and direct, where cimiento
 // creates it through the Management API and pushes the keys into the hosting env store.
 
+import { presenceFromStatus, type Presence } from '../../core/types'
 import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
@@ -257,6 +258,14 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
           hint: 'Supabase refused the delete. cimiento down retries safely. A project created through the Vercel Marketplace may have to be removed from the Vercel integration instead; cimiento doctor shows which.',
         })
       }
+    },
+
+    async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+      if (spec.id !== 'supabase.project') return 'unknown'
+      const ref = ctx.state.resources[spec.id]?.externalId
+      if (!ref) return 'unknown'
+      const result = await supabaseCall(ctx, spec.id, 'GET', `/v1/projects/${encodeURIComponent(ref)}`)
+      return presenceFromStatus(result.status)
     },
 
     async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {

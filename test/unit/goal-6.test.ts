@@ -183,3 +183,35 @@ describe('BUG-72: one run per project at a time', () => {
     expect(walk(dir).filter((f) => f.endsWith('.tmp') || f.endsWith('.lock'))).toEqual([])
   })
 })
+
+describe('BUG-73: down forgets a resource only when the provider confirms it is gone', () => {
+  async function designer(cloud: FakeCloud): Promise<void> {
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+  }
+
+  it('an accepted delete followed by a 503 on the check keeps the record and exits non-zero; the next down confirms and forgets', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await designer(cloud)
+    cloud.httpFaults.push({ method: 'GET', match: /api\.vercel\.com\/v9\/projects\//, status: 503 })
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code).not.toBe(ExitCode.ok)
+    expect(stateOf().resources['vercel.project']).toBeDefined()
+    cloud.httpFaults.length = 0
+    const again = await cli(cloud, ['down', '--yes', '--json'])
+    expect(again.code, again.writer.outText).toBe(ExitCode.ok)
+    expect(stateOf().resources['vercel.project']).toBeUndefined()
+  })
+
+  it('an auth error or a timeout on the check also keeps the record', async () => {
+    for (const status of [401, 0]) {
+      removeDir(dir)
+      const cloud = new FakeCloud({ ghDeleteScope: true })
+      await designer(cloud)
+      cloud.httpFaults.push({ method: 'GET', match: /api\.vercel\.com\/v9\/projects\//, status })
+      const down = await cli(cloud, ['down', '--yes', '--json'])
+      expect(down.code, `status ${status}`).not.toBe(ExitCode.ok)
+      expect(stateOf().resources['vercel.project'], `status ${status}`).toBeDefined()
+    }
+  })
+})

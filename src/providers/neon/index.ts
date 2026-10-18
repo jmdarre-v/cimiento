@@ -9,6 +9,7 @@ import { CimientoError } from '../../core/errors'
 import { neonLoginStep, neonOrganizationStep, neonSignupStep } from '../../core/person-steps-v2'
 import { sameResource, type ProjectState } from '../../core/state'
 import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool } from '../../core/toolkit'
+import { presenceFromStatus, type Presence } from '../../core/types'
 import type { CheckResult, Ctx, Detection, EnsureResult, Lang, Output, Provider, ResourceSpec, Session, Slot, ToolSpec, Value } from '../../core/types'
 import { chooseAndPin } from '../../manifest/pin'
 import type { Manifest } from '../../manifest/schema'
@@ -173,6 +174,14 @@ export function createNeonProvider(_m?: Manifest): Provider {
           hint: 'cimiento down retries safely. Neon keeps a deleted project recoverable for 7 days.',
         })
       }
+    },
+
+    async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+      if (spec.id !== 'neon.project' && spec.id !== 'neon.migrations') return 'unknown'
+      const id = ctx.state.resources['neon.project']?.externalId
+      if (!id) return 'unknown'
+      const result = await neonCall(ctx, spec.id, 'GET', `/projects/${encodeURIComponent(id)}`)
+      return presenceFromStatus(result.status)
     },
 
     async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {

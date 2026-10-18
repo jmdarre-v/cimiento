@@ -210,3 +210,12 @@
   fix: One run per project at a time, so two runs never create the same thing or write state over each other. The lock is a file under ~/.cimiento/locks named after the project path, outside the project so git never sees it. A lock whose process is gone, left by a killed run, is reported as stale and taken over.
   seen: "Goal 6, 2026-10-18 (BUG-72). State was written only at the end of a run, so an up killed right after creating the Vercel project left no record; the next run adopted the project by name and down would never have deleted it. State is now written after every completed operation, to a temporary file renamed over the old one, under a project lock."
 
+- code: DOWN_UNCONFIRMED
+  provider: core
+  title: down could not confirm a resource is gone
+  signatures:
+    - "could not confirm it is gone"
+  hint: Run cimiento down again once the provider answers. It looks the resource up by its id and forgets it only when the provider says it is gone.
+  fix: After every delete, down looks the resource up by the id state recorded. Present means it still exists; absent, an authenticated not found, is the only answer that lets down forget it; an auth error, a timeout or a provider error is unknown, so the record stays and the run exits non zero.
+  seen: "Goal 6, 2026-10-18 (BUG-73). down treated any failed check after a delete as gone, through verify(...).catch(() => ({ ok: false })), so a 503, a revoked token or a timeout on the check made it forget a resource that might still exist and exit 0."
+

@@ -327,6 +327,7 @@ export class FakeV2 {
     const project = one ? this.neonProjects.get(one[1]) : undefined
     if (!one || !project) return json(404, { code: '', message: 'project not found' })
     const rest = one[2] ?? ''
+    if (!rest && method === 'GET') return json(200, { project: { id: project.id, name: project.name, region_id: project.region_id } })
     if (!rest && method === 'DELETE') {
       this.neonProjects.delete(project.id)
       return json(200, { project: { id: project.id } })

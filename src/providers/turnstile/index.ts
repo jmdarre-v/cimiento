@@ -2,6 +2,7 @@
 // project. wrangler owns the Cloudflare login, the Cloudflare API owns the widget, and the site key
 // and secret key reach the hosting env through the hosting + turnstile wiring rule.
 
+import { presenceFromStatus, type Presence } from '../../core/types'
 import { sameResource } from '../../core/state'
 import { CimientoError } from '../../core/errors'
 import type { ProjectState } from '../../core/state'
@@ -176,6 +177,14 @@ export function createTurnstileProvider(_m?: Manifest): Provider {
       if (!result.ok && result.status !== 404) {
         throw cloudflareError(spec.id, result, `Deleting the Turnstile widget ${widget.name} failed.`, 'cimiento down retries safely.')
       }
+    },
+
+    async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+      if (spec.id !== 'turnstile.widget') return 'unknown'
+      const sitekey = ctx.state.resources[spec.id]?.externalId
+      if (!sitekey) return 'unknown'
+      const result = await cloudflareCall(ctx, spec.id, 'GET', `${widgetsPath(ctx, spec)}/${encodeURIComponent(sitekey)}`)
+      return presenceFromStatus(result.status)
     },
 
     async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {

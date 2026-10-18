@@ -129,6 +129,8 @@ export class FakeCloud implements Io {
   readonly httpCalls: string[] = []
 
   readonly repos = new Map<string, FakeRepo>()
+  /** Answers that replace a route's own, by method and URL; status 0 throws a timeout. */
+  readonly httpFaults: { method: string; match: RegExp; status: number }[] = []
   /** Netlify, Neon, Resend, Stripe, PostHog, DNS and Vercel domains. */
   readonly v2: FakeV2 = new FakeV2(this)
   /** GitHub Actions secrets by repository, and Supabase project secrets by project ref. */
@@ -660,6 +662,12 @@ export class FakeCloud implements Io {
     this.httpCalls.push(key)
     const url = new URL(req.url)
 
+    // A provider having a bad moment: the first matching fault answers instead of the route.
+    const fault = this.httpFaults.find((f) => f.method === req.method.toUpperCase() && f.match.test(req.url))
+    if (fault) {
+      if (fault.status === 0) throw Object.assign(new Error('timeout'), { name: 'TimeoutError' })
+      return json(fault.status, { error: { message: `fault ${fault.status}` } })
+    }
     const v2 = this.v2.http(req, url)
     if (v2) return v2
     if (url.hostname === 'api.vercel.com') return this.vercelApi(req, url)

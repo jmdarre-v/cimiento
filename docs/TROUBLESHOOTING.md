@@ -96,6 +96,16 @@ Down left something it created but cannot delete.
 
 **Looks like:** `cannot delete organizations`, `cannot delete or archive apps`
 
+### DOWN_UNCONFIRMED
+
+Down could not confirm a resource is gone.
+
+**What to do:** Run cimiento down again once the provider answers. It looks the resource up by its id and forgets it only when the provider says it is gone.
+
+**Why:** After every delete, down looks the resource up by the id state recorded. Present means it still exists; absent, an authenticated not found, is the only answer that lets down forget it; an auth error, a timeout or a provider error is unknown, so the record stays and the run exits non zero.
+
+**Looks like:** `could not confirm it is gone`
+
 ### HOSTING_DOMAIN_DNS_NEEDED
 
 The domain's DNS does not point at the hosting yet.

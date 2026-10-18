@@ -10,6 +10,7 @@ import { netlifyLoginStep, netlifySignupStep, netlifyTeamStep } from '../../core
 import { hostingEnvId } from '../../core/sink-ids'
 import { sameResource, type ProjectState } from '../../core/state'
 import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool } from '../../core/toolkit'
+import { presenceFromStatus, type Presence } from '../../core/types'
 import type { CheckResult, Ctx, Detection, EnsureResult, Lang, Output, Provider, ResourceSpec, Session, Slot, ToolSpec, Value } from '../../core/types'
 import { chooseAndPin } from '../../manifest/pin'
 import type { Manifest } from '../../manifest/schema'
@@ -213,6 +214,14 @@ export function createNetlifyProvider(_m?: Manifest): Provider {
           hint: 'cimiento down retries safely; if it keeps failing, the login is not an owner of the team.',
         })
       }
+    },
+
+    async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+      if (spec.id !== 'netlify.project' && spec.id !== 'netlify.deployment') return 'unknown'
+      const id = ctx.state.resources['netlify.project']?.externalId
+      if (!id) return 'unknown'
+      const result = await netlifyCall(ctx, spec.id, 'GET', `/sites/${encodeURIComponent(id)}`)
+      return presenceFromStatus(result.status)
     },
 
     async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {

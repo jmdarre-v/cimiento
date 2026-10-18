@@ -20,6 +20,7 @@ import { marketplaceInstructions, marketplacePersonStep, vercelTeamPlan } from '
 import { settleSupabasePath } from '../../wiring/supabase-configurations'
 import { githubAccessStep, vercelLoginStep, vercelSignupStep, vercelTeamStep } from '../../core/person-steps'
 import { renderPersonStep } from '../../core/person'
+import { presenceFromStatus, type Presence } from '../../core/types'
 import type {
   BillingInfo,
   CheckResult,
@@ -274,6 +275,15 @@ export function createVercelProvider(m?: Manifest): Provider {
           hint: 'Vercel refused the delete. cimiento down retries safely; if it keeps failing, the login is not an owner of the team.',
         })
       }
+    },
+
+    async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+      // A deployment exists only inside its project.
+      if (spec.id !== 'vercel.project' && spec.id !== 'vercel.deployment') return 'unknown'
+      const id = ctx.state.resources['vercel.project']?.externalId
+      if (!id) return 'unknown'
+      const result = await vercelCall(ctx, spec.id, 'GET', `/v9/projects/${encodeURIComponent(id)}`)
+      return presenceFromStatus(result.status)
     },
 
     async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {

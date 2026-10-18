@@ -7,6 +7,7 @@ import { githubLoginStep, githubSignupStep } from '../../core/person-steps'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
+import { presenceFromStatus, type Presence } from '../../core/types'
 import type {
   CheckResult,
   Ctx,
@@ -260,6 +261,22 @@ export const githubProvider: Provider = {
         needsHuman: true,
       })
     }
+  },
+
+  async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+    if (spec.id !== 'github.repo') return 'unknown'
+    const result = await ctx.io.exec('gh', ['repo', 'view', fullName(spec), '--json', 'id'])
+    if (result.code === 0) {
+      const recorded = ctx.state.resources[spec.id]?.externalId
+      try {
+        const id = (JSON.parse(result.stdout) as { id?: string }).id
+        // Another repository now answering to the name is not ours: ours is gone.
+        return recorded && id && id !== recorded ? 'absent' : 'present'
+      } catch {
+        return 'unknown'
+      }
+    }
+    return /Could not resolve to a Repository/.test(`${result.stderr}${result.stdout}`) ? 'absent' : 'unknown'
   },
 
   async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {
