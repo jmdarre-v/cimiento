@@ -260,6 +260,10 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
       }
     },
 
+    smokeEffect(spec: ResourceSpec): string | undefined {
+      return spec.id === 'supabase.check.migrated' ? `runs one read only query on the database, select count(*) from public.${BASELINE_TABLE}` : undefined
+    },
+
     async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
       if (spec.id !== 'supabase.project') return 'unknown'
       const ref = ctx.state.resources[spec.id]?.externalId
@@ -989,6 +993,8 @@ async function verifyMigrations(spec: ResourceSpec, ctx: Ctx): Promise<CheckResu
   if (!files.includes(BASELINE_FILE)) {
     return { ok: true, evidence: `${files.length} migrations applied in ${ref}` }
   }
+  // The query below is a POST, even though it only reads; without --smoke the history is the proof.
+  if (!ctx.smoke) return { ok: true, evidence: `${files.length} migrations recorded in the history of ${ref}; --smoke queries public.${BASELINE_TABLE}` }
   const query = await supabaseCall<{ count?: number | string }[]>(
     ctx,
     spec.id,

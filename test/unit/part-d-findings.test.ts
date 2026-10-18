@@ -83,7 +83,7 @@ describe('attended run findings', () => {
     it('up applies the baseline through the API and the check queries its table', async () => {
       const cloud = new FakeCloud()
       const t = testContext(manifestFor({ accounts: { supabase: 'direct' } }, 'fullstack'), { cloud })
-      const result = await runUp(t.ctx, t.providers, t.specs, { onManual: personDoesIt })
+      const result = await runUp({ ...t.ctx, smoke: true }, t.providers, t.specs, { onManual: personDoesIt })
       expect(result.errors).toEqual([])
       const ref = result.state.resources['supabase.project'].externalId!
       expect(cloud.migrations.get(ref)?.map((m) => m.name)).toEqual(['cimiento_baseline'])

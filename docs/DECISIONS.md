@@ -457,4 +457,11 @@ One line per decision the spec does not cover, with the reasoning.
   whole with its history insert, one implicit transaction. A missing history table is created; an
   unreadable one stops the run. The pg path is proven on a local PostgreSQL in CI; on Neon it was
   last field tested over HTTP (Goal 5), so it is partially proven until the next attended run.
+- 2026-10-18 Goal 6: checks split into inspect, which only reads, and smoke, which acts. plan,
+  doctor and up run inspect; --smoke on doctor or up runs smoke and first lists each effect:
+  Resend sends a test email (inspect reads GET /domains, 401 restricted_api_key is a live sending
+  key), PostHog sends an event (inspect checks the phc_ shape; PostHog has no read only key
+  check), Inngest sends a roundtrip event (inspect reads both keys), Turnstile calls siteverify
+  (inspect reads the widget), Supabase runs a read only query (inspect reads the migration
+  history; the query endpoint is a POST). plan ignores --smoke.
 

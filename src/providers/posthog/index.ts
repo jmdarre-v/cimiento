@@ -5,7 +5,7 @@
 // event was received, and the key's shape is checked here first (docs/DECISIONS.md).
 
 import type { Manifest } from '../../manifest/schema'
-import type { Provider } from '../../core/types'
+import type { CheckResult, Provider, ResourceSpec } from '../../core/types'
 import { CimientoError } from '../../core/errors'
 import { createKeyedProvider, keyRefused, vendorTrouble } from '../keyed'
 
@@ -30,7 +30,16 @@ export function createPosthogProvider(_m?: Manifest): Provider {
         es: 'Una prueba de que PostHog acepta la clave del proyecto: cimiento envia un evento llamado cimiento_check, que aparece en la actividad de PostHog.',
       },
     },
+    smokeEffect: () => 'sends one event named cimiento_check to PostHog, which shows under Activity',
+    async inspect(spec, _ctx, keys) {
+      const shape = keyShape(spec, keys[POSTHOG_KEY_NAME])
+      if (shape) return shape
+      // PostHog has no read only way to check a project key from outside, so this proves the shape.
+      return { ok: true, evidence: `${POSTHOG_KEY_NAME}=**** has the shape of a project key (phc_); --smoke sends an event` }
+    },
     async verify(spec, ctx, keys) {
+      const shape = keyShape(spec, keys[POSTHOG_KEY_NAME])
+      if (shape) return shape
       if (!/^phc_[A-Za-z0-9]{20,64}$/.test(keys[POSTHOG_KEY_NAME])) {
         return {
           ok: false,
@@ -61,3 +70,21 @@ export function createPosthogProvider(_m?: Manifest): Provider {
 }
 
 export default createPosthogProvider()
+
+function keyShape(spec: ResourceSpec, key: string): CheckResult | undefined {
+  if (/^phc_[A-Za-z0-9]{20,64}$/.test(key)) return undefined
+  return {
+    ok: false,
+    error: new CimientoError({
+      code: 'POSTHOG_KEY_INVALID',
+      provider: 'posthog',
+      resource: spec.id,
+      message: `${POSTHOG_KEY_NAME} does not look like a PostHog project key, which starts with phc_. A personal key (phx_) must never go to the page.`,
+      hint: `Copy the Project API key from ${KEY_URL}, then run cimiento secret rotate ${POSTHOG_KEY_NAME}.`,
+      docsUrl: KEY_URL,
+      retryable: false,
+      needsHuman: true,
+    }),
+  }
+}
+

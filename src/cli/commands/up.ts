@@ -23,7 +23,7 @@ import { hashManifest, writeProjectState } from '../../core/state'
 import type { Ctx, ResourceSpec } from '../../core/types'
 import { readmeWithReceipts } from '../../scaffold'
 import { pressEnter } from '../../secrets/prompt'
-import { openProject, reportStaleLock, type Session } from '../context'
+import { announceSmoke, openProject, reportStaleLock, type Session } from '../context'
 
 export interface UpOutcome {
   exitCode: number
@@ -48,6 +48,7 @@ export async function runUpIn(session: Session, cwd: string): Promise<UpOutcome>
 async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> {
   let project = openProject(session, { dryRun: false, cwd })
   if (await settleOrphans(session, project)) project = openProject(session, { dryRun: false, cwd })
+  announceSmoke(session, project)
   let personPhase: { pending: string[] } = { pending: [] }
   if (session.interactive) {
     // Everything that needs the person comes first, so the rest can run without them (BUG-42):

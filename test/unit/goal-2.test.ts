@@ -44,7 +44,8 @@ afterEach(() => {
 })
 
 async function newProject(cloud: FakeCloud, writer = new CaptureWriter()): Promise<number> {
-  return run(['new', 'my-app', '--preset', 'fullstack', '--json', '--yes', '--allow-billing', '--dir', dir], {
+  // --smoke: these tests prove the checks that act, the Inngest event and siteverify among them.
+  return run(['new', 'my-app', '--preset', 'fullstack', '--json', '--yes', '--allow-billing', '--smoke', '--dir', dir], {
     io: cloud,
     cwd: root,
     writer,
@@ -245,7 +246,7 @@ describe('turnstile', () => {
     const t = testContext(manifestFor({}, 'fullstack'), { cloud })
     const provider = t.providers.find((p) => p.id === 'turnstile')!
     const spec = specById(t.specs, 'turnstile.check.verify')
-    const result = await provider.verify({ ...spec, inputs: { sitekey: 'x', secret: 'fake-unknown-secret' } }, t.ctx)
+    const result = await provider.verify({ ...spec, inputs: { sitekey: 'x', secret: 'fake-unknown-secret' } }, { ...t.ctx, smoke: true })
     expect(result.ok).toBe(false)
     expect(result.error?.code).toBe('TURNSTILE_SECRET_REJECTED')
   })
@@ -316,7 +317,7 @@ describe('inngest', () => {
     await newProject(cloud)
     cloud.inngestSynced.clear()
     const writer = new CaptureWriter()
-    await run(['doctor', '--json'], { io: cloud, cwd: dir, writer, interactive: false })
+    await run(['doctor', '--json', '--smoke'], { io: cloud, cwd: dir, writer, interactive: false })
     const item = (lastJson(writer, 'doctor').items as { id: string; ok: boolean; error?: { code: string; hint: string } }[]).find(
       (i) => i.id === 'inngest.check.roundtrip',
     )!

@@ -20,7 +20,12 @@ export interface KeyedProviderOptions {
   secrets: string[]
   check: string
   explain: Record<string, { en: string; es?: string }>
+  /** The check under --smoke, which acts: sends an email or an event. */
   verify(spec: ResourceSpec, ctx: Ctx, keys: Record<string, string>): Promise<CheckResult>
+  /** The passive check, reads only, for plan, doctor and up without --smoke (BUG-76). */
+  inspect?(spec: ResourceSpec, ctx: Ctx, keys: Record<string, string>): Promise<CheckResult>
+  /** What verify does to the outside world, said before --smoke runs it. */
+  smokeEffect?: (m: Manifest) => string
 }
 
 export function createKeyedProvider(options: KeyedProviderOptions): Provider {
@@ -67,7 +72,11 @@ export function createKeyedProvider(options: KeyedProviderOptions): Provider {
         ctx.redactor.addValue(value)
         keys[name] = value
       }
-      return options.verify(spec, ctx, keys)
+      return ctx.smoke || !options.inspect ? options.verify(spec, ctx, keys) : options.inspect(spec, ctx, keys)
+    },
+
+    smokeEffect(spec: ResourceSpec, m: Manifest): string | undefined {
+      return spec.id === options.check && options.inspect && options.smokeEffect ? options.smokeEffect(m) : undefined
     },
 
     async destroy(): Promise<void> {

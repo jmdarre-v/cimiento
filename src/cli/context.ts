@@ -169,6 +169,8 @@ export function openProject(session: Session, options: { dryRun: boolean; cwd?: 
     redactor: session.redactor,
     secrets,
     dryRun: options.dryRun,
+    // plan never acts, whatever the flags say.
+    smoke: !options.dryRun || session.args.command === 'doctor' ? flagBool(session.args.flags, 'smoke') : false,
     interactive: session.interactive,
     ...(chooser ? { choose: chooser } : {}),
     ...(asker ? { ask: asker } : {}),
@@ -279,3 +281,24 @@ export function reportStaleLock(session: Session, stale: StaleLock): void {
   if (session.json) session.printer.emit({ event: 'stale-lock', pid: stale.pid, command: stale.command, startedAt: stale.startedAt, message })
   else session.printer.line(message)
 }
+
+/**
+ * --smoke runs the checks that act on the outside world: an email, an event, a test token. Each
+ * says what it will do before anything runs (BUG-76).
+ */
+export function announceSmoke(session: Session, project: ProjectSession): void {
+  if (!project.ctx.smoke) return
+  const byProvider = new Map(project.providers.map((p) => [p.id, p]))
+  const effects = project.specs
+    .filter((spec) => (!session.only?.length || session.only.includes(spec.provider)) && !session.skip?.includes(spec.provider))
+    .flatMap((spec) => {
+      const effect = byProvider.get(spec.provider)?.smokeEffect?.(spec, project.manifest)
+      return effect ? [{ id: spec.id, effect }] : []
+    })
+  if (session.json) session.printer.emit({ event: 'smoke', effects })
+  else {
+    session.printer.line('\n--smoke runs checks that act:')
+    for (const e of effects) session.printer.line(`  ${e.id}: ${e.effect}`)
+  }
+}
+

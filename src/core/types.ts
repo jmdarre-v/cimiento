@@ -135,6 +135,11 @@ export interface Ctx {
   /** plan runs read only; up runs with dryRun false. */
   dryRun: boolean
   /**
+   * Run the checks that act on the outside world: send an email, an event, a test token. Off
+   * unless --smoke; without it every check only reads (BUG-76).
+   */
+  smoke?: boolean
+  /**
    * True when a person is at a terminal. Only then does cimiento launch a browser login or ask a
    * question. In --json and agent runs it stops at those points with exit code 2 instead.
    */
@@ -192,6 +197,8 @@ export interface Provider {
   ensure(r: ResourceSpec, ctx: Ctx): Promise<EnsureResult>
   verify(r: ResourceSpec, ctx: Ctx): Promise<CheckResult>
   destroy(r: ResourceSpec, ctx: Ctx): Promise<void>
+  /** What a check does to the outside world when it runs under --smoke, said before it runs. */
+  smokeEffect?(r: ResourceSpec, m: Manifest): string | undefined
   /** Whether a resource this provider destroys still exists, looked up by its recorded id. */
   presence?(r: ResourceSpec, ctx: Ctx): Promise<Presence>
   outputs(r: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>>

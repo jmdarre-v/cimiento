@@ -75,7 +75,7 @@ function items(writer: CaptureWriter, command = 'doctor'): Item[] {
 describe('a netlify, neon, resend, stripe and posthog project on the fake cloud', () => {
   it('goes from nothing to every check passing, with the keys and DATABASE_URL in the Netlify env', async () => {
     const cloud = new FakeCloud({ keychain: KEYS })
-    const { code, writer } = await newV2(cloud)
+    const { code, writer } = await newV2(cloud, ['--smoke'])
     expect(code, writer.outText).toBe(ExitCode.ok)
 
     const site = [...cloud.v2.netlifySites.values()][0]

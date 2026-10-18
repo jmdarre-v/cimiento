@@ -90,6 +90,10 @@ export function createInngestProvider(_m?: Manifest): Provider {
       return { ok: true }
     },
 
+    smokeEffect(spec: ResourceSpec): string | undefined {
+      return spec.id === 'inngest.check.roundtrip' ? 'sends one event cimiento/roundtrip to Inngest, which runs the cimiento-roundtrip function once' : undefined
+    },
+
     async destroy(): Promise<void> {
       // The app lives in Inngest Cloud and goes away with the endpoint; down lists it as a
       // leftover to archive, because the Inngest API has no way to delete it.
@@ -340,7 +344,16 @@ function sleep(ms: number): Promise<void> {
  * key, the scaffolded function runs it, and the Inngest API, asked with the signing key, reports
  * the run as completed. Both keys are read from the Vercel env, so this also proves the wiring.
  */
+/** Without --smoke the roundtrip only reads: both keys are in the env and the app check proves sync. */
 async function verifyRoundtrip(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
+  if (ctx.smoke) return smokeRoundtrip(spec, ctx)
+  const projectId = str(spec.inputs.projectId)
+  const keys = await Promise.all(INNGEST_KEYS.map((key) => readEnvValue(ctx, spec.id, projectId, key).catch(() => undefined)))
+  if (keys.every(Boolean)) return { ok: true, evidence: 'both Inngest keys are in the env and the app is registered; --smoke sends one event and waits for its run' }
+  return smokeRoundtrip(spec, ctx)
+}
+
+async function smokeRoundtrip(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const projectId = str(spec.inputs.projectId)
   const [eventKey, signingKey] = await Promise.all(INNGEST_KEYS.map((key) => readEnvValue(ctx, spec.id, projectId, key).catch(() => undefined)))
   if (!eventKey || !signingKey) {

@@ -29,6 +29,18 @@ export function createResendProvider(_m?: Manifest): Provider {
         es: 'Resend no tiene inicio de sesion en cimiento. Su clave se crea una vez en resend.com/api-keys y se guarda con cimiento secret set RESEND_API_KEY.',
       },
     },
+    smokeEffect: (m) => `sends one email from ${m.options.resend.from} to Resend's test inbox delivered@resend.dev, which reaches nobody and counts against the monthly quota`,
+    // Reads only: the domains list answers 200 to a full access key and 401 restricted_api_key to
+    // a sending key, both live keys; anything that says invalid is refused.
+    async inspect(spec, ctx, keys) {
+      const key = keys[RESEND_KEY_NAME]
+      const res = await ctx.io.http({ method: 'GET', url: `${RESEND_API}/domains`, headers: { authorization: `Bearer ${key}`, 'user-agent': 'cimiento' } })
+      const name = (res.json as { name?: string } | undefined)?.name ?? ''
+      if (res.ok) return { ok: true, evidence: `${RESEND_KEY_NAME}=**** is a full access key Resend accepts; --smoke sends a test email` }
+      if (name === 'restricted_api_key') return { ok: true, evidence: `${RESEND_KEY_NAME}=**** is a sending key Resend accepts; --smoke sends a test email` }
+      if (res.status === 400 || res.status === 401 || res.status === 403) return keyRefused('resend', 'RESEND_KEY_INVALID', spec, RESEND_KEY_NAME, 'Resend', res.status, KEYS_URL)
+      return { ...vendorTrouble('resend', 'RESEND_API_ERROR', spec, 'Resend', res.status), unknown: true }
+    },
     async verify(spec, ctx, keys) {
       const key = keys[RESEND_KEY_NAME]
       const from = ctx.manifest.options.resend.from

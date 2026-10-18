@@ -89,6 +89,7 @@
   hint: Run cimiento doctor --json to see which item failed, then cimiento explain <resource>.
   fix: A check proves function, not existence. The message names the thing that could not be proved.
 
+  seen: "Goal 6, 2026-10-18 (BUG-76). plan and doctor acted on the outside world: on the fullstack fixture they posted a Supabase SQL query, a Turnstile siteverify and an Inngest event, and on Resend, PostHog and Neon projects they sent an email, an event and SQL over HTTP. Every check now has a passive inspect that only reads; the checks that act run only under --smoke, which says what each does first. plan never acts."
 - code: MANUAL_STEP_PENDING
   provider: core
   title: a step only a person can do

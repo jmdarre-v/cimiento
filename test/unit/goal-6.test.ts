@@ -319,7 +319,7 @@ describe('BUG-75: doctor and plan report a failed live check as failed or unknow
   })
 })
 
-describe.skip('BUG-76: plan and doctor are passive', () => {
+describe('BUG-76: plan and doctor are passive', () => {
   const KEYS = {
     'my-app/RESEND_API_KEY': 're_fake_not_a_real_key',
     'my-app/STRIPE_SECRET_KEY': 'sk_test_fake_not_a_real_key',

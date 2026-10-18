@@ -6,7 +6,7 @@ import { runVerifyAll } from '../../core/executor'
 import { isStale, writeMachineState, machineStatePath } from '../../core/state'
 import { outdatedTools, toolVersion } from '../../core/toolkit'
 import type { Detection } from '../../core/types'
-import { openProject, type Session } from '../context'
+import { announceSmoke, openProject, type Session } from '../context'
 
 export async function doctorCommand(session: Session): Promise<number> {
   const project = openProject(session, { dryRun: true })
@@ -38,6 +38,8 @@ export async function doctorCommand(session: Session): Promise<number> {
   } catch {
     // A machine state that cannot be written is not a reason to fail the report.
   }
+
+  announceSmoke(session, project)
 
   const reports = await runVerifyAll({ ...project.ctx, machine }, project.providers, project.specs, {
     only: session.only,

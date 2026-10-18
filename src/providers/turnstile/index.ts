@@ -179,6 +179,10 @@ export function createTurnstileProvider(_m?: Manifest): Provider {
       }
     },
 
+    smokeEffect(spec: ResourceSpec): string | undefined {
+      return spec.id === 'turnstile.check.verify' ? 'asks Cloudflare siteverify to check a dummy token with the widget secret key; nothing is stored' : undefined
+    },
+
     async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
       if (spec.id !== 'turnstile.widget') return 'unknown'
       const sitekey = ctx.state.resources[spec.id]?.externalId
@@ -572,6 +576,33 @@ async function verifyDomains(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult>
  * answered with invalid-input-response proves the secret key is the widget's own and is live.
  */
 async function verifySecret(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
+  if (!ctx.smoke) return inspectWidget(spec, ctx)
+  return smokeSecret(spec, ctx)
+}
+
+/** Reads only: the widget the keys belong to still exists. siteverify, a POST, runs under --smoke. */
+async function inspectWidget(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
+  const sitekey = str(spec.inputs.sitekey)
+  const result = await cloudflareCall<Widget>(ctx, spec.id, 'GET', `${widgetsPath(ctx, spec)}/${encodeURIComponent(sitekey)}`)
+  if (result.ok) return { ok: true, evidence: `turnstile widget ${sitekey} exists; --smoke checks its secret key with siteverify` }
+  if (result.status === 404) {
+    return {
+      ok: false,
+      error: new CimientoError({
+        code: 'TURNSTILE_WIDGET_NOT_FOUND',
+        provider: ID,
+        resource: spec.id,
+        message: `The Turnstile widget ${sitekey} no longer exists in the Cloudflare account.`,
+        hint: 'Run cimiento up. It creates the widget again and writes the new keys to the hosting env.',
+        retryable: true,
+        needsHuman: false,
+      }),
+    }
+  }
+  return { ok: false, unknown: true, error: cloudflareError(spec.id, result, 'Reading the Turnstile widget failed.', 'Run cimiento doctor again; nothing was changed.') }
+}
+
+async function smokeSecret(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const secret = str(spec.inputs.secret)
   if (!secret) {
     return {

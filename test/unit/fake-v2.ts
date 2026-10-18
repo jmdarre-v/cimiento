@@ -402,6 +402,11 @@ export class FakeV2 {
   private resend(req: HttpRequest, url: URL): HttpResponse {
     if (!req.headers?.['user-agent']) return json(403, { statusCode: 403, name: 'missing_user_agent', message: 'User-Agent header is required' })
     const key = req.headers?.authorization?.replace('Bearer ', '') ?? ''
+    if (url.pathname === '/domains' && req.method.toUpperCase() === 'GET') {
+      // As Resend answers: a sending key may not list domains, an unknown key is invalid.
+      if (!key.startsWith('re_fake')) return json(400, { statusCode: 400, name: 'validation_error', message: 'API key is invalid' })
+      return json(401, { statusCode: 401, name: 'restricted_api_key', message: 'This API key is restricted to only send emails' })
+    }
     if (!key.startsWith('re_fake')) return json(401, { statusCode: 401, name: 'validation_error', message: 'API key is invalid' })
     if (url.pathname !== '/emails') return json(404, {})
     const body = req.body as { from: string; to: string[] }
