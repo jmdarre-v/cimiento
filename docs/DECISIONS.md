@@ -472,4 +472,9 @@ One line per decision the spec does not cover, with the reasoning.
   dependencies, .vercel/project.json, vercel.json, netlify.toml, .netlify/state.json,
   supabase/config.toml and the github remote, then runs each provider's own detect (tool version,
   login) against a manifest built in memory. It writes no file and exits 0; init is what writes.
+- 2026-10-18 Goal 6: the release workflow runs on v* tags only, checks the tag against
+  package.json, builds and tests with the postgres service, packs, installs the tarball in a clean
+  prefix and checks cimiento --version, then scaffolds a designer project with new
+  --scaffold-only (no account touched), builds it and reads plan --json. It never publishes.
+  install.sh takes CIMIENTO_VERSION to pin a release.
 

@@ -67,7 +67,7 @@ function setup(opts: { brew: boolean; brewWritable?: boolean; os?: string; prese
     'npm',
     [
       `echo "npm $*" >> "${log}"`,
-      'pkg="$3"; case "$pkg" in @anthropic-ai/claude-code) name=claude ;; cimiento@latest|*.tgz) name=cimiento ;; *) name="$pkg" ;; esac',
+      'pkg="$3"; case "$pkg" in @anthropic-ai/claude-code) name=claude ;; cimiento@*|*.tgz) name=cimiento ;; *) name="$pkg" ;; esac',
       `printf '#!/bin/bash\\necho "%s version 0.1.0"\\n' "$name" > "${stubs}/$name"; chmod +x "${stubs}/$name"`,
     ].join('\n'),
   )
@@ -204,6 +204,15 @@ describe('scripts/install.sh', () => {
     expect(order.findIndex((l) => l.startsWith('sudo apt-get install'))).toBeLessThan(order.findIndex((l) => l.startsWith('brew install')))
     expect(order[order.length - 1]).toContain('npm install -g cimiento@latest')
     expect(out).toContain('Open a new Ubuntu window')
+  })
+
+  it('CIMIENTO_VERSION pins the release: an older cimiento is replaced by the pinned one, and the same one is left alone', () => {
+    setup({ brew: true, present: ALL })
+    const pinned = install([], { CIMIENTO_VERSION: '0.3.0' })
+    expect(pinned.code, pinned.out).toBe(0)
+    expect(pinned.calls).toContain('npm install -g cimiento@0.3.0')
+    const latest = install([])
+    expect(latest.calls.split('\n').filter((l) => l.includes('npm install -g cimiento')).length).toBe(1)
   })
 
   it('BUG-58 and BUG-59: --dry-run never fetches the Homebrew installer, and its table says would be installed', () => {

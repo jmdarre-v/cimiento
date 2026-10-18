@@ -106,6 +106,11 @@ export async function newCommand(session: Session): Promise<number> {
     session.printer.line(t(session.lang, 'files', { count: written.length + 1 }))
   }
 
+  // Files only, no account touched: for CI, which has no sessions, and for a look before up.
+  if (flagBool(session.args.flags, 'scaffold-only')) {
+    if (!session.json) session.printer.line(`Scaffold only. Run cimiento up in ${dir} when you want it deployed.`)
+    return ExitCode.ok
+  }
   const inner = { ...session, cwd: dir }
   const outcome = await runUpIn(inner, dir)
   if (!session.json && outcome.exitCode === ExitCode.ok) {

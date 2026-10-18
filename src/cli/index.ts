@@ -44,6 +44,7 @@ Usage
   cimiento publish [--message <text>]            commit every change, push, wait for the deploy, print the URL
   cimiento down                                  delete everything in state, after typing the name
   cimiento accounts set <provider> [--to <id>]   pick the account again: github, vercel, netlify, supabase, neon or turnstile
+  cimiento new <name> --scaffold-only            write the project files and stop, touching no account
   cimiento doctor --smoke                        also run the checks that act: a test email, an event, a test token
   cimiento up --orphans retain|release|destroy  decide about resources stack.yaml no longer selects
   cimiento domain add <domain>                   put your own domain on the site, with auth URLs and Turnstile following

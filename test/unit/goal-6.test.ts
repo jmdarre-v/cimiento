@@ -529,3 +529,15 @@ describe('operational boundaries: an integration removed after it was confirmed'
     expect(doctor.code).not.toBe(ExitCode.ok)
   })
 })
+
+describe('new --scaffold-only', () => {
+  it('writes the project files and touches no account', async () => {
+    const cloud = new FakeCloud()
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--scaffold-only', '--json', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+    expect(existsSync(join(dir, 'stack.yaml'))).toBe(true)
+    expect(existsSync(join(dir, 'app', 'page.tsx'))).toBe(true)
+    expect(cloud.httpCalls).toEqual([])
+    expect(cloud.execCalls.filter((c) => c.startsWith('gh ') || c.startsWith('vercel '))).toEqual([])
+  })
+})
