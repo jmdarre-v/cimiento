@@ -208,7 +208,10 @@ export const dynamic = 'force-dynamic'
 export async function GET() {
   try {
     const db = await database()
-    const rows = (await (await sql())\`select count(*)::int as count from public.cimiento_baseline\`) as { count: number }[]
+    // The query function first, then the tagged query: Next.js compiled an awaited call used as
+    // a template tag into a call on the promise itself (BUG-104).
+    const query = await sql()
+    const rows = (await query\`select count(*)::int as count from public.cimiento_baseline\`) as { count: number }[]
     const endpoint = new URL(db.url).hostname.split('.')[0].replace(/-pooler$/, '')
     return NextResponse.json({ ok: true, source: db.source, branch: db.branch ?? null, endpoint, rows: rows[0]?.count ?? 0 })
   } catch (err) {

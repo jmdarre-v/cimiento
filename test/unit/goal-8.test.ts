@@ -383,3 +383,11 @@ describe('BUG-103: options.vercel.deployment_protection was never applied', () =
     expect(again.writer.outText).toMatch(/"id":"vercel.project","kind":"resource","provider":"vercel","action":"noop"/)
   })
 })
+
+describe('BUG-104: Next.js compiled a parenthesized await used as a template tag into a call on the promise', () => {
+  it('the generated route binds the query function before it tags the query', () => {
+    const route = scaffoldFiles(manifestFor({ slots: { repo: 'github', hosting: 'vercel', database: 'neon' } }))['app/api/cimiento/database/route.ts']
+    expect(route).not.toMatch(/\(await [^()]*\(\)\)`/)
+    expect(route).toMatch(/const query = await sql\(\)\n\s+const rows = \(await query`/)
+  })
+})
