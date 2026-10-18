@@ -178,6 +178,10 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'The name cimiento would delete now belongs to another resource, with another id than the one cimiento made. cimiento leaves it alone. If the one it made is gone, run cimiento down --release with the id to stop tracking it.',
     es: 'El nombre que cimiento borraria ahora pertenece a otro recurso, con otro id que el que cimiento creo. cimiento no lo toca. Si el que creo ya no existe, ejecuta cimiento down --release con el id para dejar de seguirlo.',
   },
+  LEGACY_STATE_UNRESOLVED: {
+    en: 'State written by an older cimiento tracks something this version cannot describe, so it cannot delete it safely. Delete it yourself if it still exists, then run cimiento down --release with its id.',
+    es: 'El estado que escribio un cimiento anterior registra algo que esta version no sabe describir, asi que no puede borrarlo con seguridad. Borralo tu si aun existe y luego ejecuta cimiento down --release con su id.',
+  },
   ORPHANS_DECISION_NEEDED: {
     en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
     es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',

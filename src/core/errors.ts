@@ -183,6 +183,7 @@ export const ERROR_CODES = [
   'NEON_MIGRATION_HISTORY_UNREADABLE',
   'DOWN_ID_MISSING',
   'DOWN_IDENTITY_MISMATCH',
+  'LEGACY_STATE_UNRESOLVED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -213,6 +214,7 @@ export const PERSON_CODES: ReadonlySet<string> = new Set([
   'ORPHANS_DECISION_NEEDED',
   'DOWN_ID_MISSING',
   'DOWN_IDENTITY_MISMATCH',
+  'LEGACY_STATE_UNRESOLVED',
 ])
 
 export function needsPerson(err: { code: string; needsHuman: boolean }): boolean {

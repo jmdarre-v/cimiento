@@ -196,6 +196,16 @@ There is nothing in this folder to join.
 
 **Looks like:** `has no .cimiento/state.json`
 
+### LEGACY_STATE_UNRESOLVED
+
+State from an older cimiento tracks something it cannot rebuild.
+
+**What to do:** If the resource still exists, delete it in its provider's dashboard, then run cimiento down --release ID and cimiento down again.
+
+**Why:** State written by 0.1.0 and 0.2.0 has no spec on any entry. On the first run cimiento rebuilds each spec from stack.yaml, or from stack.yaml with the old provider put back in its slot, and the first command that writes state saves them. A record neither describes is reported by plan and every writing command, and down exits non zero until it is released.
+
+**Looks like:** `cannot say what it is or delete it safely`
+
 ### MANIFEST_INVALID
 
 Stack.yaml does not pass validation.

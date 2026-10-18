@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Upgrading from 0.1.0 or 0.2.0
+
+- State those versions wrote has no spec on any entry. The first command reads it as is and
+  rebuilds each spec from `stack.yaml`, or, for a provider `stack.yaml` no longer selects, from
+  `stack.yaml` with that provider put back in its slot. The first `up` or `down` saves the
+  rebuilt state as version 2; `plan` only reports what it rebuilt.
+- A record neither describes is reported by `plan` and by every command that writes state, and
+  `down` exits non zero with LEGACY_STATE_UNRESOLVED until it is reconciled: delete the resource
+  in its provider if it still exists, then run `cimiento down --release ID`.
+- Run `cimiento plan` once after upgrading to see both lists before anything changes.
+
+### Teardown
+
+- `down` deletes by the id the provider gave when cimiento made the resource, never by a name.
+  GitHub, whose delete takes a name, is read first and refused on a node id mismatch
+  (DOWN_IDENTITY_MISMATCH). A record without an id is never looked up by name (DOWN_ID_MISSING).
+- `down --release ID[,ID]` stops tracking resources and deletes nothing.
+
 ## 0.3.0
 
 Trustworthy state, teardown and health. 0.1.0 and 0.2.0 can lose track of resources during

@@ -490,3 +490,7 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 7: down --release ID[,ID] stops tracking resources and deletes nothing. It is
   the reconcile path for both refusals above and for unresolved legacy state, and needs no typed
   confirmation because nothing outside the project changes.
+- 2026-10-18 Goal 7: legacy state (entries without spec) is rebuilt in openProject from stack.yaml,
+  then from stack.yaml with each provider this build ships put back in the slots it fills, the
+  id's own provider first. Only up, down and the other writing commands save it; plan and doctor
+  only report. Tool, session and check entries never had a spec and are not legacy.

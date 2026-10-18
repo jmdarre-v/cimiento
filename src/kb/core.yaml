@@ -248,3 +248,12 @@
   hint: If the resource cimiento made was deleted or renamed, run cimiento down --release ID to stop tracking it; nothing is deleted.
   fix: Where a provider deletes only by name, as gh repo delete does, down first reads the resource and compares its id with the one state recorded. On a mismatch it refuses, keeps the record and explains. Vercel, Netlify, Neon, Supabase and Turnstile delete by the recorded id directly.
   seen: "Goal 7, 2026-10-18 (BUG-82, BUG-83). Vercel destroy sent DELETE /v9/projects/<name>, and GitHub destroy ran gh repo delete <name> without comparing the node id, so a project or repository made later under the same name was deleted in place of the one cimiento made."
+
+- code: LEGACY_STATE_UNRESOLVED
+  provider: core
+  title: state from an older cimiento tracks something it cannot rebuild
+  signatures:
+    - "cannot say what it is or delete it safely"
+  hint: If the resource still exists, delete it in its provider's dashboard, then run cimiento down --release ID and cimiento down again.
+  fix: State written by 0.1.0 and 0.2.0 has no spec on any entry. On the first run cimiento rebuilds each spec from stack.yaml, or from stack.yaml with the old provider put back in its slot, and the first command that writes state saves them. A record neither describes is reported by plan and every writing command, and down exits non zero until it is released.
+  seen: "Goal 7, 2026-10-18 (BUG-85, BUG-86). With state from 0.2.0, after hosting changed from vercel to netlify, down saw no spec for vercel.project, skipped it and exited 0 with the project still running; a record no provider describes was skipped the same way."

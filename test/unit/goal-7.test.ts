@@ -134,3 +134,76 @@ describe('BUG-84: a record without an id is never deleted by finding a same-name
     expect(stateOf().resources['turnstile.widget']).toBeDefined()
   })
 })
+
+/** state.json as 0.1.0 and 0.2.0 wrote it: version 1, no spec and no account on any entry. */
+function makeLegacy(): void {
+  const path = join(dir, '.cimiento', 'state.json')
+  const state = JSON.parse(readFileSync(path, 'utf8')) as { version: number; resources: Record<string, Record<string, unknown>> }
+  state.version = 1
+  for (const entry of Object.values(state.resources)) {
+    delete entry.spec
+    delete entry.account
+  }
+  writeFileSync(path, JSON.stringify(state, null, 2))
+}
+
+function swapHosting(to: string): void {
+  const file = join(dir, 'stack.yaml')
+  writeFileSync(file, readFileSync(file, 'utf8').replace(/hosting: vercel/, `hosting: ${to}`))
+}
+
+describe('BUG-85: legacy state from 0.1.0 and 0.2.0 is rebuilt, never silently skipped by down', () => {
+  it('after a hosting swap, the legacy Vercel project is rebuilt from stack.yaml, listed as orphan, and deleted by down', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'designer'])
+    makeLegacy()
+    swapHosting('netlify')
+
+    const plan = await cli(cloud, ['plan', '--json'])
+    const items = (plan.writer.jsonObjects().pop() as { items: { id: string; status: string }[] }).items
+    expect(items.find((i) => i.id === 'vercel.project')?.status).toBe('orphan')
+
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code, down.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(cloud.vercelProjects.size).toBe(0)
+    expect(stateOf().resources['vercel.project']).toBeUndefined()
+  })
+
+  it('the first command that writes state stores the rebuilt specs back', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'designer'])
+    makeLegacy()
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(up.writer.outText).toContain('"event":"legacy-rebuilt"')
+    const saved = JSON.parse(readFileSync(join(dir, '.cimiento', 'state.json'), 'utf8')) as { version: number; resources: Record<string, StoredResource> }
+    expect(saved.version).toBe(2)
+    expect(saved.resources['vercel.project'].spec).toBeDefined()
+    expect(saved.resources['github.repo'].spec).toBeDefined()
+  })
+})
+
+describe('BUG-86: a legacy record that cannot be rebuilt keeps down non-zero until it is reconciled', () => {
+  it('down reports LEGACY_STATE_UNRESOLVED and exits non-zero; down --release reconciles it', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'designer'])
+    editState((r) => {
+      r['oldhost.project'] = { origin: 'created', externalId: 'old_123' }
+    })
+    makeLegacy()
+
+    const plan = await cli(cloud, ['plan', '--json'])
+    expect(plan.writer.outText).toContain('oldhost.project')
+
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code).not.toBe(ExitCode.ok)
+    expect(down.writer.outText).toContain('LEGACY_STATE_UNRESOLVED')
+    expect(stateOf().resources['oldhost.project']).toBeDefined()
+
+    const released = await cli(cloud, ['down', '--release', 'oldhost.project', '--yes', '--json'])
+    expect(released.code).toBe(ExitCode.ok)
+    const again = await cli(cloud, ['down', '--yes', '--json'])
+    expect(again.code, again.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(stateOf().resources['oldhost.project']).toBeUndefined()
+  })
+})

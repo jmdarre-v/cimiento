@@ -11,6 +11,7 @@ import {
   machineStatePath,
   readMachineState,
   readProjectState,
+  writeProjectState,
   writeMachineState,
   type MachineState,
   type ProjectState,
@@ -21,6 +22,7 @@ import { reconcilePins } from '../manifest/pin'
 import { buildProviders, collectSpecs, explainKey } from '../registry'
 import { SecretStore, ask, askHidden, isYes, pressEnter } from '../secrets'
 import { RunLog } from '../core/runlog'
+import { upgradeLegacy, type LegacyOutcome, type LegacyUnresolved } from '../core/legacy'
 import { renderPersonStep, STEP_WORDS, type PersonStep } from '../core/person'
 import { flagBool, flagList, flagString, type ParsedArgs } from './args'
 import { Printer, type Writer } from './output'
@@ -127,6 +129,8 @@ export interface ProjectSession {
   specs: ResourceSpec[]
   ctx: Ctx
   secrets: SecretStore
+  /** What upgrading state from 0.1.0 or 0.2.0 rebuilt, and what it could not. */
+  legacy: { rebuilt: string[]; unresolved: LegacyUnresolved[] }
 }
 
 /** Loads stack.yaml and state, and assembles everything the engine needs. */
@@ -135,12 +139,22 @@ export function openProject(session: Session, options: { dryRun: boolean; cwd?: 
   const loaded = loadManifest(cwd)
   const stored = readProjectState(cwd)
   // State follows stack.yaml for every pinned account, before anything reads either.
-  const state: ProjectState = reconcilePins(loaded.manifest, { ...stored, manifestHash: loaded.hash })
+  let state: ProjectState = reconcilePins(loaded.manifest, { ...stored, manifestHash: loaded.hash })
   // Providers of resources stack.yaml no longer selects come too, so they can be planned and
   // destroyed (BUG-74); their resources() return nothing for an unselected slot.
-  const recorded = Object.values(state.resources).flatMap((e) => (e.spec ? [e.spec.provider] : []))
-  const providers = buildProviders(loaded.manifest, recorded)
-  const specs = collectSpecs(loaded.manifest, state, providers)
+  const recorded = (s: ProjectState): string[] => Object.values(s.resources).flatMap((e) => (e.spec ? [e.spec.provider] : []))
+  let providers = buildProviders(loaded.manifest, recorded(state))
+  let specs = collectSpecs(loaded.manifest, state, providers)
+  // State from 0.1.0 and 0.2.0 has no specs: rebuilt here, written back by the first command that
+  // writes state, and whatever cannot be rebuilt is reported (BUG-85, BUG-86).
+  const legacy = upgradeLegacy(loaded.manifest, state, specs, providers)
+  if (legacy.rebuilt.length > 0) {
+    state = legacy.state
+    providers = buildProviders(loaded.manifest, recorded(state))
+    specs = collectSpecs(loaded.manifest, state, providers)
+    if (!options.dryRun) writeProjectState(cwd, { ...state, manifestHash: stored.manifestHash })
+  }
+  if (!options.dryRun) reportLegacy(session, legacy)
   const secrets = new SecretStore(loaded.manifest, session.redactor, {
     interactive: session.interactive,
     values: session.deps.secrets ?? {},
@@ -177,7 +191,21 @@ export function openProject(session: Session, options: { dryRun: boolean; cwd?: 
     ...(session.interactive ? { openUrl: (url: string) => openUrlWith(session.io, url) } : {}),
     ...(canWalk(session) ? { walkStep: walker(session) } : {}),
   }
-  return { manifest: loaded.manifest, manifestHash: loaded.hash, state, providers, specs, ctx, secrets }
+  return { manifest: loaded.manifest, manifestHash: loaded.hash, state, providers, specs, ctx, secrets, legacy: { rebuilt: legacy.rebuilt, unresolved: legacy.unresolved } }
+}
+
+function reportLegacy(session: Session, legacy: LegacyOutcome): void {
+  if (legacy.rebuilt.length > 0) {
+    const message = `State from an older cimiento had no specs. Rebuilt from stack.yaml and saved: ${legacy.rebuilt.join(', ')}.`
+    if (session.json) session.printer.emit({ event: 'legacy-rebuilt', ids: legacy.rebuilt, message })
+    else session.printer.line(message)
+  }
+  if (legacy.unresolved.length > 0) {
+    const ids = legacy.unresolved.map((u) => u.id)
+    const message = `State from an older cimiento tracks ${ids.join(', ')}, which cimiento cannot rebuild. cimiento down exits non zero until each is released with cimiento down --release ID.`
+    if (session.json) session.printer.emit({ event: 'legacy-unresolved', unresolved: legacy.unresolved, message })
+    else session.printer.line(message)
+  }
 }
 
 export function emptyState(hash = ''): ProjectState {

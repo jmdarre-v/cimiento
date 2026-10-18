@@ -38,6 +38,8 @@ export async function downCommand(session: Session): Promise<number> {
 
   const release = flagList(session.args.flags, 'release')
   if (release.length > 0) return releaseRecords(session, project.ctx, release, allSpecs)
+  // A record from an older cimiento that could not be rebuilt is never skipped quietly (BUG-86).
+  const legacy = project.legacy.unresolved.map((u) => legacyError(u.id, u.reason))
 
   if (targets.length === 0) {
     // Nothing left to delete, but an organization cimiento created may still be waiting for the
@@ -48,22 +50,28 @@ export async function downCommand(session: Session): Promise<number> {
     // Checks an older down left behind go too (BUG-81).
     const next = dropOrphanChecks(recordLeftovers(ctx.state, leftovers), allSpecs)
     writeProjectState(ctx.cwd, { ...next, manifestHash: hashManifest(readFileSync(join(ctx.cwd, 'stack.yaml'), 'utf8')) })
+    const exitCode = legacy.length > 0 ? ExitCode.needsHuman : ExitCode.ok
+    const message = legacy.length > 0 ? 'Nothing cimiento can destroy, but state has records it cannot rebuild.' : 'Nothing in state to destroy.'
     const payload = {
-      ok: true,
+      ok: exitCode === ExitCode.ok,
       command: 'down',
+      exitCode,
       destroyed: [],
       released: [],
       leftovers: leftovers.map(leftoverJson),
-      pending: [],
+      pending: legacy.map((e) => e.resource),
       errors: [],
-      message: 'Nothing in state to destroy.',
+      message,
     }
-    if (session.json) session.printer.emit(payload)
-    else {
-      session.printer.line('Nothing in state to destroy.')
+    if (session.json) {
+      for (const error of legacy) session.printer.emit({ event: 'pending', id: error.resource, provider: 'core', message: error.hint, error: error.toJSON() })
+      session.printer.emit(payload)
+    } else {
+      session.printer.line(message)
+      for (const error of legacy) session.printer.error(error.toJSON())
       for (const left of leftovers) session.printer.line(leftoverLine(left))
     }
-    return ExitCode.ok
+    return exitCode
   }
 
   if (!session.yes) {
@@ -98,6 +106,10 @@ export async function downCommand(session: Session): Promise<number> {
   const outcome = await destroyTargets({ ctx, byProvider, targets, allSpecs, emit })
   let state = outcome.state
   const { destroyed, released, pending, errors } = outcome
+  for (const error of legacy) {
+    pending.push(error.resource)
+    emit({ event: 'pending', id: error.resource, provider: 'core', message: error.hint, error: error.toJSON() })
+  }
 
   // A Supabase organization cimiento created cannot be deleted through the API (see
   // SUPABASE_CAN_DELETE_ORGANIZATIONS). It is listed as a leftover with its dashboard link, and
@@ -143,6 +155,18 @@ export async function downCommand(session: Session): Promise<number> {
     for (const left of others) session.printer.line(`Left over: the ${left.what} ${left.name}, which cimiento set up. ${left.hint}`)
   }
   return exitCode
+}
+
+function legacyError(id: string, reason: string): CimientoError {
+  return new CimientoError({
+    code: 'LEGACY_STATE_UNRESOLVED',
+    provider: 'core',
+    resource: id,
+    message: `State from an older cimiento tracks ${id}, and ${reason}, so cimiento cannot say what it is or delete it safely.`,
+    hint: `If ${id} still exists, delete it in its provider's dashboard. Then run cimiento down --release ${id} to stop tracking it, and cimiento down again.`,
+    retryable: false,
+    needsHuman: true,
+  })
 }
 
 /**

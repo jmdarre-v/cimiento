@@ -16,6 +16,13 @@ export async function planCommand(session: Session): Promise<number> {
     plan.warnings.push('stack.yaml changed since the last up, so this plan is computed from the new manifest.')
   }
 
+  for (const { id, reason } of project.legacy.unresolved) {
+    plan.warnings.push(`${id} is in state from an older cimiento and cannot be rebuilt: ${reason}. cimiento down exits non zero until you run cimiento down --release ${id}.`)
+  }
+  if (project.legacy.rebuilt.length > 0) {
+    plan.warnings.push(`State from an older cimiento had no specs; rebuilt from stack.yaml: ${project.legacy.rebuilt.join(', ')}. The next up or down saves them.`)
+  }
+
   session.printer.planTable(plan)
   // plan is read only, so it reports rather than fails. A blocked item on a fresh project is the
   // normal shape of a plan, not an error.
