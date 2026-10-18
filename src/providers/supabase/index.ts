@@ -7,6 +7,8 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import { CimientoError } from '../../core/errors'
+import { previewDatabaseIsolated } from '../../core/hosting'
+import { recordedId } from '../../core/identity'
 import type { ProjectState } from '../../core/state'
 import {
   baseResources,
@@ -80,6 +82,16 @@ interface SupabaseApiKey {
 interface SupabaseAuthConfig {
   site_url?: string
   uri_allow_list?: string
+}
+
+/** The project previews read when they do not share production's (Goal 7). */
+export const PREVIEW_PROJECT = 'supabase.preview-project'
+
+/** Said by plan and up before the preview project exists: it is a second project on the free limit. */
+export function previewProjectNotice(m: Manifest, state: ProjectState): string | undefined {
+  const usesSupabase = m.slots.database === ID || m.slots.auth === ID
+  if (!usesSupabase || !previewDatabaseIsolated(m) || state.resources[PREVIEW_PROJECT]) return undefined
+  return `${PREVIEW_PROJECT} is a second Supabase project, ${m.slug}-preview, which previews read instead of production. Supabase's free plan allows 2 active projects per person; with another active free project, Supabase refuses it and cimiento lists which projects count. environments.preview.database: shared in stack.yaml skips it.`
 }
 
 export function createSupabaseProvider(_m?: Manifest): Provider {
@@ -177,6 +189,34 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
         })
       }
 
+      // Previews read their own project, never production's (Goal 7). Via the Marketplace it is a
+      // second database connected to the preview environment only; direct, cimiento creates it.
+      if (previewDatabaseIsolated(manifest)) {
+        specs.push({
+          id: PREVIEW_PROJECT,
+          kind: 'resource',
+          provider: ID,
+          dependsOn: viaHosting ? ['supabase.session', 'vercel.binding.supabase-preview-install'] : ['supabase.session', 'supabase.project'],
+          inputs: {
+            name: `${manifest.slug}-preview`,
+            region: manifest.options.supabase.region,
+            mode: viaHosting ? 'via-hosting' : 'direct',
+            ...(manifest.options.supabase.organization_id ? { organizationId: manifest.options.supabase.organization_id } : {}),
+            ...(viaHosting ? { installedBy: { deferred: 'vercel.binding.supabase-preview-install:installedBy' } } : {}),
+          },
+          billable: true,
+        })
+        if (manifest.slots.database === ID) {
+          specs.push({
+            id: 'supabase.preview-migrations',
+            kind: 'binding',
+            provider: ID,
+            dependsOn: [PREVIEW_PROJECT, 'supabase.tool.supabase'],
+            inputs: { projectRef: { deferred: `${PREVIEW_PROJECT}:projectRef` }, migrations: manifest.options.supabase.migrations },
+          })
+        }
+      }
+
       specs.push(...databaseSinkSpecs(manifest))
       return specs
     },
@@ -190,9 +230,9 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
         return ensureTool(ID, tool, spec, ctx)
       }
       if (spec.kind === 'session') return ensureSession(provider, spec, ctx)
-      if (spec.id === 'supabase.project') return ensureProject(spec, ctx)
-      if (spec.id === 'supabase.migrations') return ensureMigrations(spec, ctx)
-      if (spec.id === 'supabase.binding.auth-urls') return ensureAuthUrls(spec, ctx)
+      if (spec.id === 'supabase.project' || spec.id === PREVIEW_PROJECT) return ensureProject(spec, ctx)
+      if (spec.id === 'supabase.migrations' || spec.id === 'supabase.preview-migrations') return ensureMigrations(spec, ctx)
+      if (spec.id === 'supabase.binding.auth-urls' || spec.id === 'supabase.binding.preview-auth-urls') return ensureAuthUrls(spec, ctx)
       throw unknownResource(spec)
     },
 
@@ -204,20 +244,19 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
       }
       if (spec.kind === 'session') return verifySession(provider, spec, ctx)
       if (spec.id.startsWith('supabase.secret.')) return verifyDatabaseSecret(spec, ctx)
-      if (spec.id === 'supabase.project') return verifyProject(spec, ctx)
-      if (spec.id === 'supabase.migrations' || spec.id === 'supabase.check.migrated') {
+      if (spec.id === 'supabase.project' || spec.id === PREVIEW_PROJECT) return verifyProject(spec, ctx)
+      if (spec.id === 'supabase.migrations' || spec.id === 'supabase.check.migrated' || spec.id === 'supabase.preview-migrations') {
         return verifyMigrations(spec, ctx)
       }
-      if (spec.id === 'supabase.binding.auth-urls' || spec.id === 'supabase.check.auth-urls') {
+      if (spec.id === 'supabase.binding.auth-urls' || spec.id === 'supabase.check.auth-urls' || spec.id === 'supabase.binding.preview-auth-urls') {
         return verifyAuthUrls(spec, ctx)
       }
       throw unknownResource(spec)
     },
 
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
-      if (spec.id !== 'supabase.project') return
-      const ref = ctx.state.resources[spec.id]?.externalId
-      if (!ref) return
+      if (spec.id !== 'supabase.project' && spec.id !== PREVIEW_PROJECT) return
+      const ref = recordedId(ctx, spec, `the Supabase project ${str(spec.inputs.name) || ctx.manifest.slug}`)
       // A database the Vercel Marketplace created is a resource of a Marketplace configuration
       // that may serve other projects. Only that one resource is deleted, through Vercel, the way
       // the dashboard does it; the configuration is never uninstalled (BUG-46).
@@ -265,7 +304,7 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
     },
 
     async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
-      if (spec.id !== 'supabase.project') return 'unknown'
+      if (spec.id !== 'supabase.project' && spec.id !== PREVIEW_PROJECT) return 'unknown'
       const ref = ctx.state.resources[spec.id]?.externalId
       if (!ref) return 'unknown'
       const result = await supabaseCall(ctx, spec.id, 'GET', `/v1/projects/${encodeURIComponent(ref)}`)
@@ -273,14 +312,14 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
     },
 
     async outputs(spec: ResourceSpec, ctx: Ctx): Promise<Record<string, Output>> {
-      if (spec.id !== 'supabase.project') return {}
+      if (spec.id !== 'supabase.project' && spec.id !== PREVIEW_PROJECT) return {}
       const { project } = await findTarget(ctx, spec)
       if (!project) return {}
       return projectOutputs(ctx, spec, project)
     },
 
     async billing(spec: ResourceSpec, ctx: Ctx): Promise<BillingInfo | undefined> {
-      if (spec.id !== 'supabase.project') return undefined
+      if (spec.id !== 'supabase.project' && spec.id !== PREVIEW_PROJECT) return undefined
       const reused = ctx.manifest.accounts.supabase === 'via-hosting' ? ctx.manifest.options.supabase.marketplace_configuration : undefined
       if (reused) {
         return { account: `Supabase organization vercel_${reused}, managed by the Vercel Marketplace configuration ${reused}`, plan: 'billed through the Vercel team', paid: false }
@@ -624,6 +663,14 @@ async function ensureProject(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult
 
   if (ctx.dryRun) return { action: 'noop' }
 
+  if (spec.id === PREVIEW_PROJECT) {
+    ctx.logger.log({
+      level: 'info',
+      event: 'billing',
+      resource: spec.id,
+      message: `Creating ${name}, a second Supabase project for previews. Supabase's free plan allows 2 active projects per person, and this app now uses 2; with another active free project, Supabase refuses it and cimiento says which projects count.`,
+    })
+  }
   // The database password is a secret output: it is kept in memory for this run and never
   // written to state, logs or json output.
   const dbPass = randomBytes(24).toString('base64url')

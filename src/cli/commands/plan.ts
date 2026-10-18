@@ -3,6 +3,7 @@
 import { ExitCode } from '../../core/errors'
 import { buildPlan } from '../../core/planner'
 import { sharedPreviewWarning } from '../../core/hosting'
+import { previewProjectNotice } from '../../providers/supabase'
 import { openProject, type Session } from '../context'
 
 export async function planCommand(session: Session): Promise<number> {
@@ -19,6 +20,8 @@ export async function planCommand(session: Session): Promise<number> {
 
   const shared = sharedPreviewWarning(project.manifest)
   if (shared) plan.warnings.push(shared)
+  const second = previewProjectNotice(project.manifest, project.state)
+  if (second) plan.warnings.push(second)
   for (const { id, reason } of project.legacy.unresolved) {
     plan.warnings.push(`${id} is in state from an older cimiento and cannot be rebuilt: ${reason}. cimiento down exits non zero until you run cimiento down --release ${id}.`)
   }

@@ -41,6 +41,14 @@ export function manifestFor(overrides: Partial<ManifestInput> = {}, preset?: 'fu
   return parseManifest(mergeFragments({ name: 'my-app' }, base, overrides), 'stack.yaml')
 }
 
+/**
+ * A manifest as 0.3.0 and older planned it, previews sharing the production database. For the
+ * tests written before Goal 7 about something else, so they keep testing what they were for.
+ */
+export function manifestForShared(overrides: Partial<ManifestInput> = {}, preset?: 'fullstack' | 'designer'): Manifest {
+  return manifestFor({ environments: { dev: {}, preview: { database: 'shared' }, production: {} }, ...overrides }, preset)
+}
+
 export interface TestContext {
   ctx: Ctx
   providers: Provider[]

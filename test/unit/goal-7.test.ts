@@ -342,3 +342,73 @@ describe('BUG-88: previews never read the production Neon database by default', 
     expect((cloud.vercelEnv.get(projectId) ?? []).some((e) => e.key === 'DATABASE_URL' && e.target.includes('preview') && !e.gitBranch)).toBe(true)
   })
 })
+
+describe('BUG-89: previews never read the production Supabase database by default', () => {
+  const supabaseUrls = (cloud: FakeCloud) => {
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    return (cloud.vercelEnv.get(projectId) ?? []).filter((e) => e.key === 'NEXT_PUBLIC_SUPABASE_URL')
+  }
+
+  it('Marketplace: production is connected to production and development, a second database to preview only', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'fullstack', '--allow-billing'])
+    expect(cloud.stores.map((s) => s.name).sort()).toEqual(['my-app', 'my-app-preview'])
+    const installs = cloud.execCalls.filter((c) => c.startsWith('vercel integration add supabase'))
+    const main = installs.find((c) => / --name my-app( |$)/.test(c))!
+    expect(main).toContain('--environment production')
+    expect(main).toContain('--environment development')
+    expect(main).not.toContain('--environment preview')
+    expect(installs.find((c) => c.includes('--name my-app-preview'))).toContain('--environment preview')
+    const urls = supabaseUrls(cloud)
+    const production = urls.find((e) => e.target.includes('production'))!
+    const preview = urls.find((e) => e.target.includes('preview'))!
+    expect(production.target).not.toContain('preview')
+    expect(preview.target).toEqual(['preview'])
+    expect(preview.value).not.toBe(production.value)
+  })
+
+  it('direct: the preview env reads the preview project, and the free limit is said before it is made', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const result = await cli(cloud, ['new', 'my-app', '--preset', 'fullstack', '--supabase-account', 'direct', '--allow-billing', '--json', '--yes', '--dir', dir], root)
+    expect(result.code, result.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    const text = result.writer.outText
+    expect(text.indexOf("Supabase's free plan allows 2 active projects")).toBeGreaterThanOrEqual(0)
+    expect(cloud.supabaseProjects.map((p) => p.name).sort()).toEqual(['my-app', 'my-app-preview'])
+    const previewRef = cloud.supabaseProjects.find((p) => p.name === 'my-app-preview')!.id
+    const urls = supabaseUrls(cloud)
+    expect(urls.find((e) => e.target.includes('preview'))?.value).toBe(`https://${previewRef}.supabase.co`)
+    expect(urls.find((e) => e.target.includes('production'))?.value).not.toBe(`https://${previewRef}.supabase.co`)
+  })
+
+  it('direct, at the free limit: the preview project waits on a person and production is untouched', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, supabaseFreeLimit: 1 })
+    const result = await cli(cloud, ['new', 'my-app', '--preset', 'fullstack', '--supabase-account', 'direct', '--allow-billing', '--json', '--yes', '--dir', dir], root)
+    expect(result.code).toBe(ExitCode.needsHuman)
+    expect(result.writer.outText).toContain('SUPABASE_FREE_PROJECT_LIMIT')
+    expect(cloud.supabaseProjects.map((p) => p.name)).toEqual(['my-app'])
+    expect(supabaseUrls(cloud).some((e) => e.target.includes('preview'))).toBe(false)
+  })
+
+  it('a database 0.3.0 connected to every environment is reported, and cimiento never reconnects it', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'fullstack', '--allow-billing'])
+    // As 0.3.0 left it: one database, connected to every environment.
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    const envs = cloud.vercelEnv.get(projectId)!
+    cloud.vercelEnv.set(projectId, envs.filter((e) => !(/SUPABASE/.test(e.key) && e.target.join() === 'preview')))
+    for (const e of cloud.vercelEnv.get(projectId)!) if (/SUPABASE/.test(e.key)) e.target = ['production', 'preview', 'development']
+    cloud.stores.splice(cloud.stores.findIndex((s) => s.name === 'my-app-preview'), 1)
+    cloud.supabaseProjects.splice(cloud.supabaseProjects.findIndex((p) => p.name === 'my-app-preview'), 1)
+    editState((r) => {
+      delete r['vercel.binding.supabase-preview-install']
+      delete r['supabase.preview-project']
+      delete r['supabase.preview-migrations']
+      delete r['supabase.binding.preview-auth-urls']
+    })
+    const up = await cli(cloud, ['up', '--json', '--yes', '--allow-billing'])
+    expect(up.code).toBe(ExitCode.needsHuman)
+    expect(up.writer.outText).toContain('SUPABASE_PREVIEW_SHARES_PRODUCTION')
+    expect(cloud.vercelEnv.get(projectId)!.filter((e) => /SUPABASE/.test(e.key)).every((e) => e.target.length === 3)).toBe(true)
+    expect(cloud.stores.map((s) => s.name)).toEqual(['my-app'])
+  })
+})

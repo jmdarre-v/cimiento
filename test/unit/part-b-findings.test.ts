@@ -12,7 +12,7 @@ import type { Ctx, ResourceSpec } from '../../src/core/types'
 import { renderManifest } from '../../src/manifest'
 import { refFromUrl } from '../../src/wiring/vercel-supabase-runtime'
 import { FakeCloud } from './fake-cloud'
-import { CaptureWriter, manifestFor, removeDir, tempDir, testContext, useFakeTokens } from './helpers'
+import { CaptureWriter, manifestForShared as manifestFor, removeDir, tempDir, testContext, useFakeTokens } from './helpers'
 
 /** The person at the Marketplace page lets Vercel create a database, named after another project as in the real run. */
 async function personInstallsWithDatabase(spec: ResourceSpec, ctx: Ctx): Promise<boolean> {

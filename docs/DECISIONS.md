@@ -509,3 +509,11 @@ One line per decision the spec does not cover, with the reasoning.
   context values, and deletes only the branches state recorded, by id. A failed branch listing
   stops the run and removes nothing. environments accepts an object form so preview can carry
   database: shared; stack.yaml keeps the list form otherwise.
+- 2026-10-18 Goal 7: Supabase preview isolation is one preview project per app, not one per branch:
+  Supabase branching is a paid feature and the free plan allows 2 active projects. Via the
+  Marketplace, vercel integration add takes --environment, so production's database is connected
+  to production and development and a second one, <slug>-preview, to preview only; direct, the
+  preview project is created through the Management API after production's. A database 0.3.0
+  connected to every environment is reported with the reconnect commands, never reconnected by
+  cimiento, because that touches production. The finding tests written before Goal 7 run with
+  preview.database shared, so they keep testing what they were written for.

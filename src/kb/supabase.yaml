@@ -110,3 +110,12 @@
   hint: Run cimiento up in a terminal. Before the plan it shows the configuration with the databases and projects it serves, and asks whether to reuse it or create the database directly in the organization stack.yaml pins.
   fix: vercel integration add supabase takes the first Marketplace configuration on the team without asking, so a new database lands in that configuration's Vercel-managed organization whatever stack.yaml pins. Reusing it is recorded as options.supabase.marketplace_configuration; choosing the direct path sets accounts.supabase to direct. Either way down deletes only the database cimiento created, through its Marketplace resource, and never uninstalls a configuration.
   seen: Field test 5, 2026-10-18 (BUG-66). An attended up in cimiento-test-5b, a Neon project on Netlify, asked where its Supabase database should go and offered a configuration serving another project, because the question only checked accounts.supabase, which stack.yaml still said via-hosting. It is now asked only for a project that uses Supabase on Vercel. Field test 2, 2026-10-17 (BUG-46). The cimiento-test-2 database example-db-test-2 landed in organization vercel_icfg_EXAMPLESHARED through configuration icfg_EXAMPLESHARED, which already served another project, although the person had picked a new organization.
+
+- code: SUPABASE_PREVIEW_SHARES_PRODUCTION
+  provider: supabase
+  title: the production Marketplace database is connected to previews too
+  signatures:
+    - "connected to the preview environment too"
+  hint: Reconnect the production database to production and development only with vercel integration-resource disconnect and connect, as the message says, then run cimiento up; or set environments.preview.database shared.
+  fix: Since 0.4.0 the Marketplace database is connected to production and development only, and a second one, named after the slug with -preview, to the preview environment. A project set up by 0.3.0 or older has the production database connected to every environment, and a second database cannot be connected over it. cimiento does not reconnect the production database on its own; the person runs the two commands the hint names.
+  seen: "Goal 7, 2026-10-18 (BUG-89). The Marketplace install connected the production Supabase database to every environment, and the direct path wrote the production URL and keys into the preview env, so every preview read and wrote production data."

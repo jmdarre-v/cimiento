@@ -31,6 +31,18 @@ export const SUPABASE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'A probe that queries the migration history in the database. This proves the schema is really there, not just that a command exited without an error.',
     es: 'Una prueba que consulta el historial de migraciones en la base de datos. Prueba que el esquema existe de verdad.',
   },
+  'supabase.preview-project': {
+    en: 'A second Supabase project that preview deployments read, so a preview of unfinished work never touches production data. It starts empty and gets the same migrations. On the Vercel Marketplace path it is a second Marketplace database, connected to the preview environment only. Supabase allows 2 active free projects per person, and this is the second for this app.',
+    es: 'Un segundo proyecto de Supabase que leen las vistas previas, para que una vista previa de trabajo sin terminar nunca toque datos de produccion. Empieza vacio y recibe las mismas migraciones. Por el Marketplace de Vercel es una segunda base de datos, conectada solo al entorno de vista previa. Supabase permite 2 proyectos gratuitos activos por persona, y este es el segundo de esta app.',
+  },
+  'supabase.preview-migrations': {
+    en: 'The same migrations as production, applied to the preview project, so previews run against the same schema.',
+    es: 'Las mismas migraciones que produccion, aplicadas al proyecto de vista previa, para que las vistas previas usen el mismo esquema.',
+  },
+  'supabase.binding.preview-auth-urls': {
+    en: 'The sign in addresses of the preview project: links it sends bring people back to the preview they came from.',
+    es: 'Las direcciones de inicio de sesion del proyecto de vista previa: los enlaces que envia devuelven a la vista previa de la que vinieron.',
+  },
   'supabase.binding.auth-urls': {
     en: 'Telling Supabase which address your site lives at, so that login links and password resets send people back to your site instead of to localhost.',
     es: 'Decirle a Supabase en que direccion vive tu sitio, para que los enlaces de inicio de sesion regresen a tu sitio y no a localhost.',
@@ -74,6 +86,10 @@ export const SUPABASE_EXPLAIN: Record<string, { en: string; es?: string }> = {
   SUPABASE_ADOPTION_CONFIRMATION_NEEDED: {
     en: 'Your hosting points at a Supabase database that is older than this project, so it may belong to another app. cimiento will not take it over, or change its login settings, until you say it belongs to this project.',
     es: 'Tu hosting apunta a una base de datos de Supabase mas vieja que este proyecto, asi que puede pertenecer a otra aplicacion. cimiento no la adopta ni cambia su configuracion de inicio de sesion hasta que confirmes que es de este proyecto.',
+  },
+  SUPABASE_PREVIEW_SHARES_PRODUCTION: {
+    en: 'Your production Supabase database is also connected to previews, the way older cimiento versions set it up, so previews use real data. Reconnect it to production and development only with the two commands cimiento prints, and cimiento adds a separate database for previews.',
+    es: 'Tu base de datos de Supabase de produccion tambien esta conectada a las vistas previas, como la configuraban versiones anteriores de cimiento, asi que las vistas previas usan datos reales. Reconectala solo a produccion y desarrollo con los dos comandos que imprime cimiento, y cimiento agrega una base de datos aparte para las vistas previas.',
   },
   SUPABASE_FREE_PROJECT_LIMIT: {
     en: 'Supabase gives each person two active free projects, counted across every organization they own or run, not per organization. When both are in use, a new free project needs an old one paused or deleted, or a paid organization.',

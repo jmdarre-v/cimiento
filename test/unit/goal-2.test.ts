@@ -17,7 +17,7 @@ import { TURNSTILE_TEST_SECRET_KEY, TURNSTILE_TEST_SITE_KEY } from '../../src/pr
 import { presetFragment, renderManifest } from '../../src/manifest'
 import { SecretStore } from '../../src/secrets'
 import { FakeCloud } from './fake-cloud'
-import { CaptureWriter, manifestFor, personDoesIt, removeDir, specById, tempDir, testContext, useFakeTokens } from './helpers'
+import { CaptureWriter, manifestForShared as manifestFor, personDoesIt, removeDir, specById, tempDir, testContext, useFakeTokens } from './helpers'
 
 const KEYCHAIN_ANTHROPIC = 'fake-anthropic-api-key-not-a-real-credential'
 const ROTATED = 'fake-rotated-anthropic-key-not-a-real-credential'

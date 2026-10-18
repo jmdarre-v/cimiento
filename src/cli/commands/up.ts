@@ -3,6 +3,7 @@
 
 import { acquireProjectLock } from '../../core/lock'
 import { sharedPreviewWarning } from '../../core/hosting'
+import { previewProjectNotice } from '../../providers/supabase'
 import { flagString } from '../args'
 import { orphanSpecs, undecidedOrphans } from '../../core/orphans'
 import { destroyTargets, forget } from './down'
@@ -54,6 +55,12 @@ async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> 
   if (shared) {
     if (session.json) session.printer.emit({ event: 'warning', code: 'PREVIEW_DATABASE_SHARED', message: shared })
     else session.printer.line(`Warning: ${shared}`)
+  }
+  // The free limit is said before the second project is made, not after Supabase refuses it.
+  const second = previewProjectNotice(project.manifest, project.state)
+  if (second) {
+    if (session.json) session.printer.emit({ event: 'notice', id: 'supabase.preview-project', message: second })
+    else session.printer.line(second)
   }
   let personPhase: { pending: string[] } = { pending: [] }
   if (session.interactive) {

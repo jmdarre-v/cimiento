@@ -1,7 +1,8 @@
 // any hosting + supabase: the Supabase Auth Site URL and redirect list follow the production URL
 // and the preview pattern. Both are deferred until the first deployment exists.
 
-import { defaultHost, hostingDeploymentId, hostingOf, previewPattern, productionUrlRef } from '../core/hosting'
+import { defaultHost, hostingDeploymentId, hostingOf, previewDatabaseIsolated, previewPattern, productionUrlRef } from '../core/hosting'
+import type { ResourceSpec } from '../core/types'
 import type { ProjectState } from '../core/state'
 import type { Manifest } from '../manifest/schema'
 import type { WiringResult, WiringRule } from './types'
@@ -27,8 +28,21 @@ export const hostingSupabaseRule: WiringRule = {
     const siteUrl = m.domain ? `https://${m.domain}` : productionUrlRef(hosting)
     // With a custom domain the default address keeps working, so it stays on the redirect list.
     const extra = m.domain ? `https://${defaultHost(hosting, m.slug)}/**` : ''
+    const preview: ResourceSpec[] = previewDatabaseIsolated(m)
+      ? [
+          {
+            // The preview project's sign in links come back to the preview that sent them.
+            id: 'supabase.binding.preview-auth-urls',
+            kind: 'binding',
+            provider: 'supabase',
+            dependsOn: ['supabase.preview-project', hostingDeploymentId(hosting)],
+            inputs: { projectRef: { deferred: 'supabase.preview-project:projectRef' }, siteUrl, previewPattern: previewPattern(hosting, m.slug), ...(extra ? { extraRedirect: extra } : {}) },
+          },
+        ]
+      : []
     return {
       specs: [
+        ...preview,
         {
           id: 'supabase.binding.auth-urls',
           kind: 'binding',

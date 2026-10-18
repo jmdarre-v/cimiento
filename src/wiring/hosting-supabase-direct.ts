@@ -2,7 +2,7 @@
 // and cimiento pushes the URL, the anon key and the service role key into the hosting env, per
 // environment. On Vercel the project first looks for a database the hosting env already points at.
 
-import { hostingDeploymentId, hostingEnvSpec, hostingOf, hostingProjectId } from '../core/hosting'
+import { hostingDeploymentId, hostingEnvSpec, hostingOf, hostingProjectId, previewDatabaseIsolated } from '../core/hosting'
 import type { ProjectState } from '../core/state'
 import type { ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
@@ -35,9 +35,13 @@ export const hostingSupabaseDirectRule: WiringRule = {
     }
     const specs: ResourceSpec[] = [database]
     const envIds: string[] = []
+    const isolated = previewDatabaseIsolated(m)
     for (const environment of m.environments) {
+      // Previews read their own project unless stack.yaml says shared (Goal 7).
+      const source = environment === 'preview' && isolated ? 'supabase.preview-project' : 'supabase.project'
       for (const entry of SUPABASE_DIRECT_KEYS) {
-        const spec = hostingEnvSpec(hosting, entry.key, environment, { source: 'literal', value: { deferred: entry.ref } }, ['supabase.project'])
+        const ref = entry.ref.replace(/^supabase\.project:/, `${source}:`)
+        const spec = hostingEnvSpec(hosting, entry.key, environment, { source: 'literal', value: { deferred: ref } }, [source])
         envIds.push(spec.id)
         specs.push(spec)
       }

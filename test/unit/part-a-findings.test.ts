@@ -13,7 +13,7 @@ import { loadKb } from '../../src/kb'
 import { renderManifest } from '../../src/manifest'
 import { decodeKeyring } from '../../src/providers/supabase/api'
 import { FakeCloud } from './fake-cloud'
-import { CaptureWriter, manifestFor, personDoesIt, removeDir, tempDir, testContext, useFakeTokens } from './helpers'
+import { CaptureWriter, manifestForShared as manifestFor, personDoesIt, removeDir, tempDir, testContext, useFakeTokens } from './helpers'
 
 /** A project folder on disk with a stack.yaml, the way cimiento new leaves it. */
 function projectDir(overrides: Parameters<typeof manifestFor>[0] = {}, preset: 'fullstack' | 'designer' = 'fullstack'): string {

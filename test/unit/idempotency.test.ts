@@ -8,7 +8,7 @@ import { applyEnsureToState, emptyProjectState, type ProjectState } from '../../
 import type { Ctx, EnsureResult, Provider, ResourceSpec } from '../../src/core/types'
 import { topoSort } from '../../src/core/graph'
 import { FakeCloud } from './fake-cloud'
-import { manifestFor, testContext, personDoesIt } from './helpers'
+import { manifestFor, testContext, personDoesIt, manifestForShared } from './helpers'
 
 /** Applies the whole graph once through ensure, the way the executor does. */
 async function ensureAll(
@@ -57,10 +57,10 @@ describe('ensure is idempotent', () => {
     const notNoop = [...second.actions.entries()].filter(([id, action]) => action !== 'noop' && id !== 'vercel.marketplace-terms')
     expect(notNoop.map(([id, action]) => `${id}:${action}`)).toEqual([])
 
-    // Nothing was created twice in the fake accounts.
+    // Nothing was created twice in the fake accounts: production's database and the previews' one.
     expect(cloud.repos.size).toBe(1)
     expect(cloud.vercelProjects.size).toBe(1)
-    expect(cloud.supabaseProjects.length).toBe(1)
+    expect(cloud.supabaseProjects.map((p) => p.name).sort()).toEqual(['my-app', 'my-app-preview'])
   })
 
   it('holds for the direct supabase path too', async () => {
@@ -74,7 +74,8 @@ describe('ensure is idempotent', () => {
     const second = await ensureAll(t.ctx, t.providers, t.specs, first.state)
     expect(second.actions.get('supabase.project')).toBe('noop')
     expect(second.actions.get('vercel.env.NEXT_PUBLIC_SUPABASE_URL.production')).toBe('noop')
-    expect(cloud.supabaseProjects.length).toBe(1)
+    expect(second.actions.get('supabase.preview-project')).toBe('noop')
+    expect(cloud.supabaseProjects.map((p) => p.name).sort()).toEqual(['my-app', 'my-app-preview'])
   })
 
   it('holds for the designer preset, which has no database', async () => {
@@ -141,7 +142,7 @@ describe('adoption by name', () => {
   })
 
   it('adopts a supabase project that already exists on the direct path', async () => {
-    const manifest = manifestFor({ accounts: { supabase: 'direct' } }, 'fullstack')
+    const manifest = manifestForShared({ accounts: { supabase: 'direct' } }, 'fullstack')
     const cloud = new FakeCloud()
     cloud.supabaseProjects.push({
       id: 'sbref_existing',

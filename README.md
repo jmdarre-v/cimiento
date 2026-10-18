@@ -159,6 +159,17 @@ Previews never read the production database by default.
   plain git has no database until the next `up`, and its preview fails instead of reaching
   production. Push the branch again after `up` so its preview is built with the address. A Neon
   branch starts as a copy of production taken when it is made; what the preview writes stays in it.
+- Supabase: previews read a second project, `<slug>-preview`, with the same migrations and its own
+  sign in addresses. Through the Vercel Marketplace it is a second Marketplace database connected
+  to the preview environment only, and production's is connected to production and development.
+  With `accounts.supabase: direct`, cimiento creates it and writes its URL and keys into the
+  preview env. Supabase's free plan allows 2 active projects per person, and this is the second
+  for the app: `plan` and `up` say so before it is made, and at the limit cimiento lists which
+  projects count and waits on you, with production untouched.
+- A project set up by 0.3.0 or older through the Marketplace has its production database connected
+  to previews too. `up` stops with SUPABASE_PREVIEW_SHARES_PRODUCTION and prints the two `vercel
+  integration-resource` commands that reconnect it to production and development; cimiento never
+  reconnects it on its own.
 - To share the production database with previews on purpose, say so in `stack.yaml`; `plan` and
   `up` warn while it is set:
 

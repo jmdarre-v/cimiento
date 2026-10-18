@@ -187,6 +187,7 @@ export const ERROR_CODES = [
   'PUBLISH_LIVE_COMMIT_UNKNOWN',
   'PREVIEW_DATABASE_FAILED',
   'PREVIEW_DATABASE_SHARED',
+  'SUPABASE_PREVIEW_SHARES_PRODUCTION',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -218,6 +219,7 @@ export const PERSON_CODES: ReadonlySet<string> = new Set([
   'DOWN_ID_MISSING',
   'DOWN_IDENTITY_MISMATCH',
   'LEGACY_STATE_UNRESOLVED',
+  'SUPABASE_PREVIEW_SHARES_PRODUCTION',
 ])
 
 export function needsPerson(err: { code: string; needsHuman: boolean }): boolean {

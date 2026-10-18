@@ -734,6 +734,16 @@ Cimiento cannot pick a Supabase organization.
 
 **Looks like:** `has no organization`, `organizations, so cimiento cannot pick`
 
+### SUPABASE_PREVIEW_SHARES_PRODUCTION
+
+The production Marketplace database is connected to previews too.
+
+**What to do:** Reconnect the production database to production and development only with vercel integration-resource disconnect and connect, as the message says, then run cimiento up; or set environments.preview.database shared.
+
+**Why:** Since 0.4.0 the Marketplace database is connected to production and development only, and a second one, named after the slug with -preview, to the preview environment. A project set up by 0.3.0 or older has the production database connected to every environment, and a second database cannot be connected over it. cimiento does not reconnect the production database on its own; the person runs the two commands the hint names.
+
+**Looks like:** `connected to the preview environment too`
+
 ### SUPABASE_PROJECT_CREATE_FAILED
 
 Supabase refused to create the project.

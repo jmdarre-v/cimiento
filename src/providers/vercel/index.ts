@@ -238,7 +238,7 @@ export function createVercelProvider(m?: Manifest): Provider {
       if (spec.id === 'vercel.project') return ensureProject(spec, ctx)
       if (spec.id === 'vercel.binding.git-repo') return ensureGitLink(spec, ctx)
       if (spec.id.startsWith('vercel.env.')) return ensureEnv(spec, ctx)
-      if (spec.id === 'vercel.binding.supabase-install') return ensureSupabaseInstall(spec, ctx)
+      if (spec.id === 'vercel.binding.supabase-install' || spec.id === 'vercel.binding.supabase-preview-install') return ensureSupabaseInstall(spec, ctx)
       if (spec.id === 'vercel.deployment') return ensureDeployment(spec, ctx)
       if (spec.id === 'vercel.binding.domain') return ensureDomain(spec, ctx)
       throw unknownResource(spec)
@@ -258,7 +258,7 @@ export function createVercelProvider(m?: Manifest): Provider {
         return verifyGitLink(spec, ctx)
       }
       if (spec.id.startsWith('vercel.env.')) return verifyEnv(spec, ctx)
-      if (spec.id === 'vercel.binding.supabase-install') return verifySupabaseInstall(spec, ctx)
+      if (spec.id === 'vercel.binding.supabase-install' || spec.id === 'vercel.binding.supabase-preview-install') return verifySupabaseInstall(spec, ctx)
       if (spec.id === 'vercel.deployment') return verifyDeployment(spec, ctx)
       if (spec.id === 'vercel.check.deployed') return verifyDeployed(spec, ctx)
       if (spec.id === 'vercel.check.secrets-present') return verifySecretsPresent(spec, ctx)
@@ -297,7 +297,7 @@ export function createVercelProvider(m?: Manifest): Provider {
         const project = await getProject(ctx, spec, str(spec.inputs.name))
         return project ? projectOutputs(project) : {}
       }
-      if (spec.id === 'vercel.binding.supabase-install') {
+      if (spec.id === 'vercel.binding.supabase-install' || spec.id === 'vercel.binding.supabase-preview-install') {
         const keys = await supabaseKeysInEnv(ctx, spec, str(spec.inputs.projectId))
         if (keys.length === 0) return {}
         return {
@@ -851,6 +851,25 @@ async function verifyEnv(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
 async function ensureSupabaseInstall(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const projectId = str(spec.inputs.projectId)
   const name = str(spec.inputs.name)
+  const preview = spec.id === 'vercel.binding.supabase-preview-install'
+  // A database installed by 0.3.0 or older is connected to every environment, previews included.
+  // A second one for previews cannot be connected over it, and cimiento does not reconnect the
+  // production database on its own (Goal 7).
+  if (preview && !ctx.dryRun) {
+    const shared = (await listEnv(ctx, spec, projectId)).filter((e) => /SUPABASE/.test(e.key) && !e.gitBranch && e.target.includes('preview') && e.target.includes('production'))
+    if (shared.length > 0) {
+      const scope = ctx.manifest.accounts.vercel ? ` --scope ${ctx.manifest.accounts.vercel}` : ''
+      throw new CimientoError({
+        code: 'SUPABASE_PREVIEW_SHARES_PRODUCTION',
+        provider: ID,
+        resource: spec.id,
+        message: `The production Supabase database is connected to the preview environment too (${shared.map((e) => e.key).join(', ')}), as cimiento 0.3.0 and older connected it, so previews read production data.`,
+        hint: `Connect it to production and development only: run vercel integration-resource disconnect ${ctx.manifest.slug} ${ctx.manifest.slug} --yes${scope}, then vercel integration-resource connect ${ctx.manifest.slug} ${ctx.manifest.slug} -e production -e development --yes${scope}, then cimiento up, which adds the preview database. Or set environments.preview.database: shared in stack.yaml to keep sharing.`,
+        retryable: true,
+        needsHuman: true,
+      })
+    }
+  }
   const already = await supabaseKeysInEnv(ctx, spec, projectId)
   if (already.length > 0) {
     // Keys this step did not put there came from somewhere else, such as a Link Existing install.
@@ -868,13 +887,24 @@ async function ensureSupabaseInstall(spec: ResourceSpec, ctx: Ctx): Promise<Ensu
   // before the plan, and an unsettled one waits on them (BUG-46).
   await settleSupabasePath(ctx, spec.id, { ask: false })
 
-  await ensureLocalLink(ctx, spec, name)
+  // The folder links to the app's project; name is the Marketplace database's.
+  await ensureLocalLink(ctx, spec, str(spec.inputs.project) || name)
   // --name so the Supabase project carries the slug cimiento looks it up by, and --no-env-pull
   // because the vendor default writes .env.local, and cimiento env pull is the only place secrets
   // may touch disk.
   const args = ['integration', 'add', 'supabase', '--name', name, '--no-env-pull']
+  // Only the environments this database serves; previews get their own one (Goal 7).
+  for (const environment of str(spec.inputs.environments).split(',').filter(Boolean)) args.push('--environment', environment)
   const account = ctx.manifest.accounts.vercel
   if (account) args.push('--scope', account)
+  if (preview) {
+    ctx.logger.log({
+      level: 'info',
+      event: 'billing',
+      resource: spec.id,
+      message: `Adding ${name}, a second Supabase database for previews. Supabase's free plan allows 2 active projects per organization, and this app now uses 2; with another active free project there, Supabase refuses it.`,
+    })
+  }
   const result = ctx.interactive
     ? await ctx.io.interactive('vercel', args, { cwd: ctx.cwd })
     : await ctx.io.exec('vercel', [...args, '--non-interactive'], { cwd: ctx.cwd })
@@ -1079,10 +1109,15 @@ async function verifySupabaseInstall(spec: ResourceSpec, ctx: Ctx): Promise<Chec
   return { ok: true, evidence: `supabase keys in vercel env: ${keys.join(', ')}` }
 }
 
+/** The Supabase keys in the env this install serves: preview only for the preview database. */
 async function supabaseKeysInEnv(ctx: Ctx, spec: ResourceSpec, projectId: string): Promise<string[]> {
   if (!projectId) return []
   const envs = await listEnv(ctx, spec, projectId)
-  return envs.filter((e) => /SUPABASE/.test(e.key)).map((e) => e.key)
+  const preview = spec.id === 'vercel.binding.supabase-preview-install'
+  return envs
+    .filter((e) => /SUPABASE/.test(e.key) && !e.gitBranch)
+    .filter((e) => (preview ? e.target.length === 1 && e.target[0] === 'preview' : e.target.includes('production')))
+    .map((e) => e.key)
 }
 
 async function latestProductionDeployment(

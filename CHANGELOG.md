@@ -12,6 +12,9 @@
   `down` exits non zero with LEGACY_STATE_UNRESOLVED until it is reconciled: delete the resource
   in its provider if it still exists, then run `cimiento down --release ID`.
 - Run `cimiento plan` once after upgrading to see both lists before anything changes.
+- A Marketplace Supabase database set up by 0.3.0 or older is connected to previews too. `up`
+  stops with SUPABASE_PREVIEW_SHARES_PRODUCTION and prints the two commands that reconnect it to
+  production and development, or set `environments.preview.database: shared` to keep sharing.
 - A live Vercel deployment made by 0.3.0 or older records no commit. The first `publish` with
   nothing new stops with PUBLISH_LIVE_COMMIT_UNKNOWN; the next `publish` with a change brings a
   deploy that records it.
@@ -29,6 +32,10 @@
   production gets a Neon branch, its address written for that branch's previews only, made and
   removed by `up` and removed by `down`. `environments.preview.database: shared` opts out, with a
   warning on every `plan` and `up`.
+- Supabase: previews read a second project, `<slug>-preview`, with the same migrations. Through
+  the Vercel Marketplace it is a second database connected to preview only, and production's is
+  connected to production and development; direct, cimiento creates it. The free limit of 2
+  active projects is stated by `plan` and `up` before it is made. `down` removes it.
 
 ### Publish
 

@@ -13,7 +13,7 @@ import { renderManifest } from '../../src/manifest'
 import { reconcilePins } from '../../src/manifest/pin'
 import { SUPABASE_CAN_DELETE_ORGANIZATIONS } from '../../src/providers/supabase'
 import { FakeCloud } from './fake-cloud'
-import { CaptureWriter, manifestFor, removeDir, tempDir, testContext, useFakeTokens } from './helpers'
+import { CaptureWriter, manifestForShared as manifestFor, removeDir, tempDir, testContext, useFakeTokens } from './helpers'
 
 const ORGS = [
   { id: 'org_a', name: 'Alpha', plan: 'free' },
@@ -246,7 +246,7 @@ describe('Part B findings, round three', () => {
       dirs.push(dir)
       const withFlag = new CaptureWriter()
       await run(['plan', '--json', '--allow-billing'], { io: cloud, cwd: dir, writer: withFlag, interactive: false })
-      const approved = (withFlag.jsonObjects()[0] as { warnings: string[] }).warnings
+      const approved = (withFlag.jsonObjects()[0] as { warnings: string[] }).warnings.filter((w) => w.includes(' bills to '))
       expect(approved).toEqual([
         'supabase.project bills to Supabase organization Alpha, free plan: no charge unless you go over the plan limits. Approved for this run with --allow-billing.',
       ])

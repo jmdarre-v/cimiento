@@ -582,9 +582,16 @@ export class FakeCloud implements Io {
         return fail('You must accept the Marketplace terms for Supabase before it can be added.')
       }
       const name = args[args.indexOf('--name') + 1]
-      const project = this.findVercelProject(name)
-      if (!project || !this.linkedProjects.has(project.name)) return fail('No project linked')
-      this.installSupabase(project, name)
+      // As the CLI does: the resource goes to the linked project, connected to the environments
+      // named with --environment, or all of them.
+      const linkedId = [...this.linkedProjects.values()].pop()
+      const project = linkedId ? this.findVercelProject(linkedId) : undefined
+      if (!project) return fail('No project linked')
+      const targets = args.flatMap((a, i) => ((a === '--environment' || a === '-e') && args[i + 1] ? [args[i + 1]] : []))
+      const wanted = targets.length > 0 ? targets : ['production', 'preview', 'development']
+      const clash = (this.vercelEnv.get(project.id) ?? []).find((e) => /SUPABASE/.test(e.key) && !e.gitBranch && e.target.some((t) => wanted.includes(t)))
+      if (clash) return fail(`Error: A variable with the name \`${clash.key}\` already exists for the target ${clash.target.join(',')}`)
+      this.installSupabase(project, name, 'org_fake', wanted)
       return ok('Installed supabase')
     }
     if (args[0] === 'deploy') {
@@ -628,7 +635,7 @@ export class FakeCloud implements Io {
   }
 
   /** What the Vercel Marketplace integration does: create the project and push its keys. */
-  private installSupabase(project: FakeVercelProject, name: string, organizationId = 'org_fake'): void {
+  private installSupabase(project: FakeVercelProject, name: string, organizationId = 'org_fake', targets = ['production', 'preview', 'development']): void {
     const ref = this.ref()
     this.stores.push({ id: this.id('store'), name, cfg: this.supabaseConfigurationId, ref, projects: [project.name] })
     this.supabaseProjects.push({
@@ -650,7 +657,7 @@ export class FakeCloud implements Io {
         id: this.id('env'),
         key,
         value,
-        target: ['production', 'preview', 'development'],
+        target: [...targets],
         type: 'encrypted',
       })
     }

@@ -46,7 +46,8 @@ describe('cimiento down', () => {
     await upProject(cloud)
     expect(cloud.repos.size).toBe(1)
     expect(cloud.vercelProjects.size).toBe(1)
-    expect(cloud.supabaseProjects.length).toBe(1)
+    // Production's database and the one previews read (Goal 7).
+    expect(cloud.supabaseProjects.length).toBe(2)
 
     const writer = new CaptureWriter()
     const code = await run(['down', '--yes', '--json'], { io: cloud, cwd: dir, writer, interactive: false })
@@ -60,7 +61,7 @@ describe('cimiento down', () => {
       errors: unknown[]
     }
     expect(summary.errors).toEqual([])
-    expect(summary.destroyed.sort()).toEqual(['github.repo', 'supabase.project', 'turnstile.widget', 'vercel.deployment', 'vercel.project'])
+    expect(summary.destroyed.sort()).toEqual(['github.repo', 'supabase.preview-project', 'supabase.project', 'turnstile.widget', 'vercel.deployment', 'vercel.project'])
   })
 
   it('goes in reverse dependency order: the database before the project it was installed into', async () => {
