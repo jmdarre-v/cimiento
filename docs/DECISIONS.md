@@ -416,3 +416,11 @@ One line per decision the spec does not cover, with the reasoning.
   nothing else.
 - 2026-10-18 Goal 5: a check that fails after its resource was applied, with a code that needs a
   person (a DNS record, a key to make), is pending with exit code 2, like the same failure in ensure.
+- 2026-10-18 Goal 5: Windows is supported through Ubuntu under WSL. install.sh reads ID from
+  /etc/os-release (only ubuntu is accepted on Linux), detects WSL from /proc/version, installs with
+  apt what Homebrew on Linux needs plus libsecret-tools, then takes the same Homebrew path as macOS,
+  with ~/.bashrc as the profile. The keychain source uses secret-tool (libsecret) on Linux; with no
+  unlocked keyring, as on a bare WSL, a typed value is used for that run only and nothing is
+  written to disk. CIMIENTO_KEYCHAIN pins the kind, which the tests set to macos.
+- 2026-10-18 Goal 5: CI (.github/workflows/ci.yml) runs typecheck, build, the unit tests and
+  install.sh --dry-run on ubuntu-latest and macos-latest. Field tests never run in CI.

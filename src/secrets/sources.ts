@@ -82,16 +82,34 @@ function quoted(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
+/**
+ * Which keychain this machine has: the macOS login keychain through security, or on Linux (Ubuntu,
+ * also under WSL) the Secret Service through secret-tool from libsecret. CIMIENTO_KEYCHAIN pins it,
+ * which the tests do so they behave the same on every platform.
+ */
+export function keychainKind(): 'macos' | 'secret-tool' {
+  const pinned = process.env.CIMIENTO_KEYCHAIN
+  if (pinned === 'macos' || pinned === 'secret-tool') return pinned
+  return process.platform === 'darwin' ? 'macos' : 'secret-tool'
+}
+
+async function keychainLookup(account: string, ctx: SourceContext): Promise<string | undefined> {
+  const found =
+    keychainKind() === 'macos'
+      ? await ctx.io.exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account, '-w'])
+      : await ctx.io.exec('secret-tool', ['lookup', 'service', KEYCHAIN_SERVICE, 'account', account]).catch(() => ({ code: 127, stdout: '', stderr: '' }))
+  if (found.code !== 0) return undefined
+  const value = found.stdout.replace(/\n$/, '')
+  return value || undefined
+}
+
 export const keychainSource: Source = {
   id: 'keychain',
   available: true,
   async read(name: string, ctx: SourceContext): Promise<string | undefined> {
     const account = keychainAccount(ctx.projectSlug, name)
-    const found = await ctx.io.exec('security', ['find-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account, '-w'])
-    if (found.code === 0) {
-      const value = found.stdout.replace(/\n$/, '')
-      if (value) return value
-    }
+    const stored = await keychainLookup(account, ctx)
+    if (stored) return stored
     // Not stored yet. A person at a terminal types it once; it goes to the keychain, so doctor,
     // rotate and every later run read it from there without asking again.
     const typed = await hidden(name, ctx)
@@ -101,6 +119,19 @@ export const keychainSource: Source = {
   },
   async write(name: string, value: string, ctx: SourceContext): Promise<void> {
     const account = keychainAccount(ctx.projectSlug, name)
+    if (keychainKind() === 'secret-tool') {
+      // secret-tool reads the value from stdin. With no unlocked keyring, as on a bare WSL, the
+      // value lives only in this run, and the next run asks again; nothing is written to disk.
+      const result = await ctx.io
+        .exec('secret-tool', ['store', `--label=cimiento ${account}`, 'service', KEYCHAIN_SERVICE, 'account', account], { input: value })
+        .catch(() => ({ code: 127, stdout: '', stderr: 'secret-tool: command not found' }))
+      if (result.code !== 0) {
+        process.stderr.write(
+          `cimiento could not store ${name} in a keyring (${result.stderr.trim().slice(0, 120) || `exit code ${result.code}`}). It is used for this run only; install libsecret-tools and a keyring, or set source: env in stack.yaml.\n`,
+        )
+      }
+      return
+    }
     // security -i reads the command from stdin, so the value never appears in the process list.
     const command = `add-generic-password -U -s ${quoted(KEYCHAIN_SERVICE)} -a ${quoted(account)} -w ${quoted(value)}\n`
     const result = await ctx.io.exec('security', ['-i'], { input: command })
@@ -119,7 +150,11 @@ export const keychainSource: Source = {
 }
 
 keychainSource.remove = async (name: string, ctx: SourceContext): Promise<boolean> => {
-  const result = await ctx.io.exec('security', ['delete-generic-password', '-s', KEYCHAIN_SERVICE, '-a', keychainAccount(ctx.projectSlug, name)])
+  const account = keychainAccount(ctx.projectSlug, name)
+  const result =
+    keychainKind() === 'macos'
+      ? await ctx.io.exec('security', ['delete-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account])
+      : await ctx.io.exec('secret-tool', ['clear', 'service', KEYCHAIN_SERVICE, 'account', account]).catch(() => ({ code: 127, stdout: '', stderr: '' }))
   return result.code === 0
 }
 

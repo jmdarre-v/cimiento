@@ -59,10 +59,22 @@ function setup(opts: { brew: boolean; brewWritable?: boolean; os?: string; prese
   for (const name of opts.present ?? []) tool(stubs, name, name === 'node' ? 'v22.18.0' : '2.0.0')
 }
 
-function install(args: string[] = []) {
+/** An Ubuntu, optionally under WSL, with apt packages already present or not. */
+function ubuntu(opts: { id?: string; wsl?: boolean; installed?: string[] } = {}): Record<string, string> {
+  const osRelease = join(home, 'os-release')
+  const procVersion = join(home, 'proc-version')
+  writeFileSync(osRelease, `NAME="Ubuntu"\nID=${opts.id ?? 'ubuntu'}\nVERSION_ID="24.04"\n`)
+  writeFileSync(procVersion, opts.wsl ? 'Linux version 5.15.167.4-microsoft-standard-WSL2' : 'Linux version 6.8.0-45-generic')
+  const installed = (opts.installed ?? []).join(' ')
+  stub('dpkg', `for p in ${installed}; do [ "$2" = "$p" ] && exit 0; done; exit 1`)
+  stub('sudo', `echo "sudo $*" >> "${log}"; exit 0`)
+  return { CIMIENTO_OS_RELEASE: osRelease, CIMIENTO_PROC_VERSION: procVersion }
+}
+
+function install(args: string[] = [], env: Record<string, string> = {}) {
   const result = spawnSync('/bin/bash', [SCRIPT, ...args], {
     // Never the real Homebrew of the machine running the tests.
-    env: { HOME: home, PATH: `${stubs}:/usr/bin:/bin`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'brew-installed', 'brew') },
+    env: { HOME: home, PATH: `${stubs}:/usr/bin:/bin`, CIMIENTO_PROFILE: join(home, '.zprofile'), CIMIENTO_BREW_CANDIDATES: join(home, 'brew-installed', 'brew'), ...env },
     encoding: 'utf8',
   })
   return { code: result.status, out: `${result.stdout}${result.stderr}`, calls: existsSync(log) ? readFileSync(log, 'utf8') : '' }
@@ -153,11 +165,48 @@ describe('scripts/install.sh', () => {
     expect(profile.split('# added by the cimiento installer').length - 1).toBe(1)
   })
 
-  it('refuses anything but macOS with a sentence that says what to do instead', () => {
+  it('refuses a Linux that is not Ubuntu, and Windows outside WSL, with a sentence that says what to do instead', () => {
     setup({ brew: false, os: 'Linux' })
-    const { code, out } = install()
-    expect(code).toBe(1)
-    expect(out).toContain("cimiento's installer is for macOS")
+    const fedora = install([], ubuntu({ id: 'fedora' }))
+    expect(fedora.code).toBe(1)
+    expect(fedora.out).toContain("cimiento's installer supports macOS and Ubuntu, also under WSL on Windows")
+    expect(fedora.out).toContain('fedora')
+    setup({ brew: false, os: 'MINGW64_NT-10.0' })
+    const windows = install()
+    expect(windows.code).toBe(1)
+    expect(windows.out).toContain('wsl --install')
+  })
+
+  it('on Ubuntu under WSL: the missing apt packages in one install, then Homebrew tools, cimiento last', () => {
+    setup({ brew: true, os: 'Linux' })
+    const { code, out, calls } = install([], ubuntu({ wsl: true, installed: ['curl', 'git', 'procps'] }))
+    expect(code, out).toBe(0)
+    expect(out).toContain('on Ubuntu on WSL')
+    expect(calls).toContain('sudo apt-get install -y build-essential file libsecret-tools')
+    const order = calls.split('\n').filter(Boolean)
+    expect(order.findIndex((l) => l.startsWith('sudo apt-get install'))).toBeLessThan(order.findIndex((l) => l.startsWith('brew install')))
+    expect(order[order.length - 1]).toContain('npm install -g cimiento@latest')
+    expect(out).toContain('Open a new Ubuntu window')
+  })
+
+  it('BUG-58 and BUG-59: --dry-run never fetches the Homebrew installer, and its table says would be installed', () => {
+    setup({ brew: false })
+    const { code, out, calls } = install(['--dry-run'])
+    expect(code, out).toBe(0)
+    expect(calls).not.toContain('curl')
+    expect(out).toContain('would run: the Homebrew installer from https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh')
+    expect(out).toMatch(/^Homebrew\s+-\s+would be installed$/m)
+    expect(out).not.toMatch(/\s{2,}installed with/)
+  })
+
+  it('on Ubuntu with every apt package present, apt is not run, and --dry-run changes nothing', () => {
+    setup({ brew: true, os: 'Linux' })
+    const env = ubuntu({ installed: ['build-essential', 'procps', 'curl', 'file', 'git', 'libsecret-tools'] })
+    const { code, out, calls } = install(['--dry-run'], env)
+    expect(code, out).toBe(0)
+    expect(calls).not.toContain('apt-get')
+    expect(out).toContain('would run: brew install')
+    expect(calls).not.toMatch(/^brew install/m)
   })
 
   it('is valid bash 3.2, the bash every Mac ships', () => {

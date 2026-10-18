@@ -232,7 +232,7 @@ The install command failed.
 
 **What to do:** The installer message in the error says what went wrong. cimiento up retries the install safely.
 
-**Why:** On a fresh Mac the usual cause is that Homebrew itself is missing. Install it from https://brew.sh first.
+**Why:** On a fresh Mac the usual cause is that Homebrew itself is missing. Install it from https://brew.sh first. On Ubuntu, also under WSL, install.sh first installs with apt what Homebrew needs (build-essential, procps, curl, file, git) and libsecret-tools for keychain secrets, asking for the sudo password once.
 
 **Looks like:** `Installing`, `brew: command not found`
 

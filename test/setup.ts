@@ -15,3 +15,6 @@ process.env.LANG = 'en_US.UTF-8'
 
 // A real token in the developer's environment must never reach the fake cloud.
 for (const name of ['CLOUDFLARE_API_TOKEN', 'VERCEL_TOKEN', 'SUPABASE_ACCESS_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'ANTHROPIC_API_KEY', 'NETLIFY_AUTH_TOKEN', 'NEON_API_KEY', 'RESEND_API_KEY', 'STRIPE_SECRET_KEY', 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_POSTHOG_KEY', 'XDG_CONFIG_HOME']) delete process.env[name]
+
+// The macOS keychain, so keychain tests run the same on Linux CI (src/secrets/sources.ts).
+process.env.CIMIENTO_KEYCHAIN = 'macos'
