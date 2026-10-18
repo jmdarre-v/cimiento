@@ -1,12 +1,13 @@
 // The planner: read the manifest and state, refresh reality through each provider, and emit one
 // item per resource with status create, adopt, update, noop, needs-human or blocked.
 
+import { orphanSpecs } from './orphans'
 import { asCimientoError, type CimientoErrorFields } from './errors'
 import { dependenciesOf, topoSort } from './graph'
 import { OutputResolver } from './resolve'
 import type { BillingInfo, CheckResult, Ctx, Provider, ResourceSpec } from './types'
 
-export type PlanStatus = 'create' | 'adopt' | 'update' | 'noop' | 'needs-human' | 'blocked'
+export type PlanStatus = 'create' | 'adopt' | 'update' | 'noop' | 'needs-human' | 'blocked' | 'orphan'
 
 export interface PlanItem {
   id: string
@@ -213,6 +214,26 @@ export async function buildPlan(
   }
 
   const list = ordered.map((s) => items.get(s.id)!).filter(Boolean)
+  // Resources state still has and stack.yaml no longer selects (BUG-74). Reported, never probed:
+  // plan stays passive.
+  for (const orphan of orphanSpecs(ctx.state, specs).filter((o) => o.kind === 'resource')) {
+    const entry = ctx.state.resources[orphan.id]
+    list.push({
+      id: orphan.id,
+      kind: orphan.kind,
+      provider: orphan.provider,
+      status: 'orphan',
+      dependsOn: orphan.dependsOn,
+      deferred: [],
+      billable: false,
+      reason: entry?.retained
+        ? 'No longer in stack.yaml, kept on purpose. cimiento down still deletes it.'
+        : 'No longer in stack.yaml. cimiento up asks whether to retain, release or destroy it (--orphans); cimiento down deletes it.',
+      explainKey: 'ORPHANS_DECISION_NEEDED',
+      ...(entry?.externalId ? { externalId: entry.externalId } : {}),
+      ...(entry?.url ? { url: entry.url } : {}),
+    })
+  }
   return {
     name: ctx.manifest.name,
     slug: ctx.manifest.slug,
@@ -233,6 +254,7 @@ export function summarize(items: PlanItem[]): Record<PlanStatus, number> {
     noop: 0,
     'needs-human': 0,
     blocked: 0,
+    orphan: 0,
   }
   for (const item of items) summary[item.status] += 1
   return summary

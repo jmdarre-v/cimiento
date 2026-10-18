@@ -8,7 +8,8 @@ import { asCimientoError, CimientoError, ExitCode, needsPerson, type CimientoErr
 import { topoSort } from '../../core/graph'
 import { OutputResolver } from '../../core/resolve'
 import { hashManifest, writeProjectState, type ProjectState } from '../../core/state'
-import type { Leftover, Presence, ResourceSpec } from '../../core/types'
+import type { Ctx, Leftover, Presence, Provider, ResourceSpec } from '../../core/types'
+import { manifestForOrphan, orphanSpecs } from '../../core/orphans'
 import { ask } from '../../secrets/prompt'
 import { createdOrganizationLeftovers, type OrganizationLeftover } from '../../providers/supabase'
 import { openProject, type Session } from '../context'
@@ -27,7 +28,9 @@ export async function downCommand(session: Session): Promise<number> {
 
   // Only resources are destroyed. Bindings and checks live inside a resource and go with it;
   // tools and sessions belong to the machine, not to the project.
-  const targets = topoSort(project.specs)
+  // Everything in state, including resources stack.yaml no longer selects (BUG-74).
+  const allSpecs = [...project.specs, ...orphanSpecs(ctx.state, project.specs)]
+  const targets = topoSort(allSpecs, { allowExternal: true })
     .filter((s) => s.kind === 'resource' && ctx.state.resources[s.id])
     .reverse()
   const toDelete = targets.filter((t) => ctx.state.resources[t.id]?.origin !== 'adopted')
@@ -80,13 +83,6 @@ export async function downCommand(session: Session): Promise<number> {
   }
 
   const byProvider = new Map(project.providers.map((p) => [p.id, p]))
-  const resolver = new OutputResolver(ctx.state)
-  let state: ProjectState = ctx.state
-  const destroyed: string[] = []
-  const attempted: ResourceSpec[] = []
-  const released: string[] = []
-  const pending: string[] = []
-  const errors: CimientoErrorFields[] = []
   const emit = (event: DownEvent): void => {
     if (session.json) session.printer.emit(event)
     else if (event.event === 'destroyed') session.printer.line(`deleted  ${event.id}`)
@@ -94,101 +90,9 @@ export async function downCommand(session: Session): Promise<number> {
       session.printer.line(`${event.event === 'pending' ? 'waiting' : 'failed '}  ${event.id}  ${event.message ?? ''}`)
     }
   }
-
-  for (const original of targets) {
-    const provider = byProvider.get(original.provider)
-    if (!provider) {
-      emit({ event: 'skipped', id: original.id, provider: original.provider, message: 'No provider module in this build.' })
-      continue
-    }
-    // Only what cimiento created is deleted. An adopted resource existed before this project and
-    // may carry another application's data; it is released from state and left where it is.
-    if (ctx.state.resources[original.id]?.origin === 'adopted') {
-      released.push(original.id)
-      state = forget(state, original.id, project.specs)
-      emit({
-        event: 'skipped',
-        id: original.id,
-        provider: original.provider,
-        message: 'Adopted, not created by cimiento, so it is kept. cimiento no longer tracks it.',
-      })
-      continue
-    }
-    // Something this resource depends on refusing to go first is fine; something that depends on
-    // it still existing is not, so a failure upstream in the reverse order stops the dependents.
-    const blockedBy = targets
-      .filter((t) => t.dependsOn.includes(original.id) || dependsOnDeferred(t, original.id))
-      .filter((t) => !attempted.some((a) => a.id === t.id) && !released.includes(t.id))
-      .map((t) => t.id)
-    if (blockedBy.length > 0) {
-      emit({
-        event: 'skipped',
-        id: original.id,
-        provider: original.provider,
-        message: `Kept, because ${blockedBy.join(', ')} still exists and depends on it.`,
-      })
-      continue
-    }
-
-    const runCtx = { ...ctx, state }
-    resolver.useState(state)
-    const { spec } = await resolver.resolveWithHydration(original, project.specs, byProvider, runCtx)
-    emit({ event: 'start', id: spec.id, provider: spec.provider })
-    try {
-      await provider.destroy(spec, runCtx)
-    } catch (err) {
-      const error = asCimientoError(err, {
-        code: 'CHECK_FAILED',
-        provider: spec.provider,
-        resource: spec.id,
-        hint: 'cimiento down retries safely. The message above says what the provider refused.',
-      })
-      if (needsPerson(error)) {
-        pending.push(spec.id)
-        emit({ event: 'pending', id: spec.id, provider: spec.provider, message: error.hint, error: error.toJSON() })
-      } else {
-        errors.push(error.toJSON())
-        emit({ event: 'failed', id: spec.id, provider: spec.provider, message: error.message, error: error.toJSON() })
-      }
-      continue
-    }
-
-    attempted.push(spec)
-  }
-
-  // Prove it is gone, once everything has been asked to go. A deployment only disappears with its
-  // project, so checking each delete on its own would report it as surviving.
-  // Forgotten only on a confirmed absent, looked up by the recorded id. An auth error, a timeout or
-  // a provider error says nothing about whether it is gone, so the record stays and the run fails;
-  // the next down looks again (BUG-73).
-  for (const spec of attempted) {
-    const provider = byProvider.get(spec.provider)!
-    const presence: Presence = provider.presence ? await provider.presence(spec, { ...ctx, state }).catch((): Presence => 'unknown') : 'unknown'
-    if (presence !== 'absent') {
-      const error = new CimientoError({
-        code: presence === 'present' ? 'CHECK_FAILED' : 'DOWN_UNCONFIRMED',
-        provider: spec.provider,
-        resource: spec.id,
-        message:
-          presence === 'present'
-            ? `${spec.id} was deleted but still answers.`
-            : `cimiento asked ${spec.provider} to delete ${spec.id} but could not confirm it is gone, so it stays in state.`,
-        hint:
-          presence === 'present'
-            ? 'Some providers delete in the background. Run cimiento down again in a minute; it only touches what is still there.'
-            : `Run cimiento down again once ${spec.provider} answers; it looks the resource up by its id and forgets it only when ${spec.provider} says it is gone.`,
-        retryable: true,
-        needsHuman: false,
-      })
-      errors.push(error.toJSON())
-      emit({ event: 'failed', id: spec.id, provider: spec.provider, message: error.message, error: error.toJSON() })
-      continue
-    }
-    destroyed.push(spec.id)
-    state = forget(state, spec.id, project.specs)
-    writeProjectState(ctx.cwd, state)
-    emit({ event: 'destroyed', id: spec.id, provider: spec.provider })
-  }
+  const outcome = await destroyTargets({ ctx, byProvider, targets, allSpecs, emit })
+  let state = outcome.state
+  const { destroyed, released, pending, errors } = outcome
 
   // A Supabase organization cimiento created cannot be deleted through the API (see
   // SUPABASE_CAN_DELETE_ORGANIZATIONS). It is listed as a leftover with its dashboard link, and
@@ -244,7 +148,7 @@ function dependsOnDeferred(spec: ResourceSpec, id: string): boolean {
  * Drops a destroyed resource from state, together with the bindings, checks and manual steps that
  * only existed because of it. Tool and session entries stay: they describe the machine.
  */
-function forget(state: ProjectState, id: string, specs: ResourceSpec[]): ProjectState {
+export function forget(state: ProjectState, id: string, specs: ResourceSpec[]): ProjectState {
   const gone = new Set([id])
   for (let changed = true; changed; ) {
     changed = false
@@ -311,4 +215,134 @@ function leftoverJson(left: OrganizationLeftover): Record<string, string> {
 
 function leftoverLine(left: OrganizationLeftover): string {
   return `Left over: the Supabase organization ${left.name} (${left.id}), which cimiento created. The Supabase API cannot delete organizations; delete it at ${left.url}.`
+}
+
+export interface TeardownOutcome {
+  state: ProjectState
+  destroyed: string[]
+  released: string[]
+  pending: string[]
+  errors: CimientoErrorFields[]
+}
+
+/**
+ * Deletes the targets in the order given, each in the account it was made in, then confirms each
+ * delete by id and forgets only what is confirmed gone (BUG-73). Shared by down and by up when the
+ * person chose to destroy resources stack.yaml no longer selects (BUG-74).
+ */
+export async function destroyTargets(args: {
+  ctx: Ctx
+  byProvider: Map<string, Provider>
+  targets: ResourceSpec[]
+  allSpecs: ResourceSpec[]
+  emit: (event: DownEvent) => void
+}): Promise<TeardownOutcome> {
+  const { ctx, byProvider, targets, allSpecs, emit } = args
+  const resolver = new OutputResolver(ctx.state)
+  let state: ProjectState = ctx.state
+  const destroyed: string[] = []
+  const attempted: ResourceSpec[] = []
+  const released: string[] = []
+  const pending: string[] = []
+  const errors: CimientoErrorFields[] = []
+
+  for (const original of targets) {
+    const provider = byProvider.get(original.provider)
+    if (!provider) {
+      emit({ event: 'skipped', id: original.id, provider: original.provider, message: 'No provider module in this build.' })
+      continue
+    }
+    // Only what cimiento created is deleted. An adopted resource existed before this project and
+    // may carry another application's data; it is released from state and left where it is.
+    if (ctx.state.resources[original.id]?.origin === 'adopted') {
+      released.push(original.id)
+      state = forget(state, original.id, allSpecs)
+      emit({
+        event: 'skipped',
+        id: original.id,
+        provider: original.provider,
+        message: 'Adopted, not created by cimiento, so it is kept. cimiento no longer tracks it.',
+      })
+      continue
+    }
+    // Something this resource depends on refusing to go first is fine; something that depends on
+    // it still existing is not, so a failure upstream in the reverse order stops the dependents.
+    const blockedBy = targets
+      .filter((t) => t.dependsOn.includes(original.id) || dependsOnDeferred(t, original.id))
+      .filter((t) => !attempted.some((a) => a.id === t.id) && !released.includes(t.id))
+      .map((t) => t.id)
+    if (blockedBy.length > 0) {
+      emit({
+        event: 'skipped',
+        id: original.id,
+        provider: original.provider,
+        message: `Kept, because ${blockedBy.join(', ')} still exists and depends on it.`,
+      })
+      continue
+    }
+
+    // An orphan is destroyed in the account it was made in, whatever stack.yaml pins now.
+    const recorded = state.resources[original.id]
+    const runCtx = { ...ctx, state, manifest: manifestForOrphan(ctx.manifest, original.provider, recorded?.account) }
+    resolver.useState(state)
+    const { spec } = await resolver.resolveWithHydration(original, allSpecs, byProvider, runCtx)
+    emit({ event: 'start', id: spec.id, provider: spec.provider })
+    try {
+      await provider.destroy(spec, runCtx)
+    } catch (err) {
+      const error = asCimientoError(err, {
+        code: 'CHECK_FAILED',
+        provider: spec.provider,
+        resource: spec.id,
+        hint: 'cimiento down retries safely. The message above says what the provider refused.',
+      })
+      if (needsPerson(error)) {
+        pending.push(spec.id)
+        emit({ event: 'pending', id: spec.id, provider: spec.provider, message: error.hint, error: error.toJSON() })
+      } else {
+        errors.push(error.toJSON())
+        emit({ event: 'failed', id: spec.id, provider: spec.provider, message: error.message, error: error.toJSON() })
+      }
+      continue
+    }
+
+    attempted.push(spec)
+  }
+
+  // Prove it is gone, once everything has been asked to go. A deployment only disappears with its
+  // project, so checking each delete on its own would report it as surviving.
+  // Forgotten only on a confirmed absent, looked up by the recorded id. An auth error, a timeout or
+  // a provider error says nothing about whether it is gone, so the record stays and the run fails;
+  // the next down looks again (BUG-73).
+  for (const spec of attempted) {
+    const provider = byProvider.get(spec.provider)!
+    const where = manifestForOrphan(ctx.manifest, spec.provider, state.resources[spec.id]?.account)
+    const presence: Presence = provider.presence ? await provider.presence(spec, { ...ctx, state, manifest: where }).catch((): Presence => 'unknown') : 'unknown'
+    if (presence !== 'absent') {
+      const error = new CimientoError({
+        code: presence === 'present' ? 'CHECK_FAILED' : 'DOWN_UNCONFIRMED',
+        provider: spec.provider,
+        resource: spec.id,
+        message:
+          presence === 'present'
+            ? `${spec.id} was deleted but still answers.`
+            : `cimiento asked ${spec.provider} to delete ${spec.id} but could not confirm it is gone, so it stays in state.`,
+        hint:
+          presence === 'present'
+            ? 'Some providers delete in the background. Run cimiento down again in a minute; it only touches what is still there.'
+            : `Run cimiento down again once ${spec.provider} answers; it looks the resource up by its id and forgets it only when ${spec.provider} says it is gone.`,
+        retryable: true,
+        needsHuman: false,
+      })
+      errors.push(error.toJSON())
+      emit({ event: 'failed', id: spec.id, provider: spec.provider, message: error.message, error: error.toJSON() })
+      continue
+    }
+    destroyed.push(spec.id)
+    state = forget(state, spec.id, allSpecs)
+    writeProjectState(ctx.cwd, state)
+    emit({ event: 'destroyed', id: spec.id, provider: spec.provider })
+  }
+
+  return { state, destroyed, released, pending, errors }
 }

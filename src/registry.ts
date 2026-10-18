@@ -39,9 +39,10 @@ export function knownProviderIds(): string[] {
 }
 
 /** Provider modules for the ids a manifest selects. Unknown ids are reported by the planner. */
-export function buildProviders(m: Manifest): Provider[] {
+export function buildProviders(m: Manifest, extraIds: string[] = []): Provider[] {
   const providers: Provider[] = []
-  for (const id of selectedProviderIds(m)) {
+  // extraIds are providers state still has resources in, after their slot was removed or changed.
+  for (const id of [...new Set([...selectedProviderIds(m), ...extraIds])]) {
     const factory = FACTORIES[id]
     if (!factory) continue
     providers.push(factory(m))

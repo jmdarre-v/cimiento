@@ -44,6 +44,7 @@ Usage
   cimiento publish [--message <text>]            commit every change, push, wait for the deploy, print the URL
   cimiento down                                  delete everything in state, after typing the name
   cimiento accounts set <provider> [--to <id>]   pick the account again: github, vercel, netlify, supabase, neon or turnstile
+  cimiento up --orphans retain|release|destroy  decide about resources stack.yaml no longer selects
   cimiento domain add <domain>                   put your own domain on the site, with auth URLs and Turnstile following
   cimiento domain remove [domain]                take it off again; the default address keeps working
   cimiento explain <resource|error>              plain language

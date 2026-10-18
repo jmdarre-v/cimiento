@@ -18,6 +18,7 @@ import { removeHostingEnv } from '../../providers/hosting'
 import { removeCiSecret, removeDatabaseSecret } from '../../secrets/sinks'
 import { allSinkSpecs, assertSinkAvailable, sinkSpecsFor } from '../../secrets'
 import { HOSTING_NAMES, hostingOf } from '../../core/hosting'
+import { dropFromStoredSpecs } from '../../core/orphans'
 import type { Ctx, ResourceSpec } from '../../core/types'
 import { openProject, type ProjectSession, type Session } from '../context'
 
@@ -277,7 +278,8 @@ export async function secretRemoveCommand(session: Session): Promise<number> {
   writeFileSync(file, doc.toString({ lineWidth: 100 }), 'utf8')
   const resources = { ...project.state.resources }
   for (const spec of specs) delete resources[spec.id]
-  writeProjectState(session.cwd, { ...project.state, resources, manifestHash: hashManifest(readFileSync(file, 'utf8')) })
+  const next = dropFromStoredSpecs({ ...project.state, resources }, specs.map((s) => s.id))
+  writeProjectState(session.cwd, { ...next, manifestHash: hashManifest(readFileSync(file, 'utf8')) })
   const example = join(session.cwd, '.env.example')
   if (existsSync(example)) {
     const text = readFileSync(example, 'utf8')

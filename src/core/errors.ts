@@ -179,6 +179,7 @@ export const ERROR_CODES = [
   'HTTP_UNREACHABLE',
   'PROJECT_LOCKED',
   'DOWN_UNCONFIRMED',
+  'ORPHANS_DECISION_NEEDED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -206,6 +207,7 @@ export const PERSON_CODES: ReadonlySet<string> = new Set([
   'NEON_PROJECT_LIMIT',
   'NETLIFY_SITE_NAME_TAKEN',
   'HOSTING_DOMAIN_DNS_NEEDED',
+  'ORPHANS_DECISION_NEEDED',
 ])
 
 export function needsPerson(err: { code: string; needsHuman: boolean }): boolean {

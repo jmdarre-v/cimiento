@@ -5,6 +5,7 @@ import type { PersonStep } from './person'
 import { asCimientoError, CimientoError, ExitCode, needsPerson, type CimientoErrorFields } from './errors'
 import { dependenciesOf, deferredRefs, topoSort } from './graph'
 import { OutputResolver } from './resolve'
+import { accountFor } from './orphans'
 import { applyEnsureToState, markVerified, writeProjectState, type ProjectState } from './state'
 import type { Ctx, EnsureResult, Provider, ResourceSpec } from './types'
 
@@ -151,7 +152,7 @@ export async function runUp(
           if (!already.ok && already.error?.docsUrl) url = already.error.docsUrl
           if (!already.ok && already.error?.personStep) step = already.error.personStep
           if (already.ok) {
-            state = markVerified(applyEnsureToState(state, spec, { action: 'updated' }), spec.id)
+            state = markVerified(applyEnsureToState(state, original, { action: 'updated' }), spec.id)
             checkpoint(state)
             completed.add(spec.id)
             progressed = true
@@ -187,7 +188,7 @@ export async function runUp(
           pendingManual.add(spec.id)
           continue
         }
-        const afterManual = applyEnsureToState(state, spec, { action: 'updated' })
+        const afterManual = applyEnsureToState(state, original, { action: 'updated' })
         let check = await safeVerify(provider, spec, { ...ctx, state: afterManual })
         // A step can need two pages, one after the other, such as GitHub connected to Vercel and
         // then the repository shared with it. Each page is its own person step, asked in turn in
@@ -265,7 +266,7 @@ export async function runUp(
         continue
       }
 
-      state = applyEnsureToState(state, spec, result)
+      state = applyEnsureToState(state, original, result, accountFor(ctx.manifest, original.provider))
       checkpoint(state)
       resolver.useState(state)
       resolver.record(spec.id, result.outputs, ctx)

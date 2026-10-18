@@ -441,4 +441,10 @@ One line per decision the spec does not cover, with the reasoning.
   (never by name: a lookup in the wrong team or organization would look absent). 2xx is present,
   404 or 410 is absent, anything else, an exception included, is unknown. down forgets only on
   absent; a deployment or migrations record follows its project's presence.
+- 2026-10-18 Goal 6: project state is version 2 and records each resource, binding and manual
+  step's unresolved spec (deferred values stay references) and the account it was made in. A
+  version 1 file is read as is; 0.2.0 refuses a version 2 file. Orphans, recorded specs stack.yaml
+  no longer selects, are listed by plan, deleted by down in the account they were made in, and
+  decided by up before anything changes: --orphans retain, release or destroy, one question in a
+  terminal, or ORPHANS_DECISION_NEEDED (exit 2). Never a default destroy.
 

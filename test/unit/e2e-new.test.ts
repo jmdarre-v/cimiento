@@ -161,7 +161,7 @@ describe('cimiento new --preset fullstack --json', () => {
 
     const raw = readFileSync(join(dir, '.cimiento/state.json'), 'utf8')
     const state = JSON.parse(raw)
-    expect(state.version).toBe(1)
+    expect(state.version).toBe(2)
     expect(state.manifestHash).toMatch(/^[0-9a-f]{64}$/)
     expect(state.resources['github.repo'].externalId).toBeTruthy()
     expect(state.resources['vercel.project'].externalId).toMatch(/^prj_/)

@@ -2,6 +2,9 @@
 // with checks and receipts.
 
 import { acquireProjectLock } from '../../core/lock'
+import { flagString } from '../args'
+import { orphanSpecs, undecidedOrphans } from '../../core/orphans'
+import { destroyTargets, forget } from './down'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError, ExitCode } from '../../core/errors'
@@ -10,7 +13,7 @@ import { topoSort } from '../../core/graph'
 import { outdatedTools, upgradeTools } from '../../core/toolkit'
 import { machineStatePath, writeMachineState } from '../../core/state'
 import { settleSupabasePath } from '../../wiring/supabase-configurations'
-import { sessionConfirm, type ProjectSession } from '../context'
+import { sessionChooser, sessionConfirm, type ProjectSession } from '../context'
 import { billableItems, steps, t } from '../i18n'
 import { stepTitleFor } from '../../core/person-steps'
 import { sinkSecretName } from '../../core/sink-ids'
@@ -44,6 +47,7 @@ export async function runUpIn(session: Session, cwd: string): Promise<UpOutcome>
 
 async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> {
   let project = openProject(session, { dryRun: false, cwd })
+  if (await settleOrphans(session, project)) project = openProject(session, { dryRun: false, cwd })
   let personPhase: { pending: string[] } = { pending: [] }
   if (session.interactive) {
     // Everything that needs the person comes first, so the rest can run without them (BUG-42):
@@ -329,4 +333,91 @@ function explainBillable(session: Session, project: ProjectSession, ids: string[
     const text = explainKey(id, session.lang, project.manifest)
     if (text) session.printer.line(`  ${id}: ${text}`)
   }
+}
+
+const ORPHAN_CHOICES = ['retain', 'release', 'destroy'] as const
+type OrphanChoice = (typeof ORPHAN_CHOICES)[number]
+
+/**
+ * Resources state has and stack.yaml no longer selects, such as the Vercel project after hosting
+ * changed to netlify (BUG-74). Decided before anything else changes: --orphans, or one question,
+ * or a step for a person. retain keeps tracking them, release forgets them and leaves them where
+ * they are, destroy deletes them and confirms each gone. Returns whether state changed.
+ */
+async function settleOrphans(session: Session, project: ProjectSession): Promise<boolean> {
+  const orphans = undecidedOrphans(project.state, project.specs)
+  if (orphans.length === 0) return false
+  const ids = orphans.map((o) => o.id)
+  const flag = flagString(session.args.flags, 'orphans')
+  if (flag && !(ORPHAN_CHOICES as readonly string[]).includes(flag)) {
+    throw new CimientoError({
+      code: 'ORPHANS_DECISION_NEEDED',
+      provider: 'core',
+      resource: 'up',
+      message: `--orphans takes retain, release or destroy, not ${flag}.`,
+      hint: 'Run cimiento up --orphans retain, release or destroy.',
+      retryable: false,
+      needsHuman: true,
+    })
+  }
+  let choice = flag as OrphanChoice | undefined
+  const choose = sessionChooser(session)
+  if (!choice && session.interactive && choose) {
+    choice = (await choose(`stack.yaml no longer selects ${ids.join(', ')}. What should happen to them?`, [
+      { value: 'retain', label: 'Retain: keep them and keep tracking them; down deletes them later' },
+      { value: 'release', label: 'Release: stop tracking them and leave them where they are' },
+      { value: 'destroy', label: 'Destroy: delete them now' },
+    ])) as OrphanChoice
+  }
+  if (!choice) {
+    throw new CimientoError({
+      code: 'ORPHANS_DECISION_NEEDED',
+      provider: 'core',
+      resource: 'up',
+      message: `stack.yaml no longer selects ${ids.join(', ')}, which cimiento still tracks, and nobody chose what happens to them. Nothing was changed.`,
+      hint: 'Run cimiento up --orphans retain to keep them, --orphans release to stop tracking them, or --orphans destroy to delete them; or run cimiento up in a terminal and choose.',
+      retryable: true,
+      needsHuman: true,
+    })
+  }
+  const all = [...project.specs, ...orphanSpecs(project.state, project.specs)]
+  let state = project.state
+  if (choice === 'retain') {
+    const resources = { ...state.resources }
+    for (const id of ids) resources[id] = { ...resources[id], retained: true }
+    state = { ...state, resources }
+  } else if (choice === 'release') {
+    for (const id of ids) state = forget(state, id, all)
+  } else {
+    const byProvider = new Map(project.providers.map((p) => [p.id, p]))
+    const targets = topoSort(all, { allowExternal: true }).filter((s) => ids.includes(s.id)).reverse()
+    const outcome = await destroyTargets({
+      ctx: project.ctx,
+      byProvider,
+      targets,
+      allSpecs: all,
+      emit: (event) => {
+        if (session.json) session.printer.emit({ ...event, phase: 'orphans' })
+        else if (event.event === 'destroyed') session.printer.line(`deleted  ${event.id}`)
+        else if (event.event === 'failed' || event.event === 'pending') session.printer.line(`${event.event}  ${event.id}  ${event.message ?? ''}`)
+      },
+    })
+    state = outcome.state
+    if (outcome.errors.length > 0 || outcome.pending.length > 0) {
+      writeProjectState(project.ctx.cwd, state)
+      throw new CimientoError({
+        code: 'DOWN_UNCONFIRMED',
+        provider: 'core',
+        resource: 'up',
+        message: `Not every resource stack.yaml no longer selects could be deleted and confirmed gone: ${[...outcome.errors.map((e) => e.resource), ...outcome.pending].join(', ')}.`,
+        hint: 'Read the messages above, then run cimiento up --orphans destroy again; it only touches what is still there.',
+        retryable: true,
+        needsHuman: false,
+      })
+    }
+  }
+  writeProjectState(project.ctx.cwd, state)
+  if (session.json) session.printer.emit({ event: 'orphans', choice, ids })
+  else session.printer.line(`${choice === 'retain' ? 'Retained' : choice === 'release' ? 'Released' : 'Destroyed'}: ${ids.join(', ')}`)
+  return true
 }

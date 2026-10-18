@@ -7,7 +7,10 @@ import { dirname, join } from 'node:path'
 import { CimientoError } from './errors'
 import type { EnsureResult, Output, ResourceSpec } from './types'
 
+/** Machine state version. */
 export const STATE_VERSION = 1
+/** Project state version. 2 records each resource's spec (BUG-74); 0.2.0 and older refuse it. */
+export const PROJECT_STATE_VERSION = 2
 export const STALE_AFTER_DAYS = 7
 
 export interface MachineTool {
@@ -44,6 +47,22 @@ export interface StateResource {
   origin?: 'created' | 'adopted'
   verifiedAt?: string
   outputs?: Record<string, string>
+  /**
+   * The spec cimiento applied, unresolved, so a resource stack.yaml no longer selects can still be
+   * planned and destroyed (BUG-74). Deferred values stay references; no secret value is stored.
+   */
+  spec?: StoredSpec
+  /** The account, team or organization the resource was made in, for destroying it there. */
+  account?: string
+  /** Kept on purpose after its slot was removed: up stops asking about it. */
+  retained?: boolean
+}
+
+export interface StoredSpec {
+  kind: ResourceSpec['kind']
+  provider: string
+  dependsOn: string[]
+  inputs: ResourceSpec['inputs']
 }
 
 export interface ProjectState {
@@ -75,7 +94,7 @@ export function emptyMachineState(): MachineState {
 }
 
 export function emptyProjectState(): ProjectState {
-  return { version: STATE_VERSION, manifestHash: '', resources: {}, manualDone: [] }
+  return { version: PROJECT_STATE_VERSION, manifestHash: '', resources: {}, manualDone: [] }
 }
 
 export function readMachineState(path = machineStatePath()): MachineState {
@@ -93,9 +112,10 @@ export function readProjectState(cwd: string): ProjectState {
   const path = projectStatePath(cwd)
   const parsed = readJson<Partial<ProjectState>>(path, 'project state')
   if (!parsed) return emptyProjectState()
-  assertVersion(parsed.version, path)
+  // Version 1, written by 0.2.0 and older, has no specs and is read as is.
+  assertVersion(parsed.version, path, PROJECT_STATE_VERSION)
   return {
-    version: STATE_VERSION,
+    version: PROJECT_STATE_VERSION,
     manifestHash: parsed.manifestHash ?? '',
     resources: parsed.resources ?? {},
     manualDone: parsed.manualDone ?? [],
@@ -106,14 +126,13 @@ export function writeProjectState(cwd: string, state: ProjectState): void {
   const git = join(cwd, '.git')
   const tempDir = existsSync(git) && statSync(git).isDirectory() ? git : dirname(projectStatePath(cwd))
   writeJson(projectStatePath(cwd), {
-    version: STATE_VERSION,
+    version: PROJECT_STATE_VERSION,
     manifestHash: state.manifestHash,
     resources: sortKeys(state.resources),
     manualDone: [...state.manualDone].sort(),
   }, tempDir)
 }
 
-/** Records the result of an ensure call. Secret outputs are dropped, never stored. */
 /**
  * Whether the resource found by name is the one state recorded. A different id, or no id to
  * compare, means cimiento cannot claim it, so it is adopted and down never deletes it (BUG-57).
@@ -122,7 +141,11 @@ export function sameResource(recorded: string | undefined, found: string): boole
   return recorded !== undefined && recorded === found
 }
 
-export function applyEnsureToState(state: ProjectState, spec: ResourceSpec, result: EnsureResult): ProjectState {
+/**
+ * Records the result of an ensure call. spec must be the unresolved spec, as the plan holds it:
+ * a resolved one can carry secret values in its inputs. Secret outputs are dropped, never stored.
+ */
+export function applyEnsureToState(state: ProjectState, spec: ResourceSpec, result: EnsureResult, account?: string): ProjectState {
   const now = new Date().toISOString()
   const recorded = state.resources[spec.id]
   // An adopted resource with another id replaces the record: its dates and outputs are not ours.
@@ -136,6 +159,10 @@ export function applyEnsureToState(state: ProjectState, spec: ResourceSpec, resu
   else if (result.action === 'adopted') entry.origin = 'adopted'
   if (result.externalId) entry.externalId = result.externalId
   if (result.url) entry.url = result.url
+  if (spec.kind === 'resource' || spec.kind === 'binding' || spec.kind === 'manual') {
+    entry.spec = { kind: spec.kind, provider: spec.provider, dependsOn: [...spec.dependsOn], inputs: { ...spec.inputs } }
+  }
+  if (account) entry.account = account
   const outputs = { ...(previous?.outputs ?? {}) }
   for (const [key, out] of Object.entries(result.outputs ?? {})) {
     if (out.secret) continue
@@ -220,13 +247,13 @@ function writeJson(path: string, value: unknown, tempDir = dirname(path)): void 
   renameSync(temp, path)
 }
 
-function assertVersion(version: number | undefined, path: string): void {
-  if (version === undefined || version === STATE_VERSION) return
+function assertVersion(version: number | undefined, path: string, max = STATE_VERSION): void {
+  if (version === undefined || (version >= 1 && version <= max)) return
   throw new CimientoError({
     code: 'STATE_VERSION_UNSUPPORTED',
     provider: 'core',
     resource: path,
-    message: `State file ${path} has version ${version}, this build understands version ${STATE_VERSION}.`,
+    message: `State file ${path} has version ${version}, this build understands versions up to ${max}.`,
     hint: 'Upgrade cimiento, or delete the state file and let cimiento plan rebuild it by adoption.',
     retryable: false,
     needsHuman: true,

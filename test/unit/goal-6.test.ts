@@ -215,3 +215,67 @@ describe('BUG-73: down forgets a resource only when the provider confirms it is 
     }
   })
 })
+
+describe('BUG-74: plan, up and down cover every resource in state, even one stack.yaml no longer selects', () => {
+  async function designerSwappedToNetlify(cloud: FakeCloud): Promise<void> {
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+    const { parseDocument } = await import('yaml')
+    const { writeFileSync } = await import('node:fs')
+    const file = join(dir, 'stack.yaml')
+    const doc = parseDocument(readFileSync(file, 'utf8'))
+    doc.setIn(['slots', 'hosting'], 'netlify')
+    writeFileSync(file, doc.toString(), 'utf8')
+  }
+
+  it('after hosting changes from vercel to netlify, plan lists the old Vercel project as an orphan', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await designerSwappedToNetlify(cloud)
+    const plan = await cli(cloud, ['plan', '--json'])
+    const items = (plan.writer.jsonObjects().pop() as { items: { id: string; status: string }[] }).items
+    expect(items.find((i) => i.id === 'vercel.project')?.status).toBe('orphan')
+    expect(items.find((i) => i.id === 'vercel.deployment')?.status).toBe('orphan')
+  })
+
+  it('down deletes the old Vercel project too, and confirms it gone', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await designerSwappedToNetlify(cloud)
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code, down.writer.outText).toBe(ExitCode.ok)
+    expect(cloud.vercelProjects.size).toBe(0)
+    expect(stateOf().resources['vercel.project']).toBeUndefined()
+  })
+
+  it('up with nobody to ask and no --orphans stops before changing anything, as a step for a person', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await designerSwappedToNetlify(cloud)
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code).toBe(ExitCode.needsHuman)
+    expect(up.writer.outText).toContain('ORPHANS_DECISION_NEEDED')
+    expect(cloud.v2.netlifySites.size).toBe(0)
+  })
+
+  it('up --orphans destroy deletes the old project and builds the new hosting; release forgets it and leaves it; retain keeps tracking it', async () => {
+    for (const choice of ['destroy', 'release', 'retain'] as const) {
+      removeDir(dir)
+      const cloud = new FakeCloud({ ghDeleteScope: true })
+      await designerSwappedToNetlify(cloud)
+      const up = await cli(cloud, ['up', '--json', '--yes', '--orphans', choice])
+      expect(up.code, `${choice}: ${up.writer.outText.slice(-600)}`).toBe(ExitCode.ok)
+      expect(cloud.v2.netlifySites.size, choice).toBe(1)
+      expect(cloud.vercelProjects.size, choice).toBe(choice === 'destroy' ? 0 : 1)
+      expect(Boolean(stateOf().resources['vercel.project']), choice).toBe(choice === 'retain')
+    }
+  })
+
+  it('state holds the unresolved spec of each resource and never a secret value', async () => {
+    const cloud = new FakeCloud({ marketplaceDone: true })
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'fullstack', '--json', '--yes', '--allow-billing', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+    const raw = readFileSync(join(dir, '.cimiento', 'state.json'), 'utf8')
+    const state = JSON.parse(raw) as { version: number; resources: Record<string, { spec?: { provider: string; kind: string } }> }
+    expect(state.version).toBe(2)
+    expect(state.resources['vercel.project'].spec).toMatchObject({ provider: 'vercel', kind: 'resource' })
+    for (const value of ['fake-anthropic-api-key-not-a-real-credential', 'signkey-', 'fake-supabase-service-role', 'eyJ']) expect(raw, value).not.toContain(value)
+  })
+})

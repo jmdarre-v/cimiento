@@ -216,6 +216,16 @@ A step only a person can do.
 
 **Looks like:** `has not been confirmed yet`, `still does not look done`
 
+### ORPHANS_DECISION_NEEDED
+
+Stack.yaml no longer selects resources cimiento still tracks.
+
+**What to do:** Run cimiento up --orphans retain, release or destroy, or run cimiento up in a terminal and choose.
+
+**Why:** When a slot is removed or filled by another provider, such as hosting changed from vercel to netlify, the old resources stay in state with the spec they were made with. plan lists them as orphan. up asks once, before changing anything; retain keeps tracking them and down deletes them later, release forgets them and leaves them where they are, destroy deletes them now and confirms each gone. down always deletes them.
+
+**Looks like:** `no longer selects`
+
 ### PLAN_CYCLE
 
 Two steps wait on each other.

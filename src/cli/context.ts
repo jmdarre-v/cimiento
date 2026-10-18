@@ -136,7 +136,10 @@ export function openProject(session: Session, options: { dryRun: boolean; cwd?: 
   const stored = readProjectState(cwd)
   // State follows stack.yaml for every pinned account, before anything reads either.
   const state: ProjectState = reconcilePins(loaded.manifest, { ...stored, manifestHash: loaded.hash })
-  const providers = buildProviders(loaded.manifest)
+  // Providers of resources stack.yaml no longer selects come too, so they can be planned and
+  // destroyed (BUG-74); their resources() return nothing for an unselected slot.
+  const recorded = Object.values(state.resources).flatMap((e) => (e.spec ? [e.spec.provider] : []))
+  const providers = buildProviders(loaded.manifest, recorded)
   const specs = collectSpecs(loaded.manifest, state, providers)
   const secrets = new SecretStore(loaded.manifest, session.redactor, {
     interactive: session.interactive,

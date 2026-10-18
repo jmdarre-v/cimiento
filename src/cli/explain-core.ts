@@ -170,4 +170,8 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'cimiento asked a provider to delete something but could not confirm it is gone, so it keeps it on its list. Run cimiento down again later; it only forgets a resource once the provider says it is gone.',
     es: 'cimiento pidio a un proveedor borrar algo pero no pudo confirmar que ya no existe, asi que lo mantiene en su lista. Ejecuta cimiento down de nuevo mas tarde; solo lo olvida cuando el proveedor confirma que ya no existe.',
   },
+  ORPHANS_DECISION_NEEDED: {
+    en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
+    es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',
+  },
 }

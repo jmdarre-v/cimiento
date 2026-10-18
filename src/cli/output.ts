@@ -173,6 +173,7 @@ const STATUS_ES: Record<string, string> = {
   noop: 'sin cambios',
   'needs-human': 'te necesita',
   blocked: 'en espera',
+  orphan: 'huerfano',
 }
 
 const ACTION_ES: Record<string, string> = {
