@@ -1,5 +1,7 @@
 # cimiento
 
+![A key changed by hand in Vercel: cimiento doctor --smoke finds it and names the fix, cimiento secret set writes the right value back and deploys, and doctor is green again](docs/demo.gif)
+
 cimiento connects your app's services, verifies the connections and helps you recover when they
 break.
 

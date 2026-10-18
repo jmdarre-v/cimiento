@@ -92,7 +92,7 @@ export async function secretSetCommand(session: Session): Promise<number> {
       errors,
     })
   } else {
-    session.printer.line(`${name}=**** pushed to ${specs.length} destinations.`)
+    session.printer.line(`${name}=**** pushed to ${specs.length} destination${specs.length === 1 ? '' : 's'}.`)
     if (redeployed) session.printer.line(`Deployed again so the live app uses it: ${redeployed}`)
     for (const error of errors) session.printer.error(error)
   }
