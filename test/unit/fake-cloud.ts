@@ -928,6 +928,8 @@ export class FakeCloud implements Io {
     if (oneEnv) {
       const project = this.findVercelProject(decodeURIComponent(oneEnv[1]))
       const entry = project ? (this.vercelEnv.get(project.id) ?? []).find((e) => e.id === decodeURIComponent(oneEnv[2])) : undefined
+      // As Vercel does: a sensitive value is write only and never comes back.
+      if (entry?.type === 'sensitive') return json(200, { key: entry.key, target: entry.target, type: entry.type })
       return entry ? json(200, { key: entry.key, value: entry.value, target: entry.target }) : json(404, { error: { message: 'env not found' } })
     }
 

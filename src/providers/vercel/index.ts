@@ -683,11 +683,14 @@ async function ensureEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
 
   const existing = await listEnv(ctx, spec, projectId)
   const entry = existing.find((e) => e.key === key && e.target.includes(target) && !e.gitBranch)
+  const externalId = `${projectId}/${key}/${target}`
   if (entry) {
-    // Present is not enough: a value someone changed by hand is written over (BUG-91).
+    // Present is not enough: a value someone changed by hand is written over (BUG-91), also one
+    // Vercel never shows again, seen by its entry having changed since cimiento wrote it (BUG-92).
     const known = await knownEnvValue(spec, ctx)
     const held = known === undefined ? undefined : await envValue(ctx, spec, projectId, entry.id)
-    if (known === undefined || held === undefined || held === known) return { action: 'noop', externalId: `${projectId}/${key}/${target}` }
+    const differs = held !== undefined ? held !== known : changedSinceWritten(entry, ctx.state.resources[spec.id]?.outputs)
+    if (known === undefined || !differs) return { action: 'noop', externalId, outputs: entryOutputs(entry, ctx.state.resources[spec.id]?.outputs) }
     if (ctx.dryRun) return { action: 'noop' }
     if (str(spec.inputs.public) !== 'true') ctx.redactor.addName(key)
     const patched = await vercelCall<unknown>(ctx, spec.id, 'PATCH', `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(entry.id)}`, { value: known })
@@ -698,7 +701,7 @@ async function ensureEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
         hint: `Run cimiento secret set ${key} again.`,
       })
     }
-    return { action: 'updated', externalId: `${projectId}/${key}/${target}` }
+    return { action: 'updated', externalId, outputs: await writtenOutputs(ctx, spec, projectId, key, target) }
   }
   if (ctx.dryRun) return { action: 'noop' }
 
@@ -723,7 +726,25 @@ async function ensureEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
       hint: `Run cimiento secret set ${key} again, or add it by hand in the Vercel project settings.`,
     })
   }
-  return { action: 'created', externalId: `${projectId}/${key}/${target}` }
+  return { action: 'created', externalId, outputs: await writtenOutputs(ctx, spec, projectId, key, target) }
+}
+
+/** The entry cimiento last wrote: its id and when Vercel says it changed, as state records them. */
+function entryOutputs(entry: VercelEnv, recorded: Record<string, string> | undefined): Record<string, Output> {
+  // A first sight of an entry from before 0.4.0 becomes the baseline.
+  if (recorded?.envId) return { envId: { value: recorded.envId, secret: false }, envUpdatedAt: { value: recorded.envUpdatedAt ?? '0', secret: false } }
+  return { envId: { value: entry.id, secret: false }, envUpdatedAt: { value: String(entry.updatedAt ?? entry.createdAt ?? 0), secret: false } }
+}
+
+async function writtenOutputs(ctx: Ctx, spec: ResourceSpec, projectId: string, key: string, target: string): Promise<Record<string, Output>> {
+  const entry = (await listEnv(ctx, spec, projectId)).find((e) => e.key === key && e.target.includes(target) && !e.gitBranch)
+  return entry ? entryOutputs(entry, undefined) : {}
+}
+
+/** Replaced (another id) or edited (changed later) since cimiento last wrote it. */
+function changedSinceWritten(entry: VercelEnv, recorded: Record<string, string> | undefined): boolean {
+  if (!recorded?.envId) return false
+  return recorded.envId !== entry.id || (entry.updatedAt ?? entry.createdAt ?? 0) > Number(recorded.envUpdatedAt ?? 0)
 }
 
 /**
@@ -757,7 +778,8 @@ export async function rotateEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureRes
       hint: `Run cimiento secret rotate ${key} again; it only writes, it never deletes.`,
     })
   }
-  return { action: 'updated', externalId: `${projectId}/${key}/${target}` }
+  // Recorded, so the next doctor does not take cimiento's own write for someone else's (BUG-92).
+  return { action: 'updated', externalId: `${projectId}/${key}/${target}`, outputs: await writtenOutputs(ctx, spec, projectId, key, target) }
 }
 
 /**
@@ -856,8 +878,11 @@ async function verifyEnv(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   if (entry) {
     const known = await knownEnvValue(spec, ctx)
     const held = known === undefined ? undefined : await envValue(ctx, spec, projectId, entry.id)
-    if (known !== undefined && held !== undefined && held !== known) return { ok: false, error: valueMismatch(spec, key, `the ${target} environment of the Vercel project`) }
-    return { ok: true, evidence: `${key}=**** present in vercel ${target}${known !== undefined && held !== undefined ? ', the value cimiento holds' : ''}` }
+    const where = `the ${target} environment of the Vercel project`
+    if (known !== undefined && held !== undefined && held !== known) return { ok: false, error: valueMismatch(spec, key, where) }
+    // A value Vercel never shows again is judged by its entry: replaced or edited since cimiento wrote it.
+    if (held === undefined && changedSinceWritten(entry, ctx.state.resources[spec.id]?.outputs)) return { ok: false, error: valueMismatch(spec, key, where, true) }
+    return { ok: true, evidence: `${key}=**** present in vercel ${target}${held !== undefined ? ', the value cimiento holds' : ''}` }
   }
   if (!existing.some((e) => e.key === key && e.target.includes(target))) {
     return {

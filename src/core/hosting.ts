@@ -108,13 +108,15 @@ export function sharedPreviewWarning(m: Manifest): string | undefined {
 }
 
 /** A hosting env value that is not the one cimiento holds for it, without printing either (BUG-90). */
-export function valueMismatch(spec: ResourceSpec, key: string, where: string): CimientoError {
+export function valueMismatch(spec: ResourceSpec, key: string, where: string, replaced = false): CimientoError {
   const secret = spec.inputs.source !== 'literal'
   return new CimientoError({
     code: 'SECRET_VALUE_MISMATCH',
     provider: spec.provider,
     resource: spec.id,
-    message: `${key}=**** in ${where} is not the value cimiento holds for it, so the app reads a different ${secret ? 'key' : 'value'} than the one cimiento checks.`,
+    message: replaced
+      ? `${key}=**** in ${where} was replaced or edited after cimiento last wrote it, and the hosting never shows the value again, so cimiento cannot tell it is the value it holds.`
+      : `${key}=**** in ${where} is not the value cimiento holds for it, so the app reads a different ${secret ? 'key' : 'value'} than the one cimiento checks.`,
     hint: secret ? `Run cimiento secret set ${key}. It writes the value cimiento holds over the one there and deploys again.` : 'Run cimiento up. It writes the value over the one there and deploys again.',
     retryable: true,
     needsHuman: false,

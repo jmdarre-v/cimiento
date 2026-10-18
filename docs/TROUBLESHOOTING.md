@@ -322,7 +322,7 @@ The hosting env holds another value than the one cimiento holds.
 
 **What to do:** Run cimiento secret set NAME. It writes the value cimiento holds over the one in the hosting env and deploys again.
 
-**Why:** doctor and up compare each hosting env value with the one cimiento holds, when it has it without asking anyone, a literal from the plan, or a secret from the environment or the keychain, and never print either. A different value fails the check, and up and secret set write the right one over it. A secret whose source is the hidden prompt is only checked for presence, because nobody is asked just to compare.
+**Why:** A value the hosting never shows again, such as a Vercel sensitive one, is judged by its entry, replaced or edited since cimiento wrote it. doctor and up compare each hosting env value with the one cimiento holds, when it has it without asking anyone, a literal from the plan, or a secret from the environment or the keychain, and never print either. A different value fails the check, and up and secret set write the right one over it. A secret whose source is the hidden prompt is only checked for presence, because nobody is asked just to compare.
 
 **Looks like:** `is not the value cimiento holds for it`
 

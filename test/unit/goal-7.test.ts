@@ -452,6 +452,27 @@ describe('BUG-90 and BUG-91: a wrong value in the hosting env is seen by doctor 
     expect(green.code, green.writer.outText.slice(-800)).toBe(ExitCode.ok)
   })
 
+  it('BUG-92: a key replaced with a sensitive value Vercel never shows is still seen as changed, and secret set writes over it', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await withDemoToken(cloud, ['--preset', 'designer'])
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    const envs = cloud.vercelEnv.get(projectId)!
+    // As vercel env rm then vercel env add do: a new entry, sensitive, with a new id.
+    envs.splice(envs.findIndex((e) => e.key === 'DEMO_TOKEN'), 1)
+    envs.push({ id: 'env_by_hand', key: 'DEMO_TOKEN', value: WRONG, target: ['production'], type: 'sensitive', createdAt: Date.now() + 1000 })
+
+    const broken = await cli(cloud, ['doctor', '--smoke', '--json'])
+    expect(broken.code).not.toBe(ExitCode.ok)
+    expect(broken.writer.outText).toContain('SECRET_VALUE_MISMATCH')
+    expect(broken.writer.outText).toContain('cimiento secret set DEMO_TOKEN')
+
+    const set = await cli(cloud, ['secret', 'set', 'DEMO_TOKEN', '--json'])
+    expect(set.code, set.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(envs.find((e) => e.key === 'DEMO_TOKEN')!.value).toBe(RIGHT)
+    const green = await cli(cloud, ['doctor', '--smoke', '--json'])
+    expect(green.code, green.writer.outText.slice(-800)).toBe(ExitCode.ok)
+  })
+
   it('Netlify: the same', async () => {
     const cloud = new FakeCloud({ ghDeleteScope: true, keychain: V2_KEYS })
     await withDemoToken(cloud, V2_ARGS)
