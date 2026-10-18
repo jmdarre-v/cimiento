@@ -151,3 +151,28 @@ End with the install one-liner and the two commands a new person runs. User zero
 6. Mark v1 and v2 done in SPEC section 18. Bump to 0.2.0, CHANGELOG, regenerate `docs/TROUBLESHOOTING.md`, README covering every provider, `npm pack` check, push. Do not run `npm publish`; end with `BLOCKED: npm publish`.
 
 The GOAL REPORT includes the bug table and timings inline.
+
+## Goal 6: trustworthy state, teardown and health; version 0.3.0
+
+0.2.0 is already on npm and has these bugs; 0.3.0 replaces it. Continue BUG ids, each with a KB
+entry and a regression test that reproduces the failure first. (BUG-66 to 70 were used at the end
+of Goal 5, so Goal 6 starts at BUG-71.)
+
+1. Verification returns present, absent or unknown. `down` forgets a resource only on confirmed absent; auth errors, timeouts and provider errors keep it in state and exit non-zero.
+2. State records each managed resource's full spec. `down` and `plan` cover every resource in state, including ones whose slot was removed or changed in `stack.yaml`; a removed slot asks retain, release or destroy (flag for `--yes`).
+3. Checkpoint state after every completed operation, written to a temp file then renamed, with a project lock file that blocks concurrent runs and reports a stale lock.
+4. `publish` runs commit, push and deploy-wait as resumable stages: with a clean tree it still compares HEAD with the remote and the deployed commit and resumes the missing stage.
+5. `doctor`: a failed live verify is failed or unknown, never ok; `manualDone` is history only.
+6. `plan` and `doctor` are passive. Split verify into inspect and smoke; the Resend email and the PostHog event only run in smoke, behind `--smoke`, with the effect stated. Test that `plan` makes no POST.
+7. Neon migrations: no semicolon splitting; send whole files through a path that understands dollar quoting; tell a missing history table from an unreadable one.
+8. `io.ts` http: bounded timeout on every request; retries only for idempotent reads.
+9. Templates escape string literals and JSX text; test with the name `Jane's "app" & co`.
+10. README: the `.env` hook is an accidental-disclosure guard, not a boundary. Tagline: cimiento connects your app's services, verifies the connections and helps you recover when they break. A capability matrix per provider with proven, partially proven, unproven from the field tests. Verification levels explained: key exists, provider accepts it, app uses it, end-to-end transaction. State that dev, preview and production do not imply separate databases unless configured.
+11. `cimiento doctor` works in an existing project with no `stack.yaml`: detect providers read-only, create nothing.
+12. LICENSE (MIT, jmdarre-v), SECURITY.md, CONTRIBUTING.md with architecture map, local setup, a provider example and test expectations; three good-first-issue GitHub issues.
+13. Release workflow: on a `v*` tag, build, test, `npm pack`, install the tarball in a clean dir and run `cimiento --version` and `plan --json` in a scaffolded project that builds; `install.sh` accepts `CIMIENTO_VERSION`, README shows the pinned form.
+14. Tests at operational boundaries: interruption right after create, accepted delete plus 503 verify, revoked permission after a confirmed integration, provider swap in `stack.yaml`, failed push and deploy-wait retry, real PostgreSQL via a local postgres in CI.
+15. Field test on existing sessions, unattended, in `docs/FIELD-TEST-6.md` with run-log timings: `new cimiento-test-6 --preset designer`, interrupt `up` right after the Vercel project is created and resume, `publish` with a failed push then resume, change hosting to netlify and confirm `plan` and `down` handle the old Vercel project, `down`, confirm nothing remains.
+16. Bump to 0.3.0, CHANGELOG, TROUBLESHOOTING, push. Then end with `BLOCKED:` and as Next the exact attended commands for field tests 5b and 5c (accounts, keys, the CNAME with its exact value) then `npm publish` 0.3.0, then `npm deprecate` for `cimiento@0.1.0` and `cimiento@0.2.0` with the message: teardown can lose track of resources, upgrade to 0.3.0.
+
+The GOAL REPORT includes the bug table and timings inline.
