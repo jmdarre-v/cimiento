@@ -17,6 +17,7 @@ import { parseManifest } from '../../manifest/schema'
 import { removeHostingEnv } from '../../providers/hosting'
 import { removeCiSecret, removeDatabaseSecret } from '../../secrets/sinks'
 import { allSinkSpecs, assertSinkAvailable, sinkSpecsFor } from '../../secrets'
+import { HOSTING_NAMES, hostingOf } from '../../core/hosting'
 import type { Ctx, ResourceSpec } from '../../core/types'
 import { openProject, type Session } from '../context'
 
@@ -151,7 +152,12 @@ export async function secretRotateCommand(session: Session): Promise<number> {
       )
     }
   }
-  const note = 'Vercel reads env when it builds. cimiento up deploys again so the live app uses the new value, and cimiento doctor reports the deployment until then.'
+  // Named for the hosting this project uses (BUG-62); with no hosting sink there is nothing to rebuild.
+  const hosting = hostingOf(project.manifest)
+  const note =
+    hosting && declaration.sinks.includes('hosting')
+      ? `${HOSTING_NAMES[hosting]} reads env when it builds. cimiento up deploys again so the live app uses the new value, and cimiento doctor reports the deployment until then.`
+      : 'Every sink holds the new value now.'
   const exitCode = errors.length > 0 ? ExitCode.failed : ExitCode.ok
   if (session.json) {
     session.printer.emit({ ok: exitCode === ExitCode.ok, command: 'secret rotate', name, source: declaration.source, updated, created, errors, note })

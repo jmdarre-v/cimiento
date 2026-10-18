@@ -1,6 +1,8 @@
 // Regression tests for the bugs field test 5 found (docs/FIELD-TEST-5.md), from BUG-60 on.
 
+import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { parseDocument } from 'yaml'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from '../../src/cli/index'
 import { ExitCode } from '../../src/core/errors'
@@ -70,5 +72,26 @@ describe('BUG-61: a Next.js site on Netlify gets the Next.js runtime', () => {
     expect(site.plugins).toEqual([{ package: '@netlify/plugin-nextjs' }])
     expect(cloud.v2.netlifyDeploys.length).toBe(deploys + 1)
     expect(cloud.pages.get(site.ssl_url)?.status).toBe(200)
+  })
+})
+
+describe('BUG-62: secret rotate names the hosting the project uses', () => {
+  it('on Netlify the note says Netlify reads env when it builds, not Vercel', async () => {
+    const cloud = new FakeCloud()
+    await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--hosting', 'netlify', '--json', '--yes', '--dir', dir], root)
+    const file = join(dir, 'stack.yaml')
+    const doc = parseDocument(readFileSync(file, 'utf8'))
+    doc.set('secrets', doc.createNode([{ name: 'CIMIENTO_TEST_SECRET', sinks: ['hosting'], environments: ['preview', 'production'], source: 'env' }]))
+    writeFileSync(file, doc.toString(), 'utf8')
+    process.env.CIMIENTO_TEST_SECRET = 'fake-rotate-note-value-not-real'
+    try {
+      await cli(cloud, ['secret', 'set', 'CIMIENTO_TEST_SECRET', '--json'])
+      const { writer } = await cli(cloud, ['secret', 'rotate', 'CIMIENTO_TEST_SECRET', '--json'])
+      const note = (writer.jsonObjects().find((o) => (o as { command?: string }).command === 'secret rotate') as { note: string }).note
+      expect(note).toContain('Netlify reads env when it builds')
+      expect(note).not.toContain('Vercel')
+    } finally {
+      delete process.env.CIMIENTO_TEST_SECRET
+    }
   })
 })
