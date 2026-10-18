@@ -508,3 +508,24 @@ describe('BUG-80: doctor in an existing project without stack.yaml detects provi
     expect(cloud.httpCalls.filter((c) => /^(POST|PUT|PATCH|DELETE) /.test(c))).toEqual([])
   })
 })
+
+// Item 14, tests at operational boundaries, where each one lives:
+//   interruption right after create          BUG-72, up killed right after the Vercel project
+//   accepted delete plus 503 verify          BUG-73
+//   revoked permission after a confirmation  BUG-75 (GitHub access) and the Inngest test below
+//   provider swap in stack.yaml              BUG-74
+//   failed push and deploy-wait retry        BUG-78
+//   real PostgreSQL                          test/unit/postgres.test.ts, a postgres service in CI
+describe('operational boundaries: an integration removed after it was confirmed', () => {
+  it('doctor fails the Inngest step once the integration is gone, instead of trusting that it was confirmed', async () => {
+    const cloud = new FakeCloud({ marketplaceDone: true })
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'fullstack', '--json', '--yes', '--allow-billing', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+    cloud.inngestInstalled = false
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    const item = (doctor.writer.jsonObjects().pop() as { items: { id: string; ok: boolean; status: string }[] }).items.find((i) => i.id === 'inngest.vercel-integration')!
+    expect(item.ok).toBe(false)
+    expect(item.status).toBe('failed')
+    expect(doctor.code).not.toBe(ExitCode.ok)
+  })
+})
