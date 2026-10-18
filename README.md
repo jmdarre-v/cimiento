@@ -1,8 +1,12 @@
 # cimiento
 
-One command that takes you from nothing to a deployed, wired, verified project skeleton, and
-keeps that environment healthy afterwards. It installs tools, logs in, creates resources, wires
-them together, pushes secrets, deploys, and proves the result works.
+cimiento connects your app's services, verifies the connections and helps you recover when they
+break.
+
+One command takes you from nothing to a deployed project on GitHub, hosting, a database and the
+services you pick, with every key in the right place. It installs tools, logs in, creates
+resources, wires them together, pushes secrets and deploys. Afterwards `cimiento doctor` checks
+that each connection still works, and the commands pick up where an interrupted run stopped.
 
 Everything runs on your machine with your own accounts. There is no hosted service.
 
@@ -16,7 +20,12 @@ curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/ins
 ```
 
 It skips whatever is already installed and ends with a table of every tool. Claude Code needs a
-Claude Pro or Max plan. If you already have Node 22, `npm install -g cimiento` installs cimiento
+Claude Pro or Max plan. To install one release in particular, pin it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/install.sh | CIMIENTO_VERSION=0.3.0 bash
+```
+ If you already have Node 22, `npm install -g cimiento` installs cimiento
 alone. The CLIs of the other providers (Netlify, Neon, wrangler for Turnstile) are installed by
 cimiento the first time a project needs them.
 
@@ -81,7 +90,10 @@ only place secrets touch disk, in a gitignored file, and start everything locall
 ```
 
 Skills `/cimiento:setup`, `/cimiento:new-project`, `/cimiento:explain` and `/cimiento:secrets`,
-and a hook that blocks Claude from reading, searching or printing `.env` files.
+and a hook that stops Claude from reading, searching or printing `.env` files. The hook, like the
+deny rule in the generated `.claude/settings.json`, is a guard against accidental disclosure, not
+a security boundary: it keeps Claude Code from reading a key by mistake, and does not stop a
+shell command that reads the file another way or a key pasted into a chat. See `SECURITY.md`.
 
 ## What it made
 
@@ -90,6 +102,75 @@ records what exists and when it was last verified. Both are committed, neither h
 
 To change the environment, edit `stack.yaml` and run `cimiento up`. Clicking in a dashboard also
 works, and `cimiento doctor` will tell you about it the next time you run it.
+
+## What a check proves
+
+Each check says how far it got, from the weakest proof to the strongest:
+
+| Level | Proves | Examples |
+|---|---|---|
+| Key exists | The value is in every place it was sent | `secrets.present`, `secret check` |
+| Provider accepts it | The provider answers a read with that key | Stripe test balance, Anthropic models, Resend domains |
+| App uses it | The deployed app answers with what the connection set up | `hosting.deployed` with the scaffold marker, Supabase Auth URLs, the Inngest app registered |
+| End-to-end transaction | Something went all the way through | Inngest roundtrip event, Turnstile siteverify, Resend test email, PostHog event, a query on the migrated table |
+
+`plan`, `doctor` and `up` only read, so they stop at the first three levels. The end-to-end checks
+act on the outside world, and run only with `--smoke`, which says what each one will do before it
+runs:
+
+```bash
+cimiento doctor --smoke
+```
+
+`doctor` reports each item as ok, failed or unknown. Unknown means the provider could not tell,
+such as a timeout or a 503; it is never counted as ok, and something confirmed once and later
+revoked, like GitHub access for Vercel, shows as failed again.
+
+## What has been proven on real accounts
+
+From the field tests in `docs/FIELD-TEST-*.md`. Unit tests cover every row on a fake cloud;
+this table is about real accounts.
+
+| Provider | Proven | Partially proven | Unproven |
+|---|---|---|---|
+| GitHub | Repository, push, delete, Actions secrets | | |
+| Vercel | Project, repository link, env, deploy, publish, branch previews | Custom domain: added, its DNS record named, removed; serving it was not run | |
+| Netlify | Site, repository link, env per context, deploy, publish, pull request previews, secret set to remove | | |
+| Supabase | Direct and Marketplace paths, migrations, Auth URLs, project secrets | | |
+| Neon | Project, connection strings in the hosting env | Migrations: proven over HTTP in field test 5; the 0.3.0 Postgres client path is proven on a local PostgreSQL only | |
+| Inngest | Integration, keys, roundtrip event | | |
+| Turnstile | Widget, keys, domains, siteverify | | |
+| Resend | Key, test email to the test inbox | The 0.3.0 read only key check | |
+| Stripe | Test mode keys, test balance | | |
+| PostHog | Project key, event received | | PostHog has no read only key check; without `--smoke` cimiento checks the key's shape |
+| Anthropic | Key, read only call | | |
+| Windows via WSL | | install.sh on Ubuntu 24.04 in a container | WSL itself |
+
+## Environments and databases
+
+`stack.yaml` lists `dev`, `preview` and `production`, and secrets go to each environment you name.
+That does not create separate databases: by default preview and production use the same Supabase
+or Neon database, with the same connection values in both. Separate databases per environment are
+something you configure, not something cimiento implies.
+
+## When something breaks
+
+- An interrupted `up` resumes. State is written after every step, so the next run knows what was
+  created; one run per project at a time, and a lock left by a killed run is reported and taken
+  over.
+- `cimiento publish` resumes too: with nothing new to commit it still pushes a commit that did not
+  reach the remote, and waits for the deploy when the live site is not built from it.
+- `cimiento down` forgets a resource only when the provider confirms it is gone. A timeout or an
+  auth error keeps it in state and exits non zero; run it again.
+- Changed a provider in `stack.yaml`, such as hosting from vercel to netlify? `plan` lists the old
+  resources as orphans, and `up` asks whether to retain, release or destroy them:
+
+```bash
+cimiento up --orphans destroy
+```
+
+- In a project cimiento did not create, `cimiento doctor` without a `stack.yaml` lists the
+  providers the project already uses, read only, and creates nothing.
 
 ## Commands
 
@@ -110,6 +191,9 @@ works, and `cimiento doctor` will tell you about it the next time you run it.
 | `cimiento secret rotate NAME` | A new value, written over every destination |
 | `cimiento secret remove NAME` | Take a secret out of the project and every destination |
 | `cimiento down` | Delete everything in state, after you type the project name back |
+| `cimiento doctor --smoke` | Also run the checks that act: a test email, an event, a test token |
+| `cimiento up --orphans <choice>` | Retain, release or destroy resources `stack.yaml` no longer selects |
+| `cimiento new <name> --scaffold-only` | Write the project files and stop, touching no account |
 | `cimiento accounts set <provider>` | Pick the GitHub account, Vercel or Netlify team, Supabase or Neon organization, or Cloudflare account again |
 | `cimiento domain add <domain>` | Put your own domain on the site; Supabase Auth URLs and Turnstile follow |
 | `cimiento domain remove` | Take it off again; the default address keeps working |
@@ -184,11 +268,11 @@ flag per slot (`--hosting netlify --database neon`), or in `cimiento new --guide
 | hosting | Netlify | Creates the site, links it with a deploy key and a webhook, sets the Next.js runtime, writes env per deploy context, builds | Logs in with `netlify login`; picks the team when there are several |
 | database, auth | Supabase | Creates the database through the Vercel Marketplace (`via-hosting`) or the Supabase API (`direct`), runs migrations, sets Auth URLs | Logs in; accepts the Marketplace terms once per team |
 | database | Neon | Creates the project, runs `db/migrations`, writes `DATABASE_URL` and `DATABASE_URL_UNPOOLED` to the hosting env | Logs in with `neonctl auth`; picks the organization when there are several |
-| jobs | Inngest | Checks the Vercel integration, keeps its keys in the env, proves a real event runs | Approves the Inngest Vercel integration once |
+| jobs | Inngest | Checks the Vercel integration and keeps its keys in the env; with `--smoke`, proves a real event runs | Approves the Inngest Vercel integration once |
 | bot_protection | Turnstile | Creates the widget, writes its keys, keeps its domains on the production host | Logs in with `wrangler login` |
-| email | Resend | Sends one email to Resend's test inbox to prove the key | Makes an API key; cimiento asks for it at a hidden prompt |
+| email | Resend | Reads what the key may do; with `--smoke`, sends one email to Resend's test inbox | Makes an API key; cimiento asks for it at a hidden prompt |
 | payments | Stripe, test mode only | Reads the test balance to prove the key; refuses any live key | Copies the sandbox or test mode keys |
-| analytics | PostHog | Writes the ingestion host, sends one event | Copies the project token (phc_) |
+| analytics | PostHog | Writes the ingestion host, checks the key's shape; with `--smoke`, sends one event | Copies the project token (phc_) |
 | ai | Anthropic | Proves the key with a free read only call | Makes an API key |
 
 Every person step says the full link, the clicks in order, each field and value, the button and
@@ -209,7 +293,7 @@ cimiento names the one record to add there (the CNAME Vercel recommends for the 
 
 ## What is in this release
 
-0.2.0: all of the above. Templates `nextjs-app` and `designer-site`. Expert, guided (English and
+0.3.0: all of the above. Templates `nextjs-app` and `designer-site`. Expert, guided (English and
 Spanish) and `--json` output. The installer script for macOS and Ubuntu, also under WSL, and the
 Claude Code plugin. `CHANGELOG.md` has the details.
 
