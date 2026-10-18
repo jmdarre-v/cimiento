@@ -196,3 +196,16 @@ failure first.
 8. Record field tests in `docs/FIELD-TEST-7.md` with run-log timings. Bump to 0.4.0, CHANGELOG, TROUBLESHOOTING, tag v0.4.0, push.
 
 The goal is met when the GOAL REPORT is printed showing every item committed, `pnpm test` and CI green on the last commit, the v0.4.0 tag pushed, git status clean, and every field-test resource confirmed gone with each provider's CLI or API. The report includes the bug table and timings inline; its Next line lists only person steps: `npm publish` of 0.4.0, and `npm deprecate` of 0.3.0 because its teardown deletes by name.
+
+## Goal 8: close the Goal 7 limits; version 0.4.1
+
+Continue BUG ids from BUG-93, each with a KB entry and a regression test that reproduces the
+failure first.
+
+1. Neon preview branches without `cimiento up`: the scaffold ships a GitHub Actions workflow that, on push of any branch other than main, creates the Neon branch for it (and deletes it when the branch is deleted), using a `NEON_API_KEY` repo secret that cimiento sets through the ci sink. A preview built before the branch exists must fail with a clear message, never read production. Field test unattended on existing sessions: push a branch with plain git, confirm the preview reads its own database, delete the branch, confirm the Neon branch is gone.
+2. Commit stamp on CLI deploys: field test unattended on Vercel and Netlify with a clean tree, confirm the deployment records the commit and `publish` on a clean tree reads it back. Fix whatever fails.
+3. Speed: an `up` with nothing to change takes about 90 s, mostly tool and session detection. Cache tool versions and session identities per machine with a short TTL, invalidated on any auth error, and run detection concurrently. Target: a noop `up` under 20 s on the cimiento repo itself; report the measured before and after from run logs.
+4. Supabase preview project: implement a field test path that runs when a free slot or a paid organization the person chose is available; when the free limit blocks it, record that and continue. Do not pause, delete or create anything outside cimiento-test-8 resources.
+5. Record in `docs/FIELD-TEST-8.md` with run-log timings. Update the README capability matrix with what is now proven. Bump to 0.4.1, CHANGELOG, TROUBLESHOOTING, tag v0.4.1, push.
+
+The goal is met when the GOAL REPORT is printed showing every item committed or recorded as stopped with its reason, `pnpm test` and CI green on the last commit, the v0.4.1 tag pushed, git status clean, and every field-test resource confirmed gone with each provider's CLI or API. The report includes the bug table and timings inline; its Next line lists only person steps: `npm publish` of 0.4.1, and freeing a Supabase free slot if the Supabase preview test was blocked.
