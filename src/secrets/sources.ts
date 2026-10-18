@@ -22,6 +22,8 @@ export interface SourceContext {
   /** Asks one multiple choice question, for whether the person has an account yet. */
   choose?: (question: string, options: ChoiceOption[]) => Promise<string>
   lang?: 'en' | 'es'
+  /** Sign-ups asked and pages walked in this run, so two keys on one page open it once (BUG-69). */
+  walked?: Set<string>
 }
 
 export interface Source {
@@ -40,7 +42,9 @@ async function hidden(name: string, ctx: SourceContext): Promise<string | undefi
   const step = secretStep(name, ctx.projectSlug, ctx.declaration?.url)
   // Someone new to the vendor needs an account before the page with the key exists for them.
   const signup = secretSignupStep(name)
-  if (signup && ctx.walkStep && ctx.choose) {
+  const walked = ctx.walked ?? new Set<string>()
+  if (signup && ctx.walkStep && ctx.choose && !walked.has(`signup:${signup.vendor}`)) {
+    walked.add(`signup:${signup.vendor}`)
     const es = ctx.lang === 'es'
     const has = await ctx.choose(es ? `Tienes una cuenta de ${signup.vendor}?` : `Do you have a ${signup.vendor} account?`, [
       { value: 'yes', label: es ? 'Si' : 'Yes' },
@@ -48,7 +52,10 @@ async function hidden(name: string, ctx: SourceContext): Promise<string | undefi
     ])
     if (has === 'no') await ctx.walkStep(signup.step)
   }
-  if (step && ctx.walkStep) await ctx.walkStep(step)
+  if (step && ctx.walkStep && !walked.has(step.url)) {
+    walked.add(step.url)
+    await ctx.walkStep(step)
+  }
   const value = (await (ctx.promptHidden ?? askHidden)(`Value for ${name} (input is hidden): `)).trim()
   // Refused before the keychain source stores it.
   if (value) assertTestModeValue(name, value)

@@ -195,6 +195,7 @@ export const V2_SECRETS: Record<
     path: [
       L('Switch to your sandbox (or Test mode) at the top of the page; cimiento refuses any live key', 'Cambia a tu sandbox (o Test mode) arriba en la pagina; cimiento rechaza cualquier clave real'),
       L('Under Standard keys, find Secret key and click Reveal test key', 'En Standard keys, busca Secret key y haz clic en Reveal test key'),
+      L('Keep the page open: the Publishable key on it, starting with pk_test_, is the next one cimiento asks for', 'Deja la pagina abierta: la Publishable key, que empieza con pk_test_, es la siguiente que pide cimiento'),
     ],
     fields: [],
     button: 'Reveal test key',

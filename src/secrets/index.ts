@@ -29,6 +29,7 @@ export interface SecretStoreOptions {
 
 export class SecretStore implements SecretResolver {
   private cache = new Map<string, string>()
+  private readonly walked = new Set<string>()
 
   constructor(
     private readonly manifest: Manifest,
@@ -71,6 +72,7 @@ export class SecretStore implements SecretResolver {
       ...(this.options.walkStep ? { walkStep: this.options.walkStep } : {}),
       ...(this.options.choose ? { choose: this.options.choose } : {}),
       ...(this.options.lang ? { lang: this.options.lang } : {}),
+      walked: this.walked,
     }
   }
 

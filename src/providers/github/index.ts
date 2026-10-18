@@ -302,10 +302,16 @@ function needsDeleteScope(result: { stdout: string; stderr: string }): boolean {
 async function ensureRepo(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const full = fullName(spec)
   const known = ctx.state.resources[spec.id]
-  const existing = await viewRepo(ctx, full)
+  let existing = await viewRepo(ctx, full)
 
   if (existing) {
     await ensureLocalRemote(ctx, existing)
+    // An empty repository, such as one created by a run that could not push (BUG-68), gets the
+    // local commits now, so everything that builds from it has a branch to build.
+    if (!existing.defaultBranchRef && !ctx.dryRun) {
+      const view = await pushFirst(ctx, spec, existing)
+      if (view) existing = view
+    }
     return {
       // Another repository answering to the same name is adopted, never taken for ours (BUG-57).
       action: sameResource(known?.externalId, existing.id) ? 'noop' : 'adopted',
@@ -322,6 +328,13 @@ async function ensureRepo(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   await ctx.io.exec('gh', ['auth', 'setup-git', '--hostname', 'github.com'], { cwd: ctx.cwd }).catch(() => undefined)
   const visibility = str(spec.inputs.visibility) || 'private'
   const description = str(spec.inputs.description) || ''
+  // After cimiento down the folder keeps its origin remote, pointing at the deleted repository of
+  // the same name, and gh repo create --remote origin would create the repository and then fail
+  // before pushing (BUG-68). That remote is cimiento's own, so it goes.
+  const origin = await ctx.io.exec('git', ['remote', 'get-url', 'origin'], { cwd: ctx.cwd })
+  if (origin.code === 0 && sameRepoUrl(origin.stdout.trim(), full)) {
+    await ctx.io.exec('git', ['remote', 'remove', 'origin'], { cwd: ctx.cwd })
+  }
   const args = ['repo', 'create', full, `--${visibility}`, '--source=.', '--remote=origin', '--push']
   if (description) args.push('--description', description)
   const created = await ctx.io.exec('gh', args, { cwd: ctx.cwd })
@@ -393,6 +406,32 @@ export async function gitIdentityArgs(ctx: Ctx): Promise<string[]> {
 }
 
 /** When the repository already exists, make sure this checkout points at it. */
+function sameRepoUrl(url: string, full: string): boolean {
+  return url.replace(/\.git$/, '').replace(/^git@github\.com:/, 'https://github.com/').toLowerCase() === `https://github.com/${full}`.toLowerCase()
+}
+
+/** Pushes the local branch to an empty repository, and returns the repository as it is after. */
+async function pushFirst(ctx: Ctx, spec: ResourceSpec, view: RepoView): Promise<RepoView | undefined> {
+  // No repository or no commit here: nothing to push.
+  const head = await ctx.io.exec('git', ['rev-parse', '--verify', 'HEAD'], { cwd: ctx.cwd })
+  if (head.code !== 0) return undefined
+  const branch = ctx.manifest.options.github.defaultBranch
+  await ctx.io.exec('gh', ['auth', 'setup-git', '--hostname', 'github.com'], { cwd: ctx.cwd }).catch(() => undefined)
+  const pushed = await ctx.io.exec('git', ['push', '-u', 'origin', `HEAD:${branch}`], { cwd: ctx.cwd })
+  if (pushed.code !== 0) {
+    throw new CimientoError({
+      code: 'GITHUB_PERMISSION_DENIED',
+      provider: ID,
+      resource: spec.id,
+      message: `${view.nameWithOwner} is empty and pushing the local commits to it failed: ${(pushed.stderr || pushed.stdout).trim().slice(0, 300)}`,
+      hint: 'cimiento doctor shows which account gh uses; then run cimiento up again, which pushes the first commit.',
+      retryable: true,
+      needsHuman: false,
+    })
+  }
+  return viewRepo(ctx, view.nameWithOwner)
+}
+
 async function ensureLocalRemote(ctx: Ctx, view: RepoView): Promise<void> {
   if (ctx.dryRun) return
   if (!existsSync(join(ctx.cwd, '.git'))) return

@@ -164,6 +164,8 @@ export class FakeCloud implements Io {
   gitCommits = 0
   /** The checked out branch, and every branch pushed to the repository with its head commit. */
   gitBranch = 'main'
+  /** The URL of the local origin remote, as git remote get-url prints it. */
+  gitOrigin: string | undefined
   readonly pushedBranches = new Map<string, string>()
   /** What a push makes Vercel's build end as. */
   pushBuild: 'READY' | 'ERROR' | 'BUILDING' = 'READY'
@@ -425,8 +427,12 @@ export class FakeCloud implements Io {
     if (args[0] === 'status') return ok(this.gitDirty ? ' M app/page.tsx\n' : '')
     if (args[0] === 'push') {
       // Vercel's GitHub app starts a production build of the pushed commit by itself.
-      const branch = args[args.length - 1]
+      const branch = args[args.length - 1].replace(/^HEAD:/, '')
       this.pushedBranches.set(branch, this.gitSha())
+      // The first push to an empty repository makes its branch the default one.
+      for (const repo of this.repos.values()) {
+        if (`${repo.url}.git` === this.gitOrigin && !repo.defaultBranch) repo.defaultBranch = branch
+      }
       const project = [...this.vercelProjects.values()][0]
       if (project) {
         const list = this.deployments.get(project.id) ?? []
@@ -454,8 +460,16 @@ export class FakeCloud implements Io {
       this.gitDirty = false
       return ok(`[main ${this.gitSha().slice(0, 7)}] commit`)
     }
-    if (args[0] === 'remote' && args[1] === 'get-url') return fail('error: No such remote')
-    if (args[0] === 'remote' && args[1] === 'add') return ok('')
+    if (args[0] === 'remote' && args[1] === 'get-url') return this.gitOrigin ? ok(`${this.gitOrigin}\n`) : fail('error: No such remote')
+    if (args[0] === 'remote' && args[1] === 'add') {
+      if (this.gitOrigin) return fail('error: remote origin already exists.')
+      this.gitOrigin = args[3]
+      return ok('')
+    }
+    if (args[0] === 'remote' && args[1] === 'remove') {
+      this.gitOrigin = undefined
+      return ok('')
+    }
     return ok('')
   }
 
@@ -513,14 +527,18 @@ export class FakeCloud implements Io {
       if (this.repos.has(full)) return fail(`Name already exists on this account`)
       const [owner, name] = full.split('/')
       const visibility = args.find((a) => a === '--private' || a === '--public')?.slice(2) ?? 'private'
+      // As gh does: the repository is created first, then adding the remote fails if one exists.
+      const remoteClash = args.includes('--remote=origin') && this.gitOrigin !== undefined
       this.repos.set(full, {
         id: this.id('R'),
         name,
         owner,
         url: `https://github.com/${full}`,
         visibility,
-        defaultBranch: args.includes('--push') ? 'main' : null,
+        defaultBranch: args.includes('--push') && !remoteClash ? 'main' : null,
       })
+      if (remoteClash) return fail(`X Unable to add remote "origin"\n\nhttps://github.com/${full}`)
+      if (args.includes('--remote=origin')) this.gitOrigin = `https://github.com/${full}.git`
       return ok(`https://github.com/${full}`)
     }
     if (args[0] === 'repo' && args[1] === 'delete') {

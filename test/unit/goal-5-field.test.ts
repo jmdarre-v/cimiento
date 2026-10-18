@@ -175,3 +175,53 @@ describe('BUG-67: the Neon login is found where current neonctl keeps it', () =>
     }
   })
 })
+
+describe('BUG-68: up after down in the same folder recreates the repository and pushes it', () => {
+  it('the leftover origin remote does not stop the push, so the hosting link and deploy follow', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const flags = ['--preset', 'designer', '--hosting', 'netlify', '--json', '--yes', '--dir', dir]
+    expect((await cli(cloud, ['new', 'my-app', ...flags], root)).code).toBe(ExitCode.ok)
+    expect(cloud.gitOrigin).toBe('https://github.com/test-handle/my-app.git')
+    expect((await cli(cloud, ['down', '--yes', '--json'])).code).toBe(ExitCode.ok)
+    expect(cloud.repos.size).toBe(0)
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText).toBe(ExitCode.ok)
+    expect(cloud.repos.get('test-handle/my-app')?.defaultBranch).toBe('main')
+    expect([...cloud.v2.netlifySites.values()][0].build_settings?.repo_path).toBe('test-handle/my-app')
+  })
+
+  it('an empty repository left by such a run gets the local commits on the next up', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--hosting', 'netlify', '--json', '--yes', '--dir', dir], root)
+    await cli(cloud, ['down', '--yes', '--json'])
+    // What the old gh repo create left: the repository, empty.
+    cloud.repos.set('test-handle/my-app', { id: 'R_empty', name: 'my-app', owner: 'test-handle', url: 'https://github.com/test-handle/my-app', visibility: 'private', defaultBranch: null })
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, cloud.execCalls.filter((c) => c.startsWith('git') || c.startsWith('gh repo')).join('\n')).toBe(ExitCode.ok)
+    expect(cloud.repos.get('test-handle/my-app')?.defaultBranch).toBe('main')
+    expect(cloud.execCalls).toContain('git push -u origin HEAD:main')
+  })
+})
+
+describe('BUG-69: two keys on one page open it once', () => {
+  it('Stripe asks about the account once and walks its keys page once for both keys', async () => {
+    const { completeFragment, mergeFragments, parseManifest } = await import('../../src/manifest')
+    const { SecretStore } = await import('../../src/secrets')
+    const { Redactor } = await import('../../src/core/redact')
+    const m = parseManifest(completeFragment(mergeFragments({ name: 'my-app' }, { slots: { repo: 'github', hosting: 'vercel', payments: 'stripe' } as never })))
+    const walked: string[] = []
+    const asked: string[] = []
+    const values: Record<string, string> = { STRIPE_SECRET_KEY: 'sk_test_fake_not_a_real_key', NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: 'pk_test_fake_not_a_real_key' }
+    const store = new SecretStore(m, new Redactor(), {
+      interactive: true,
+      io: new FakeCloud({ keychainEmpty: true }),
+      promptHidden: async (q) => values[/Value for (\w+)/.exec(q)![1]],
+      walkStep: async (step) => void walked.push(step.id),
+      choose: async (q) => (asked.push(q), 'no'),
+    })
+    expect(await store.get('STRIPE_SECRET_KEY')).toBe(values.STRIPE_SECRET_KEY)
+    expect(await store.get('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY')).toBe(values.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY)
+    expect(asked).toHaveLength(1)
+    expect(walked).toEqual(['stripe.signup', 'secret.STRIPE_SECRET_KEY'])
+  })
+})
