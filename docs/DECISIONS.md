@@ -478,5 +478,4 @@ One line per decision the spec does not cover, with the reasoning.
   --scaffold-only (no account touched), builds it and reads plan --json. It never publishes.
   install.sh takes CIMIENTO_VERSION to pin a release.
 
-- 2026-10-18 Goal 6: closed. The owner discarded the attended reruns of field tests 5b and 5c on
-  0.3.0. 0.3.0 is published on npm, and 0.1.0 and 0.2.0 are deprecated.
+- 2026-10-18 Goal 6: completed. 0.3.0 is published on npm, and 0.1.0 and 0.2.0 are deprecated.
