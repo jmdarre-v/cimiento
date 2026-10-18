@@ -133,3 +133,45 @@ describe('BUG-64: the DNS step names the record Vercel asks for', () => {
     expect(check.error?.message).toContain('TXT _vercel vc-domain-verify=fake-not-real')
   })
 })
+
+describe('BUG-66: the Supabase configuration question only comes up for a Supabase project on Vercel', () => {
+  it('a Neon project with accounts.supabase via-hosting left in stack.yaml is never asked, and Vercel is never called for it', async () => {
+    const { testContext } = await import('./helpers')
+    const { settleSupabasePath } = await import('../../src/wiring/supabase-configurations')
+    const cloud = new FakeCloud({ supabaseConfiguration: { id: 'icfg_shared', databases: [{ name: 'other-db', project: 'other-app' }] } })
+    const m = manifestFor({ slots: { repo: 'github', hosting: 'netlify', database: 'neon' } as never, accounts: { supabase: 'via-hosting' } })
+    const { ctx } = testContext(m, { cloud })
+    const asked: string[] = []
+    const result = await settleSupabasePath({ ...ctx, interactive: true, choose: async (q) => (asked.push(q), '1') }, 'up', { ask: true })
+    expect(result).toBeUndefined()
+    expect(asked).toEqual([])
+    expect(cloud.httpCalls.some((c) => c.includes('api.vercel.com'))).toBe(false)
+  })
+})
+
+describe('BUG-67: the Neon login is found where current neonctl keeps it', () => {
+  it('reads ~/.config/neon/credentials.json, and still the older ~/.config/neonctl', async () => {
+    const { mkdirSync } = await import('node:fs')
+    const { resolveNeonToken } = await import('../../src/providers/neon/api')
+    const { testContext } = await import('./helpers')
+    const { ctx } = testContext(manifestFor({}, 'designer'))
+    const saved = { key: process.env.NEON_API_KEY, xdg: process.env.XDG_CONFIG_HOME }
+    const base = tempDir('cimiento-xdg-')
+    try {
+      delete process.env.NEON_API_KEY
+      process.env.XDG_CONFIG_HOME = base
+      for (const folder of ['neon', 'neonctl']) {
+        removeDir(join(base, 'neon'))
+        removeDir(join(base, 'neonctl'))
+        mkdirSync(join(base, folder), { recursive: true })
+        writeFileSync(join(base, folder, 'credentials.json'), JSON.stringify({ access_token: `fake-${folder}-token-not-real`, expires_at: Date.now() + 3_600_000 }))
+        expect(await resolveNeonToken(ctx, 'neon.session')).toBe(`fake-${folder}-token-not-real`)
+      }
+    } finally {
+      if (saved.key) process.env.NEON_API_KEY = saved.key
+      if (saved.xdg) process.env.XDG_CONFIG_HOME = saved.xdg
+      else delete process.env.XDG_CONFIG_HOME
+      removeDir(base)
+    }
+  })
+})

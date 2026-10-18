@@ -778,7 +778,7 @@ No Neon token for the API.
 
 **What to do:** cimiento up opens the Neon login in your browser. On a machine with no browser, set NEON_API_KEY in the environment.
 
-**Why:** neonctl keeps a short lived token and refreshes it on every command; cimiento runs neonctl me first when the stored one expired.
+**Why:** neonctl keeps a short lived token and refreshes it on every command; cimiento runs neonctl me first when the stored one expired. Current neonctl keeps its login in ~/.config/neon/credentials.json, older releases in ~/.config/neonctl; cimiento reads both.
 
 **Looks like:** `could not find a Neon token`
 

@@ -4,7 +4,8 @@
   signatures:
     - "could not find a Neon token"
   hint: cimiento up opens the Neon login in your browser. On a machine with no browser, set NEON_API_KEY in the environment.
-  fix: neonctl keeps a short lived token and refreshes it on every command; cimiento runs neonctl me first when the stored one expired.
+  fix: neonctl keeps a short lived token and refreshes it on every command; cimiento runs neonctl me first when the stored one expired. Current neonctl keeps its login in ~/.config/neon/credentials.json, older releases in ~/.config/neonctl; cimiento reads both.
+  seen: Field test 5, 2026-10-18 (BUG-67). After the person signed up and logged in with neonctl auth in the attended up of cimiento-test-5b, neon.project still failed with NEON_TOKEN_MISSING, because neonctl now writes ~/.config/neon and cimiento only read ~/.config/neonctl.
 
 - code: NEON_API_ERROR
   provider: neon

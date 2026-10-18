@@ -10,14 +10,18 @@ import type { Ctx } from '../../core/types'
 
 export const NEON_API = 'https://console.neon.tech/api/v2'
 
-export function neonCredentialsPath(): string {
+/**
+ * Where neonctl keeps its login. Current releases use ~/.config/neon; older ones used
+ * ~/.config/neonctl (BUG-67). The first that exists wins.
+ */
+export function neonCredentialsPaths(): string[] {
   const base = process.env.XDG_CONFIG_HOME || join(homedir(), '.config')
-  return join(base, 'neonctl', 'credentials.json')
+  return [join(base, 'neon', 'credentials.json'), join(base, 'neonctl', 'credentials.json')]
 }
 
 function fileToken(): { token: string; expired: boolean } | undefined {
-  const path = neonCredentialsPath()
-  if (!existsSync(path)) return undefined
+  const path = neonCredentialsPaths().find((p) => existsSync(p))
+  if (!path) return undefined
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as { access_token?: string; expires_at?: number }
     if (!parsed.access_token) return undefined

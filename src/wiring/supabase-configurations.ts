@@ -83,6 +83,9 @@ export function describeConfiguration(cfg: SupabaseConfiguration): string {
  */
 export async function settleSupabasePath(ctx: Ctx, resource: string, opts: { ask: boolean }): Promise<'reuse' | 'direct' | 'install' | undefined> {
   if (ctx.manifest.accounts.supabase !== 'via-hosting') return undefined
+  // Only a project that uses Supabase, on Vercel, has a Marketplace path to settle (BUG-66).
+  const m = ctx.manifest
+  if ((m.slots.database !== 'supabase' && m.slots.auth !== 'supabase') || m.slots.hosting !== 'vercel') return undefined
   const cfg = await marketplaceSupabaseConfiguration(ctx, resource)
   if (!cfg) return 'install'
   if (ctx.manifest.options.supabase.marketplace_configuration === cfg.id) return 'reuse'
