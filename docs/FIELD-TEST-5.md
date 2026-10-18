@@ -131,8 +131,8 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 | BUG-65 | The first CI run failed on ubuntu-latest: the installer tests used the machine's /usr/bin, where the GitHub runner has gh, so gh counted as already installed | e721e4d |
 | BUG-66 | In the attended up of cimiento-test-5b (Neon on Netlify), up asked where the Supabase database should go and offered a Supabase configuration serving another project, because stack.yaml still had accounts.supabase via-hosting | aea037f |
 | BUG-67 | After the Neon sign-up and login in that run, neon.project failed with NEON_TOKEN_MISSING: neonctl now keeps its login in ~/.config/neon, and cimiento only read ~/.config/neonctl | aea037f |
-| BUG-68 | In the attended up of cimiento-test-5b, gh repo create made the repository but failed to add the origin remote the folder kept after down, so nothing was pushed and the Netlify link and deploy were skipped | see git log |
-| BUG-69 | The same run opened the Stripe keys page twice, once per key, and asked about a Stripe account twice | see git log |
+| BUG-68 | In the attended up of cimiento-test-5b, gh repo create made the repository but failed to add the origin remote the folder kept after down, so nothing was pushed and the Netlify link and deploy were skipped | 509edf7 |
+| BUG-69 | The same run opened the Stripe keys page twice, once per key, and asked about a Stripe account twice | 509edf7 |
 
 ## Left for a person
 
