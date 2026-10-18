@@ -145,6 +145,7 @@ this table is about real accounts.
 | PostHog | Project key, event received | | PostHog has no read only key check; without `--smoke` cimiento checks the key's shape |
 | Anthropic | Key, read only call | | |
 | Windows via WSL | | install.sh on Ubuntu 24.04 in a container | WSL itself |
+| Recovery (0.3.0) | On Vercel: an up killed right after a create, resumed; a publish with a failed push, resumed; a hosting swap seen by plan and cleaned up by down (field test 6) | | The same on Netlify, Supabase and Neon, covered by unit tests only |
 
 ## Environments and databases
 
