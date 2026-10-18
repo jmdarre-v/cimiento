@@ -5,7 +5,8 @@ import { CimientoError } from '../core/errors'
 import { RealIo, type Io } from '../core/io'
 import type { PersonStep } from '../core/person'
 import type { Redactor } from '../core/redact'
-import type { ResourceSpec, SecretResolver } from '../core/types'
+import type { ChoiceOption, ResourceSpec, SecretResolver } from '../core/types'
+import { assertTestModeValue } from './guard'
 import type { Manifest, SecretDecl, Sink } from '../manifest/schema'
 import { SOURCES, type SourceContext } from './sources'
 import { sinkSecretName } from '../core/sink-ids'
@@ -22,6 +23,8 @@ export interface SecretStoreOptions {
   /** Replaces the terminal's hidden prompt, for tests. */
   promptHidden?: (question: string) => Promise<string>
   walkStep?: (step: PersonStep, open?: () => Promise<void>) => Promise<void>
+  choose?: (question: string, options: ChoiceOption[]) => Promise<string>
+  lang?: 'en' | 'es'
 }
 
 export class SecretStore implements SecretResolver {
@@ -53,6 +56,7 @@ export class SecretStore implements SecretResolver {
     const source = SOURCES[decl?.source ?? 'env']
     const value = await source.read(name, this.sourceContext(name))
     if (value === undefined) return undefined
+    assertTestModeValue(name, value)
     this.set(name, value)
     return value
   }
@@ -65,6 +69,8 @@ export class SecretStore implements SecretResolver {
       declaration: this.declaration(name),
       ...(this.options.promptHidden ? { promptHidden: this.options.promptHidden } : {}),
       ...(this.options.walkStep ? { walkStep: this.options.walkStep } : {}),
+      ...(this.options.choose ? { choose: this.options.choose } : {}),
+      ...(this.options.lang ? { lang: this.options.lang } : {}),
     }
   }
 
@@ -80,6 +86,7 @@ export class SecretStore implements SecretResolver {
     let value: string | undefined
     if (sourceId === 'prompt' || sourceId === 'keychain') {
       value = await SOURCES.prompt.read(name, ctx)
+      if (value !== undefined) assertTestModeValue(name, value)
       if (value !== undefined && sourceId === 'keychain') await SOURCES.keychain.write!(name, value, ctx)
     } else {
       value = await SOURCES[sourceId].read(name, ctx)
@@ -97,6 +104,7 @@ export class SecretStore implements SecretResolver {
         needsHuman: true,
       })
     }
+    assertTestModeValue(name, value)
     this.set(name, value)
     return value
   }

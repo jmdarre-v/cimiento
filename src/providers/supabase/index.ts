@@ -1008,8 +1008,9 @@ async function getAuthConfig(ctx: Ctx, spec: ResourceSpec, ref: string): Promise
   return result.body
 }
 
-function redirectList(siteUrl: string, previewPattern: string): string {
+function redirectList(siteUrl: string, previewPattern: string, extra = ''): string {
   const entries = [`${siteUrl}/**`]
+  if (extra) entries.push(extra)
   if (previewPattern) entries.push(previewPattern)
   entries.push('http://localhost:3000/**')
   return entries.join(',')
@@ -1019,7 +1020,7 @@ async function ensureAuthUrls(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResul
   const ref = str(spec.inputs.projectRef)
   const siteUrl = str(spec.inputs.siteUrl)
   const preview = str(spec.inputs.previewPattern)
-  const wanted = redirectList(siteUrl, preview)
+  const wanted = redirectList(siteUrl, preview, str(spec.inputs.extraRedirect))
   const current = await getAuthConfig(ctx, spec, ref)
   if (current?.site_url === siteUrl && current?.uri_allow_list === wanted) {
     return { action: 'noop', externalId: ref, outputs: { siteUrl: { value: siteUrl, secret: false } } }

@@ -16,8 +16,8 @@ export type SecretSource = (typeof SECRET_SOURCES)[number]
 /** Which provider ids may fill each slot. `none` leaves the slot empty. */
 export const SLOT_PROVIDERS: Record<Slot, readonly string[]> = {
   repo: ['github', 'none'],
-  hosting: ['vercel', 'none'],
-  database: ['supabase', 'none'],
+  hosting: ['vercel', 'netlify', 'none'],
+  database: ['supabase', 'neon', 'none'],
   auth: ['supabase', 'none'],
   jobs: ['inngest', 'none'],
   bot_protection: ['turnstile', 'none'],
@@ -27,14 +27,34 @@ export const SLOT_PROVIDERS: Record<Slot, readonly string[]> = {
   ai: ['anthropic', 'none'],
 }
 
+/** The secrets a provider reads its keys from, which stack.yaml must declare when the slot is set. */
+export const SLOT_SECRET_NAMES: [Slot, string, string[]][] = [
+  ['ai', 'anthropic', ['ANTHROPIC_API_KEY']],
+  ['email', 'resend', ['RESEND_API_KEY']],
+  ['payments', 'stripe', ['STRIPE_SECRET_KEY', 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY']],
+  ['analytics', 'posthog', ['NEXT_PUBLIC_POSTHOG_KEY']],
+]
+
 /** Provider ids this build can actually plan and apply. */
-export const IMPLEMENTED_PROVIDERS = ['github', 'vercel', 'supabase', 'inngest', 'turnstile', 'anthropic'] as const
+export const IMPLEMENTED_PROVIDERS = [
+  'github',
+  'vercel',
+  'netlify',
+  'supabase',
+  'neon',
+  'inngest',
+  'turnstile',
+  'resend',
+  'stripe',
+  'posthog',
+  'anthropic',
+] as const
 
 const slotsSchema = z
   .object({
     repo: z.enum(['github', 'none']).default('none'),
-    hosting: z.enum(['vercel', 'none']).default('none'),
-    database: z.enum(['supabase', 'none']).default('none'),
+    hosting: z.enum(['vercel', 'netlify', 'none']).default('none'),
+    database: z.enum(['supabase', 'neon', 'none']).default('none'),
     auth: z.enum(['supabase', 'none']).default('none'),
     jobs: z.enum(['inngest', 'none']).default('none'),
     bot_protection: z.enum(['turnstile', 'none']).default('none'),
@@ -51,6 +71,9 @@ const accountsSchema = z
     vercel: z.string().min(1).optional(),
     supabase: z.enum(['via-hosting', 'direct']).default('via-hosting'),
     cloudflare: z.string().min(1).optional(),
+    /** The Netlify team slug, and the Neon organization id. */
+    netlify: z.string().min(1).optional(),
+    neon: z.string().min(1).optional(),
   })
   .strict()
 
@@ -84,6 +107,32 @@ const optionsSchema = z
       .default({}),
     turnstile: z
       .object({ mode: z.enum(['managed', 'invisible', 'non-interactive']).default('managed') })
+      .strict()
+      .default({}),
+    netlify: z
+      .object({
+        build_command: z.string().min(1).default('npm run build'),
+        publish_dir: z.string().min(1).default('.next'),
+      })
+      .strict()
+      .default({}),
+    neon: z
+      .object({
+        region: z.string().min(1).default('aws-us-east-2'),
+        pg_version: z.number().int().min(14).max(18).default(17),
+        migrations: z.string().min(1).default('db/migrations'),
+      })
+      .strict()
+      .default({}),
+    resend: z
+      .object({
+        /** Sender for the send check until a domain of your own is verified in Resend. */
+        from: z.string().min(3).default('onboarding@resend.dev'),
+      })
+      .strict()
+      .default({}),
+    posthog: z
+      .object({ host: z.enum(['us', 'eu']).default('us') })
       .strict()
       .default({}),
   })
@@ -182,6 +231,9 @@ function crossValidate(m: Manifest, source: string): void {
   if (m.accounts.supabase === 'via-hosting' && (database === 'supabase' || auth === 'supabase') && hosting === 'none') {
     problems.push('accounts.supabase is via-hosting but slots.hosting is none; set slots.hosting or use accounts.supabase: direct')
   }
+  if (m.accounts.supabase === 'via-hosting' && (database === 'supabase' || auth === 'supabase') && hosting === 'netlify') {
+    problems.push('accounts.supabase is via-hosting, which is the Vercel Marketplace, but slots.hosting is netlify; use accounts.supabase: direct')
+  }
   for (const secret of m.secrets) {
     if (secret.sinks.includes('hosting') && hosting === 'none') {
       problems.push(`secrets.${secret.name} targets the hosting sink but slots.hosting is none`)
@@ -206,11 +258,17 @@ function crossValidate(m: Manifest, source: string): void {
   if (m.slots.jobs === 'inngest' && hosting !== 'vercel') {
     problems.push('slots.jobs is inngest, which reaches the app through the Vercel integration, but slots.hosting is not vercel')
   }
+  if (hosting === 'netlify' && m.slots.repo !== 'github') {
+    problems.push('slots.hosting is netlify, which builds from the GitHub repository, but slots.repo is not github')
+  }
   if (m.slots.bot_protection === 'turnstile' && hosting === 'none') {
     problems.push('slots.bot_protection is turnstile, whose keys go to the hosting env, but slots.hosting is none')
   }
-  if (m.slots.ai === 'anthropic' && !m.secrets.some((s) => s.name === 'ANTHROPIC_API_KEY')) {
-    problems.push('slots.ai is anthropic but secrets does not declare ANTHROPIC_API_KEY')
+  for (const [slot, provider, names] of SLOT_SECRET_NAMES) {
+    if (m.slots[slot] !== provider) continue
+    for (const name of names) {
+      if (!m.secrets.some((s) => s.name === name)) problems.push(`slots.${slot} is ${provider} but secrets does not declare ${name}`)
+    }
   }
   const seen = new Set<string>()
   for (const secret of m.secrets) {

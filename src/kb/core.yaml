@@ -154,3 +154,29 @@
     - "No ready preview for"
   hint: Wait a minute and run cimiento doctor again. If the state says error, open the build log of that preview in the hosting dashboard.
   fix: The hosting provider builds a preview for every pushed branch by itself. hosting.preview checks that each branch other than production has a ready preview of its latest commit, so a branch whose preview failed to build shows up here instead of in production.
+
+- code: HOSTING_DOMAIN_FAILED
+  provider: core
+  title: the custom domain could not be added or removed
+  signatures:
+    - "to the Vercel project failed"
+    - "is not a domain name cimiento can add"
+    - "already has the domain"
+  hint: Read the message; a domain belongs to one hosting project at a time, and stack.yaml keeps one custom domain per project.
+  fix: cimiento domain add writes domain in stack.yaml, then applies only the items that follow it. cimiento domain remove undoes the same items.
+
+- code: HOSTING_DOMAIN_DNS_NEEDED
+  provider: core
+  title: the domain's DNS does not point at the hosting yet
+  signatures:
+    - "but its DNS does not point there yet"
+  hint: Add the one DNS record the message names where the domain's DNS is managed, then run cimiento doctor.
+  fix: A subdomain needs a CNAME to the hosting (cname.vercel-dns.com for Vercel, <site>.netlify.app for Netlify). The DNS provider is the one place cimiento cannot reach, so this is a person step.
+
+- code: HOSTING_DOMAIN_NOT_SERVING
+  provider: core
+  title: the domain points at the hosting but does not serve the site yet
+  signatures:
+    - "though its DNS points at"
+  hint: Run cimiento doctor again in a few minutes; the https certificate is issued after DNS points at the hosting.
+  fix: The check fetches https://<domain> and expects 200 with the cimiento scaffold marker.

@@ -18,6 +18,11 @@ failed. Exit codes: 0 ok, 1 failed, 2 waiting on a person, 3 blocked.
 - [Inngest](#inngest)
 - [Cloudflare Turnstile](#cloudflare-turnstile)
 - [Anthropic](#anthropic)
+- [neon](#neon)
+- [netlify](#netlify)
+- [posthog](#posthog)
+- [resend](#resend)
+- [stripe](#stripe)
 
 ## cimiento itself
 
@@ -90,6 +95,36 @@ Down left something it created but cannot delete.
 **Why:** The Supabase Management API has no way to delete an organization, so down lists an organization cimiento created as a leftover with its dashboard link, keeps the record in state, and drops it once the organization is gone. The Inngest API cannot delete or archive an app either, so down lists the Inngest app in the run that removes its endpoint.
 
 **Looks like:** `cannot delete organizations`, `cannot delete or archive apps`
+
+### HOSTING_DOMAIN_DNS_NEEDED
+
+The domain's DNS does not point at the hosting yet.
+
+**What to do:** Add the one DNS record the message names where the domain's DNS is managed, then run cimiento doctor.
+
+**Why:** A subdomain needs a CNAME to the hosting (cname.vercel-dns.com for Vercel, <site>.netlify.app for Netlify). The DNS provider is the one place cimiento cannot reach, so this is a person step.
+
+**Looks like:** `but its DNS does not point there yet`
+
+### HOSTING_DOMAIN_FAILED
+
+The custom domain could not be added or removed.
+
+**What to do:** Read the message; a domain belongs to one hosting project at a time, and stack.yaml keeps one custom domain per project.
+
+**Why:** cimiento domain add writes domain in stack.yaml, then applies only the items that follow it. cimiento domain remove undoes the same items.
+
+**Looks like:** `to the Vercel project failed`, `is not a domain name cimiento can add`, `already has the domain`
+
+### HOSTING_DOMAIN_NOT_SERVING
+
+The domain points at the hosting but does not serve the site yet.
+
+**What to do:** Run cimiento doctor again in a few minutes; the https certificate is issued after DNS points at the hosting.
+
+**Why:** The check fetches https://<domain> and expects 200 with the cimiento scaffold marker.
+
+**Looks like:** `though its DNS points at`
 
 ### HOSTING_PREVIEW_NOT_READY
 
@@ -704,3 +739,203 @@ The Anthropic API refused the key.
 **Why:** The check calls GET /v1/models, which is read only and free. A 401 means the key is wrong or revoked; rotate replaces it in the keychain and in every hosting environment at once, and up deploys again so the app reads it.
 
 **Looks like:** `api.anthropic.com refused`, `authentication_error`
+
+## neon
+
+### NEON_API_ERROR
+
+Neon returned an unexpected error.
+
+**What to do:** Read the Neon message in the error, then run cimiento doctor --json.
+
+**Why:** With a personal login, cimiento always names the organization in accounts.neon, because Neon lists and creates projects per organization.
+
+**Looks like:** `Listing Neon projects failed`, `Creating the Neon project`
+
+### NEON_MIGRATION_FAILED
+
+A migration did not run on Neon.
+
+**What to do:** Fix the SQL file the error names and run cimiento up again.
+
+**Why:** cimiento applies each file in db/migrations once, in name order, in one transaction through Neon's HTTP endpoint, and records it in cimiento_migrations. Statements end at a semicolon at the end of a line.
+
+**Looks like:** `failed on Neon`, `not applied yet`, `Querying public.cimiento_baseline on Neon failed`
+
+### NEON_PROJECT_LIMIT
+
+The Neon organization is at its project limit.
+
+**What to do:** Delete a Neon project you no longer need at https://console.neon.tech/app/projects, then run cimiento up again.
+
+**Why:** The Free plan allows a limited number of projects per organization. cimiento never deletes a project it did not create.
+
+**Looks like:** `the organization is at its project limit`
+
+### NEON_TOKEN_MISSING
+
+No Neon token for the API.
+
+**What to do:** cimiento up opens the Neon login in your browser. On a machine with no browser, set NEON_API_KEY in the environment.
+
+**Why:** neonctl keeps a short lived token and refreshes it on every command; cimiento runs neonctl me first when the stored one expired.
+
+**Looks like:** `could not find a Neon token`
+
+## netlify
+
+### NETLIFY_API_ERROR
+
+Netlify returned an unexpected error.
+
+**What to do:** Read the Netlify message in the error, then run cimiento doctor --json.
+
+**Why:** A 401 means the login expired; cimiento up logs in again. A 403 means the login is not a member of the team in accounts.netlify.
+
+**Looks like:** `Listing Netlify sites failed`, `Deleting the Netlify site`
+
+### NETLIFY_DEPLOY_FAILED
+
+A Netlify build failed.
+
+**What to do:** Open the deploy log in the Netlify site under Deploys. A failing build is almost always an error in the site's code.
+
+**Why:** Fix the error the log shows, push, and run cimiento publish or cimiento up again.
+
+**Looks like:** `Netlify's deploy of`, `Starting a Netlify build failed`
+
+### NETLIFY_DEPLOYMENT_NOT_READY
+
+The Netlify deploy is not ready.
+
+**What to do:** Wait for the build to finish and run cimiento doctor again. A first build takes a few minutes.
+
+**Why:** When an env var changed after the last deploy, cimiento up builds again so the live site reads the new value.
+
+**Looks like:** `No ready Netlify deploy`, `No production deploy exists for this Netlify site`, `The latest production deploy is`
+
+### NETLIFY_ENV_WRITE_FAILED
+
+An env var could not be written to the Netlify site.
+
+**What to do:** Run cimiento secret set NAME again; it only writes what is missing.
+
+**Why:** Netlify keeps one variable per name with a value per deploy context. cimiento writes production to production, preview to deploy-preview and branch-deploy, and dev to dev.
+
+**Looks like:** `to the Netlify site failed`
+
+### NETLIFY_REPO_LINK_FAILED
+
+Netlify could not be linked to the repository.
+
+**What to do:** Check with cimiento doctor that gh is logged in as an administrator of the repository, then run cimiento up again.
+
+**Why:** cimiento links Netlify the way netlify init does without the GitHub app, with a read only deploy key and a repository webhook to the site's deploy hook. Adding both needs admin rights on the repository.
+
+**Looks like:** `Linking Netlify to`, `Linking the Netlify site to`, `is not linked to`
+
+### NETLIFY_SITE_NAME_TAKEN
+
+The site name is taken on Netlify.
+
+**What to do:** Set slug in stack.yaml to a name nobody uses yet, then run cimiento up again.
+
+**Why:** Netlify site names are global, because the name is the address <name>.netlify.app. cimiento adopts a site it can see; a taken name it cannot see belongs to someone else.
+
+**Looks like:** `Netlify refused the site name`
+
+### NETLIFY_SITE_NOT_FOUND
+
+No Netlify site with this name.
+
+**What to do:** Run cimiento up to create it. If it lives in another team, set accounts.netlify to that team's slug.
+
+**Why:** cimiento looks for the site by name in the pinned team.
+
+**Looks like:** `No Netlify site named`, `has no Netlify project yet`
+
+### NETLIFY_TOKEN_MISSING
+
+No Netlify token for the API.
+
+**What to do:** cimiento up opens the Netlify login in your browser. On a machine with no browser, set NETLIFY_AUTH_TOKEN in the environment.
+
+**Why:** cimiento reads the token netlify login stores in the CLI's config. It never asks you to paste one into chat.
+
+**Looks like:** `could not find a Netlify token`
+
+## posthog
+
+### POSTHOG_API_ERROR
+
+PostHog did not accept the check event.
+
+**What to do:** This is on the PostHog side. Run cimiento doctor again; it changes nothing.
+
+**Why:** PostHog's ingestion edge checks only the shape of a project key, so a received event proves the address and key format, and the event then shows under Activity.
+
+**Looks like:** `PostHog answered`
+
+### POSTHOG_KEY_INVALID
+
+The PostHog key is not a project key.
+
+**What to do:** Copy the Project token (phc_) from your PostHog project settings, then run cimiento secret rotate NEXT_PUBLIC_POSTHOG_KEY.
+
+**Why:** The page sends events with the public project key. A personal key (phx_) must never go to the page, so cimiento refuses it.
+
+**Looks like:** `does not look like a PostHog project key`, `PostHog refused`
+
+## resend
+
+### RESEND_API_ERROR
+
+Resend failed the send check.
+
+**What to do:** If the message says the sender is not allowed, set options.resend.from to onboarding@resend.dev or an address on a domain you verified in Resend.
+
+**Why:** The check sends one email from the sender in options.resend.from to Resend's test inbox delivered@resend.dev, which reaches nobody.
+
+**Looks like:** `Resend answered`
+
+### RESEND_KEY_INVALID
+
+Resend refused the key.
+
+**What to do:** Make a new key at https://resend.com/api-keys, then run cimiento secret rotate RESEND_API_KEY.
+
+**Why:** A revoked, restricted to another domain or suspended key is refused. Sending access is enough for cimiento's check.
+
+**Looks like:** `Resend refused RESEND_API_KEY`
+
+## stripe
+
+### STRIPE_API_ERROR
+
+Stripe failed the check.
+
+**What to do:** This is on the Stripe side. Run cimiento doctor again; it changes nothing.
+
+**Why:** The check only reads the test balance.
+
+**Looks like:** `Stripe answered`
+
+### STRIPE_KEY_INVALID
+
+Stripe refused the key, or it is the wrong kind.
+
+**What to do:** STRIPE_SECRET_KEY starts with sk_test_ and NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY with pk_test_. Copy them again and run cimiento secret rotate NAME.
+
+**Why:** The check reads the test balance with the secret key, which moves no money.
+
+**Looks like:** `Stripe refused STRIPE_SECRET_KEY`, `is not a Stripe test mode key of the right kind`
+
+### STRIPE_LIVE_KEY_REFUSED
+
+A Stripe live key was refused.
+
+**What to do:** Copy the test key from https://dashboard.stripe.com/apikeys with your sandbox or Test mode selected, then run cimiento secret set NAME again.
+
+**Why:** cimiento only uses Stripe test mode. A key starting with sk_live_, rk_live_ or pk_live_ is refused the moment it is read, before it reaches the keychain, a sink or a check.
+
+**Looks like:** `is a Stripe live mode key`, `Stripe did not confirm test mode`

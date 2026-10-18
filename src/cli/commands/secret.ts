@@ -14,7 +14,7 @@ import { OutputResolver } from '../../core/resolve'
 import { hashManifest, writeProjectState } from '../../core/state'
 import { manifestPath } from '../../manifest'
 import { parseManifest } from '../../manifest/schema'
-import { removeEnv } from '../../providers/vercel'
+import { removeHostingEnv } from '../../providers/hosting'
 import { removeCiSecret, removeDatabaseSecret } from '../../secrets/sinks'
 import { allSinkSpecs, assertSinkAvailable, sinkSpecsFor } from '../../secrets'
 import type { Ctx, ResourceSpec } from '../../core/types'
@@ -287,5 +287,5 @@ function withDependencies<T extends { id: string; dependsOn: string[] }>(wanted:
 async function removeSinkValue(spec: ResourceSpec, ctx: Ctx): Promise<boolean> {
   if (spec.id.startsWith('supabase.secret.')) return removeDatabaseSecret(spec, ctx)
   if (spec.id.startsWith('github.secret.')) return removeCiSecret(spec, ctx)
-  return removeEnv(spec, ctx)
+  return removeHostingEnv(spec, ctx)
 }

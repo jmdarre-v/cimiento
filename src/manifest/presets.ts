@@ -1,6 +1,6 @@
 // Presets are manifest fragments, merged over the defaults by cimiento new and cimiento init.
 
-import type { ManifestInput } from './schema'
+import { SLOT_SECRET_NAMES, type ManifestInput } from './schema'
 
 export type PresetName = 'fullstack' | 'designer'
 
@@ -101,4 +101,29 @@ export function emptyFragment(): Omit<ManifestInput, 'name'> {
     domain: null,
     scaffold: { template: 'none', claude_md: true, ci: false },
   }
+}
+
+/**
+ * Fills in what a slot choice implies, so --email resend works without editing stack.yaml first:
+ * each provider's key is declared as a keychain secret for the hosting env, and Supabase on Netlify
+ * uses the direct path, because via-hosting is the Vercel Marketplace.
+ */
+export function completeFragment(input: ManifestInput): ManifestInput {
+  const out = structuredClone(input)
+  const slots = (out.slots ?? {}) as Record<string, string | undefined>
+  const hosting = slots.hosting ?? 'none'
+  if (hosting === 'netlify' && (slots.database === 'supabase' || slots.auth === 'supabase')) {
+    out.accounts = { ...(out.accounts ?? {}), supabase: 'direct' }
+  }
+  if (hosting === 'none') return out
+  const secrets = [...(out.secrets ?? [])]
+  for (const [slot, provider, names] of SLOT_SECRET_NAMES) {
+    if (slots[slot] !== provider) continue
+    for (const name of names) {
+      if (secrets.some((s) => s.name === name)) continue
+      secrets.push({ name, sinks: ['hosting'], environments: ['preview', 'production'], source: 'keychain' })
+    }
+  }
+  out.secrets = secrets
+  return out
 }

@@ -7,7 +7,7 @@ import { CimientoError } from '../core/errors'
 import type { Receipt } from '../core/executor'
 import type { ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
-import { nextjsAppFiles } from './templates/nextjs-app'
+import { BASELINE_FILE, BASELINE_SQL, nextjsAppFiles } from './templates/nextjs-app'
 import { designerSiteFiles } from './templates/designer-site'
 
 export { BASELINE_FILE, BASELINE_SQL, BASELINE_TABLE, MARKER_NAME } from './templates/nextjs-app'
@@ -43,7 +43,10 @@ export function scaffoldFiles(m: Manifest, options: ScaffoldOptions = {}): Recor
   files['README.md'] = readme(m, [])
 
   if (m.scaffold.claude_md) files['CLAUDE.md'] = claudeMd(m)
-  if (m.scaffold.ci && m.slots.database !== 'none') {
+  // The baseline migration neon.check.migrated queries, whatever the template.
+  if (m.slots.database === 'neon') files[`${m.options.neon.migrations}/${BASELINE_FILE}`] = BASELINE_SQL
+  // The workflow runs supabase db push; Neon migrations are applied by cimiento up.
+  if (m.scaffold.ci && m.slots.database === 'supabase') {
     files['.github/workflows/migrations.yml'] = migrationsWorkflow(m)
   }
 
@@ -83,6 +86,7 @@ design/exports/*.zip
 *.log
 .DS_Store
 .vercel
+.netlify
 `
 }
 
@@ -95,6 +99,11 @@ export function envExample(m: Manifest, extraNames: string[]): string {
     names.add('NEXT_PUBLIC_SUPABASE_ANON_KEY')
     names.add('SUPABASE_SERVICE_ROLE_KEY')
   }
+  if (m.slots.database === 'neon') {
+    names.add('DATABASE_URL')
+    names.add('DATABASE_URL_UNPOOLED')
+  }
+  if (m.slots.analytics === 'posthog') names.add('NEXT_PUBLIC_POSTHOG_HOST')
   if (m.slots.jobs === 'inngest') {
     names.add('INNGEST_EVENT_KEY')
     names.add('INNGEST_SIGNING_KEY')

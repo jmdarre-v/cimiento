@@ -124,6 +124,8 @@ export const PINS: Record<string, { path: string[]; stateId: string; outputKey: 
     what: 'Supabase organization',
   },
   turnstile: { path: ['accounts', 'cloudflare'], stateId: 'turnstile.session', outputKey: 'account', what: 'Cloudflare account' },
+  netlify: { path: ['accounts', 'netlify'], stateId: 'netlify.session', outputKey: 'team', what: 'Netlify team' },
+  neon: { path: ['accounts', 'neon'], stateId: 'neon.session', outputKey: 'organizationId', what: 'Neon organization' },
 }
 
 export function pinnedValue(m: Manifest, provider: string): string | undefined {

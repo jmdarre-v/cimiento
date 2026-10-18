@@ -5,6 +5,7 @@ import { asCimientoError, ExitCode } from '../core/errors'
 import { parseArgs, flagBool } from './args'
 import { openSession, defaultWriter, type CliDeps } from './context'
 import { accountsSetCommand } from './commands/accounts'
+import { domainAddCommand, domainRemoveCommand } from './commands/domain'
 import { doctorCommand } from './commands/doctor'
 import { downCommand } from './commands/down'
 import { envPrintCommand, envPullCommand } from './commands/env'
@@ -39,7 +40,9 @@ Usage
   cimiento dev                                   local database, jobs server and app, one Ctrl+C
   cimiento publish [--message <text>]            commit every change, push, wait for the deploy, print the URL
   cimiento down                                  delete everything in state, after typing the name
-  cimiento accounts set <provider> [--to <id>]   pick the account again: github, vercel, supabase or turnstile
+  cimiento accounts set <provider> [--to <id>]   pick the account again: github, vercel, netlify, supabase, neon or turnstile
+  cimiento domain add <domain>                   put your own domain on the site, with auth URLs and Turnstile following
+  cimiento domain remove [domain]                take it off again; the default address keeps working
   cimiento explain <resource|error>              plain language
 
 Flags
@@ -109,10 +112,14 @@ async function dispatch(session: ReturnType<typeof openSession>, args: ReturnTyp
       case 'accounts':
         if (args.sub === 'set') return await accountsSetCommand(session)
         return unknown(session, `accounts ${args.sub ?? ''}`.trim(), 'accounts set')
+      case 'domain':
+        if (args.sub === 'add') return await domainAddCommand(session)
+        if (args.sub === 'remove') return await domainRemoveCommand(session)
+        return unknown(session, `domain ${args.sub ?? ''}`.trim(), 'domain add, domain remove')
       case 'explain':
         return await explainCommand(session)
       default:
-        return unknown(session, args.command, 'new, init, plan, up, doctor, join, dev, publish, down, accounts, env, secret, explain')
+        return unknown(session, args.command, 'new, init, plan, up, doctor, join, dev, publish, down, accounts, domain, env, secret, explain')
     }
   } catch (err) {
     const error = asCimientoError(err, {

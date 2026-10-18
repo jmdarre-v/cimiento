@@ -3,6 +3,7 @@
 // every part a person needs (BUG-41).
 
 import type { Localized, PersonStep } from './person'
+import { netlifyLoginStep, neonLoginStep, V2_SECRETS, v2StepSamples } from './person-steps-v2'
 
 const L = (en: string, es: string): Localized => ({ en, es })
 
@@ -327,6 +328,18 @@ const KNOWN_SECRETS: Record<string, { service: string; url: string; button: stri
 }
 
 export function secretStep(name: string, projectSlug: string, url?: string): PersonStep | undefined {
+  const v2 = V2_SECRETS[name]
+  if (v2) {
+    return {
+      id: `secret.${name}`,
+      title: L(`Copy ${name} from ${v2.service}; you paste it at a hidden prompt here, never in a chat`, `Copia ${name} de ${v2.service}; lo pegas aqui en una pregunta oculta, nunca en un chat`),
+      url: v2.url,
+      path: v2.path,
+      fields: v2.fields,
+      button: L(v2.button, v2.button),
+      success: v2.success,
+    }
+  }
   const known = KNOWN_SECRETS[name]
   const page = known?.url ?? url
   if (!page) return undefined
@@ -347,9 +360,16 @@ export function secretStep(name: string, projectSlug: string, url?: string): Per
   }
 }
 
+/** The account to create before a key can be made, for a vendor cimiento knows. */
+export function secretSignupStep(name: string): { vendor: string; step: PersonStep } | undefined {
+  const v2 = V2_SECRETS[name]
+  if (!v2) return undefined
+  return { vendor: v2.service.replace(' test mode', ''), step: v2.signup() }
+}
+
 /** The title of the person step a plan item stands for, for the list of steps a run asks for. */
 export function stepTitleFor(id: string, project: string): Localized | undefined {
-  const secret = /^vercel\.env\.([A-Z0-9_]+)\./.exec(id)?.[1]
+  const secret = /^(?:vercel|netlify)\.env\.([A-Z0-9_]+)\./.exec(id)?.[1]
   if (secret) return secretStep(secret, project)?.title ?? L(`Type ${secret} at a hidden prompt`, `Escribe ${secret} en una pregunta oculta`)
   switch (id) {
     case 'vercel.session':
@@ -358,6 +378,10 @@ export function stepTitleFor(id: string, project: string): Localized | undefined
       return githubLoginStep().title
     case 'supabase.session':
       return supabaseLoginStep().title
+    case 'netlify.session':
+      return netlifyLoginStep().title
+    case 'neon.session':
+      return neonLoginStep().title
     case 'turnstile.session':
       return cloudflareLoginStep().title
     case 'vercel.github-access':
@@ -394,5 +418,7 @@ export function everyStepSample(): PersonStep[] {
     githubSignupStep(),
     vercelSignupStep(),
     claudeLoginStep(),
+    ...v2StepSamples(),
+    ...Object.keys(V2_SECRETS).map((name) => secretStep(name, 'my-app')!),
   ]
 }

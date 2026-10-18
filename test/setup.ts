@@ -14,4 +14,4 @@ delete process.env.LC_MESSAGES
 process.env.LANG = 'en_US.UTF-8'
 
 // A real token in the developer's environment must never reach the fake cloud.
-for (const name of ['CLOUDFLARE_API_TOKEN', 'VERCEL_TOKEN', 'SUPABASE_ACCESS_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'ANTHROPIC_API_KEY']) delete process.env[name]
+for (const name of ['CLOUDFLARE_API_TOKEN', 'VERCEL_TOKEN', 'SUPABASE_ACCESS_TOKEN', 'GH_TOKEN', 'GITHUB_TOKEN', 'ANTHROPIC_API_KEY', 'NETLIFY_AUTH_TOKEN', 'NEON_API_KEY', 'RESEND_API_KEY', 'STRIPE_SECRET_KEY', 'NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_POSTHOG_KEY', 'XDG_CONFIG_HOME']) delete process.env[name]

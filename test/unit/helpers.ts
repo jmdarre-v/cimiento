@@ -18,9 +18,14 @@ import { FakeCloud } from './fake-cloud'
 export const FAKE_VERCEL_TOKEN = 'fake-vercel-token-not-a-real-credential'
 export const FAKE_SUPABASE_TOKEN = 'fake-supabase-token-not-a-real-credential'
 
+export const FAKE_NETLIFY_TOKEN = 'fake-netlify-token-not-a-real-credential'
+export const FAKE_NEON_KEY = 'fake-neon-api-key-not-a-real-credential'
+
 export function useFakeTokens(): void {
   process.env.VERCEL_TOKEN = FAKE_VERCEL_TOKEN
   process.env.SUPABASE_ACCESS_TOKEN = FAKE_SUPABASE_TOKEN
+  process.env.NETLIFY_AUTH_TOKEN = FAKE_NETLIFY_TOKEN
+  process.env.NEON_API_KEY = FAKE_NEON_KEY
 }
 
 export function tempDir(prefix = 'cimiento-test-'): string {

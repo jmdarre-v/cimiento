@@ -50,7 +50,7 @@ describe('manifest schema', () => {
 
   it('lists every invalid field at once instead of stopping at the first', () => {
     try {
-      parse({ name: 'x', slots: { repo: 'gitlab', hosting: 'netlify' } })
+      parse({ name: 'x', slots: { repo: 'gitlab', hosting: 'cloudflare-pages' } })
       expect.unreachable('should have thrown')
     } catch (err) {
       const error = err as CimientoError

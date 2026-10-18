@@ -7,6 +7,7 @@ import { isAbsolute, join, resolve } from 'node:path'
 import { CimientoError, ExitCode } from '../../core/errors'
 import { emptyProjectState } from '../../core/state'
 import {
+  completeFragment,
   emptyFragment,
   isPresetName,
   manifestExists,
@@ -108,7 +109,7 @@ export async function newCommand(session: Session): Promise<number> {
   const inner = { ...session, cwd: dir }
   const outcome = await runUpIn(inner, dir)
   if (!session.json && outcome.exitCode === ExitCode.ok) {
-    const url = outcome.receipts.find((r) => r.id === 'vercel.deployment')?.url
+    const url = outcome.receipts.find((r) => r.id === 'vercel.deployment' || r.id === 'netlify.deployment')?.url
     session.printer.line(url ? `\n${url}` : `\n${t(session.lang, 'done', { dir })}`)
   }
   return outcome.exitCode
@@ -149,7 +150,7 @@ function buildManifest(session: Session, name: string) {
   const template = flagString(session.args.flags, 'template')
   if (template) overrides.scaffold = { template } as ManifestInput['scaffold']
 
-  return parseManifest(mergeFragments(base, overrides), 'stack.yaml')
+  return parseManifest(completeFragment(mergeFragments(base, overrides)), 'stack.yaml')
 }
 
 /** Asks for projectsDir on first use and remembers it in machine state, per spec section 9. */
@@ -187,7 +188,7 @@ async function targetDir(session: Session, slug: string): Promise<string> {
  */
 async function guidedSlots(session: Session): Promise<void> {
   const flags = session.args.flags
-  const slots = ['repo', 'hosting', 'database', 'auth', 'jobs', 'bot_protection', 'ai'] as const
+  const slots = ['repo', 'hosting', 'database', 'auth', 'jobs', 'bot_protection', 'email', 'payments', 'analytics', 'ai'] as const
   if (flagString(flags, 'preset') || slots.some((s) => flagString(flags, s))) return
   const choose = sessionChooser(session)
   if (!choose) return

@@ -1,6 +1,7 @@
 // any hosting + supabase: the Supabase Auth Site URL and redirect list follow the production URL
 // and the preview pattern. Both are deferred until the first deployment exists.
 
+import { defaultHost, hostingDeploymentId, hostingOf, previewPattern, productionUrlRef } from '../core/hosting'
 import type { ProjectState } from '../core/state'
 import type { Manifest } from '../manifest/schema'
 import type { WiringResult, WiringRule } from './types'
@@ -14,24 +15,26 @@ const EXPLAIN: Record<string, { en: string; es?: string }> = {
 
 export const hostingSupabaseRule: WiringRule = {
   id: 'hosting+supabase',
-  pair: ['vercel', 'supabase'],
+  pair: ['hosting', 'supabase'],
 
   applies(m: Manifest): boolean {
-    return m.slots.auth === 'supabase' && m.slots.hosting !== 'none'
+    return m.slots.auth === 'supabase' && hostingOf(m) !== undefined
   },
 
   build(m: Manifest, _state: ProjectState): WiringResult {
     const projectRef = { deferred: 'supabase.project:projectRef' }
-    const siteUrl = m.domain ? `https://${m.domain}` : { deferred: 'vercel.deployment:productionUrl' }
-    const previewPattern = `https://${m.slug}-*.vercel.app/**`
+    const hosting = hostingOf(m)!
+    const siteUrl = m.domain ? `https://${m.domain}` : productionUrlRef(hosting)
+    // With a custom domain the default address keeps working, so it stays on the redirect list.
+    const extra = m.domain ? `https://${defaultHost(hosting, m.slug)}/**` : ''
     return {
       specs: [
         {
           id: 'supabase.binding.auth-urls',
           kind: 'binding',
           provider: 'supabase',
-          dependsOn: ['supabase.project', 'vercel.deployment'],
-          inputs: { projectRef, siteUrl, previewPattern },
+          dependsOn: ['supabase.project', hostingDeploymentId(hosting)],
+          inputs: { projectRef, siteUrl, previewPattern: previewPattern(hosting, m.slug), ...(extra ? { extraRedirect: extra } : {}) },
         },
         {
           id: 'supabase.check.auth-urls',

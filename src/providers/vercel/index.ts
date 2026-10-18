@@ -38,6 +38,7 @@ import type {
 import type { Manifest } from '../../manifest/schema'
 import { toVercelTarget, vercelCall, vercelError } from './api'
 import { VERCEL_EXPLAIN } from './explain'
+import { recordName, verifyDomainServes, type DnsRecord } from '../domain-check'
 
 const ID = 'vercel'
 
@@ -234,6 +235,7 @@ export function createVercelProvider(m?: Manifest): Provider {
       if (spec.id.startsWith('vercel.env.')) return ensureEnv(spec, ctx)
       if (spec.id === 'vercel.binding.supabase-install') return ensureSupabaseInstall(spec, ctx)
       if (spec.id === 'vercel.deployment') return ensureDeployment(spec, ctx)
+      if (spec.id === 'vercel.binding.domain') return ensureDomain(spec, ctx)
       throw unknownResource(spec)
     },
 
@@ -256,6 +258,11 @@ export function createVercelProvider(m?: Manifest): Provider {
       if (spec.id === 'vercel.check.deployed') return verifyDeployed(spec, ctx)
       if (spec.id === 'vercel.check.secrets-present') return verifySecretsPresent(spec, ctx)
       if (spec.id === 'vercel.check.preview') return verifyPreview(spec, ctx)
+      if (spec.id === 'vercel.binding.domain') return verifyDomain(spec, ctx)
+      if (spec.id === 'vercel.check.domain') {
+        const domain = str(spec.inputs.domain)
+        return verifyDomainServes(spec, ctx, { domain, record: vercelDnsRecord(domain), vendor: 'Vercel', requireMarker: str(spec.inputs.requireMarker) === 'true' })
+      }
       throw unknownResource(spec)
     },
 
@@ -1148,7 +1155,7 @@ export async function waitForCommitDeployment(
       state = (deployment.readyState ?? deployment.state ?? 'unknown').toUpperCase()
       if (state === 'READY') {
         const project = await getProject(ctx, spec, projectId)
-        const alias = project?.targets?.production?.alias?.[0]
+        const alias = defaultAlias(project)
         return { url: `https://${deployment.url}`, ...(alias && deployment.target === 'production' ? { productionUrl: `https://${alias}` } : {}), state }
       }
       if (state === 'ERROR' || state === 'CANCELED') {
@@ -1183,7 +1190,7 @@ function deploymentOutputs(
   project: VercelProject | undefined,
   cliOutput = '',
 ): Record<string, Output> {
-  const alias = project?.targets?.production?.alias?.[0]
+  const alias = defaultAlias(project)
   const fromCli = /https:\/\/[^\s]+/.exec(cliOutput)?.[0]
   const url = alias ? `https://${alias}` : (fromCli ?? `https://${deployment.url}`)
   return {
@@ -1390,3 +1397,70 @@ function unknownResource(spec: ResourceSpec): CimientoError {
 }
 
 export default vercelProvider
+
+/**
+ * The production address on vercel.app. With a custom domain Vercel lists it among the aliases too,
+ * and the default address must stay what checks and wiring follow, so domain remove changes nothing
+ * but the domain.
+ */
+function defaultAlias(project: VercelProject | undefined): string | undefined {
+  const aliases = project?.targets?.production?.alias ?? []
+  return aliases.find((a) => a.endsWith('.vercel.app')) ?? aliases[0]
+}
+
+/** The DNS record a domain at an outside DNS provider needs to reach Vercel. */
+export function vercelDnsRecord(domain: string): DnsRecord {
+  const name = recordName(domain)
+  return name === '@' ? { type: 'A', name, value: '76.76.21.21' } : { type: 'CNAME', name, value: 'cname.vercel-dns.com' }
+}
+
+/** Adds the custom domain to the project, or with inputs.remove, takes it off. */
+async function ensureDomain(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
+  const projectId = str(spec.inputs.projectId)
+  const domain = str(spec.inputs.domain)
+  const remove = str(spec.inputs.remove) === 'true'
+  const path = `/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}`
+  const current = await vercelCall<{ name?: string; verified?: boolean }>(ctx, spec.id, 'GET', path)
+  const present = current.ok
+  const externalId = `${projectId}/${domain}`
+  if (present !== remove) return { action: 'noop', externalId }
+  if (ctx.dryRun) return { action: 'noop' }
+  if (remove) {
+    const deleted = await vercelCall(ctx, spec.id, 'DELETE', path)
+    if (!deleted.ok && deleted.status !== 404) {
+      throw vercelError(spec.id, deleted, { code: 'HOSTING_DOMAIN_FAILED', message: `Removing ${domain} from the Vercel project failed.`, hint: `Run cimiento domain remove ${domain} again; it only removes what is still there.` })
+    }
+    return { action: 'updated', externalId, outputs: { domain: { value: '', secret: false } } }
+  }
+  const added = await vercelCall<{ verified?: boolean }>(ctx, spec.id, 'POST', `/v10/projects/${encodeURIComponent(projectId)}/domains`, { name: domain })
+  if (!added.ok) {
+    throw vercelError(spec.id, added, {
+      code: 'HOSTING_DOMAIN_FAILED',
+      message: `Adding ${domain} to the Vercel project failed.`,
+      hint: added.status === 409
+        ? `${domain} already belongs to another Vercel project. Remove it there, or pick another subdomain, then run cimiento domain add again.`
+        : `Run cimiento domain add ${domain} again; it only adds what is missing.`,
+    })
+  }
+  return { action: 'created', externalId, url: `https://${domain}`, outputs: { domain: { value: domain, secret: false } } }
+}
+
+async function verifyDomain(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
+  const projectId = str(spec.inputs.projectId)
+  const domain = str(spec.inputs.domain)
+  const current = await vercelCall(ctx, spec.id, 'GET', `/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}`)
+  if (current.ok) return { ok: true, evidence: `${domain} is a domain of the Vercel project` }
+  return {
+    ok: false,
+    error: new CimientoError({
+      code: 'HOSTING_DOMAIN_FAILED',
+      provider: ID,
+      resource: spec.id,
+      message: `${domain} is not a domain of the Vercel project.`,
+      hint: `Run cimiento domain add ${domain}.`,
+      retryable: true,
+      needsHuman: false,
+    }),
+  }
+}
+

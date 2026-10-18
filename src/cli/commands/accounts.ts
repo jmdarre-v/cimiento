@@ -7,7 +7,9 @@ import { join } from 'node:path'
 import { CimientoError, ExitCode } from '../../core/errors'
 import { hashManifest, writeProjectState, type ProjectState } from '../../core/state'
 import { ensureVendorSession } from '../../core/toolkit'
-import type { ResourceSpec } from '../../core/types'
+import type { Ctx, ResourceSpec } from '../../core/types'
+import { neonCall } from '../../providers/neon/api'
+import { netlifyCall } from '../../providers/netlify/api'
 import { PINS, pinnedValue, reconcilePins, setInManifest } from '../../manifest/pin'
 import { githubProvider } from '../../providers/github'
 import { chooseSupabaseOrganization, createdOrganizationOutputs } from '../../providers/supabase'
@@ -44,6 +46,8 @@ export async function accountsSetCommand(session: Session): Promise<number> {
     await chooseVercelTeam(ctx, to)
   } else if (provider === 'turnstile') {
     await chooseCloudflareAccount(ctx, to)
+  } else if (provider === 'netlify' || provider === 'neon') {
+    await chooseListed(ctx, provider, pin.path, pin.what, to)
   } else {
     // A gh login is one account, so the pin follows whoever is logged in.
     const spec: ResourceSpec = { id: 'github.session', kind: 'session', provider: 'github', dependsOn: [], inputs: {} }
@@ -102,3 +106,42 @@ export async function accountsSetCommand(session: Session): Promise<number> {
   }
   return ExitCode.ok
 }
+
+/** Netlify teams and Neon organizations: listed through the API, then picked by --to or asked. */
+async function chooseListed(ctx: Ctx, provider: 'netlify' | 'neon', path: string[], what: string, to: string | undefined): Promise<void> {
+  const resource = `${provider}.session`
+  const options =
+    provider === 'netlify'
+      ? ((await netlifyCall<{ slug: string; name?: string }[]>(ctx, resource, 'GET', '/accounts')).body ?? []).map((t) => ({ value: t.slug, label: `${t.name ?? t.slug} (${t.slug})` }))
+      : ((await neonCall<{ organizations?: { id: string; name: string }[] }>(ctx, resource, 'GET', '/users/me/organizations')).body?.organizations ?? []).map((o) => ({
+          value: o.id,
+          label: `${o.name} (${o.id})`,
+        }))
+  const match = to ? options.find((o) => o.value === to || o.label.startsWith(`${to} `)) : undefined
+  if (to && !match) {
+    throw new CimientoError({
+      code: 'ACCOUNT_CHOICE_NEEDED',
+      provider,
+      resource,
+      message: `No ${what} ${to} is visible to this login. The choices are ${options.map((o) => o.label).join(', ') || 'none'}.`,
+      hint: `Pass one of the listed values with --to, or run cimiento accounts set ${provider} in a terminal to pick one.`,
+      retryable: true,
+      needsHuman: true,
+    })
+  }
+  if (match) return setInManifest(ctx, path, match.value)
+  if (options.length === 1) return setInManifest(ctx, path, options[0].value)
+  if (!ctx.interactive || !ctx.choose) {
+    throw new CimientoError({
+      code: 'ACCOUNT_CHOICE_NEEDED',
+      provider,
+      resource,
+      message: `You have ${options.length} ${what}s: ${options.map((o) => o.label).join(', ')}.`,
+      hint: `Run cimiento accounts set ${provider} --to <value> with one of them, or in a terminal without --to to pick one.`,
+      retryable: true,
+      needsHuman: true,
+    })
+  }
+  setInManifest(ctx, path, await ctx.choose(`Which ${what} should this project use?`, options))
+}
+

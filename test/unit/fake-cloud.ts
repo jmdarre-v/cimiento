@@ -7,6 +7,7 @@
 import { createHmac } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { FakeV2 } from './fake-v2'
 import type { ExecOptions, ExecResult, HttpRequest, HttpResponse, Io, Running, SpawnOptions } from '../../src/core/io'
 
 export interface FakeRepo {
@@ -128,6 +129,8 @@ export class FakeCloud implements Io {
   readonly httpCalls: string[] = []
 
   readonly repos = new Map<string, FakeRepo>()
+  /** Netlify, Neon, Resend, Stripe, PostHog, DNS and Vercel domains. */
+  readonly v2: FakeV2 = new FakeV2(this)
   /** GitHub Actions secrets by repository, and Supabase project secrets by project ref. */
   readonly actionsSecrets = new Map<string, Map<string, string>>()
   readonly supabaseSecrets = new Map<string, Map<string, string>>()
@@ -227,6 +230,8 @@ export class FakeCloud implements Io {
       vercel: 'Vercel CLI 39.0.0',
       supabase: '1.200.0',
       wrangler: ' ⛅️ wrangler 4.151.1',
+      netlify: 'netlify-cli/17.38.1 darwin-arm64 node-v22.11.0',
+      neonctl: '2.27.0',
       ...(options.toolVersions ?? {}),
     }
     if (this.onePassword) this.versions.op = '2.32.0'
@@ -310,7 +315,9 @@ export class FakeCloud implements Io {
       return ok('upgraded')
     }
     if (cmd === 'git') return this.git(args)
-    if (cmd === 'gh') return this.gh(args, _opts)
+    const v2 = this.v2.exec(cmd, args)
+    if (v2) return v2
+    if (cmd === 'gh') return this.v2.gh(args) ?? this.gh(args, _opts)
     if (cmd === 'vercel') return this.vercel(args)
     if (cmd === 'supabase') return this.supabase(args)
     if (cmd === 'brew' || cmd === 'npm' || cmd === 'pnpm') return ok('installed')
@@ -434,6 +441,7 @@ export class FakeCloud implements Io {
         })
         this.deployments.set(project.id, list)
       }
+      this.v2.onPush(undefined, branch)
       return ok('To https://github.com/x/y.git')
     }
     if (args[0] === 'add') return ok('')
@@ -633,6 +641,8 @@ export class FakeCloud implements Io {
     this.httpCalls.push(key)
     const url = new URL(req.url)
 
+    const v2 = this.v2.http(req, url)
+    if (v2) return v2
     if (url.hostname === 'api.vercel.com') return this.vercelApi(req, url)
     if (url.hostname === 'api.supabase.com') return this.supabaseApi(req, url)
     if (url.hostname === 'api.cloudflare.com') return this.cloudflareApi(req, url)
@@ -793,6 +803,8 @@ export class FakeCloud implements Io {
     const method = req.method.toUpperCase()
 
     if (path === '/v2/teams') return json(200, { teams: this.vercelTeams })
+    const domains = /^\/v(?:9|10)\/projects\/([^/]+)\/domains(?:\/([^/]+))?$/.exec(path)
+    if (domains) return this.v2.vercelDomain(decodeURIComponent(domains[1]), method, domains[2] ? decodeURIComponent(domains[2]) : undefined, req.body)
     if (path === '/v1/integrations/git-namespaces') {
       if (url.searchParams.has('teamId')) return json(400, { error: { message: 'specifying `teamId` or `slug` is not supported by this endpoint.' } })
       if (!this.vercelGithubConnected) return json(403, { error: { message: 'No GitHub account connected' } })

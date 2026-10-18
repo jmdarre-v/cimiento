@@ -270,6 +270,13 @@ export async function runUp(
       })
 
       const check = await safeVerify(provider, spec, { ...ctx, state })
+      if (!check.ok && check.error && needsPerson(check.error)) {
+        // Applied, and what is left is a person's: a DNS record, a key to make. Waiting on them is
+        // the honest status, exit code 2, not a failure.
+        pendingManual.add(spec.id)
+        emit({ event: 'manual', id: spec.id, provider: spec.provider, message: check.error.message, error: check.error.toJSON() })
+        continue
+      }
       if (!check.ok) {
         const error =
           check.error ??

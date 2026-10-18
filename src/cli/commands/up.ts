@@ -216,7 +216,8 @@ async function confirmWith(session: Session, question: string): Promise<boolean>
 
 /** How long the unattended part takes, from what each kind of step usually takes. */
 const SECONDS: [RegExp, number][] = [
-  [/^vercel\.deployment$/, 180],
+  [/^(vercel|netlify)\.deployment$/, 180],
+  [/^neon\.project$/, 20],
   [/^vercel\.binding\.supabase-install$|^supabase\.project$/, 120],
   [/^supabase\.migrations$/, 20],
   [/\.tool\./, 30],

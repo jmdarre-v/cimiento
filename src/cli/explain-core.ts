@@ -118,4 +118,40 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'A branch you pushed does not have a working preview yet. The hosting provider builds one for every branch by itself; this usually clears in a minute, unless the build failed.',
     es: 'Una rama que subiste todavia no tiene una vista previa funcionando. El proveedor de hosting construye una por cada rama; normalmente se resuelve en un minuto, salvo que la construccion haya fallado.',
   },
+  STRIPE_KEY_INVALID: {
+    en: 'Stripe refused the key, or it is not a test key of the right kind. The secret key starts with sk_test_ and the publishable key with pk_test_.',
+    es: 'Stripe rechazo la clave, o no es una clave de prueba del tipo correcto. La clave secreta empieza con sk_test_ y la publicable con pk_test_.',
+  },
+  STRIPE_API_ERROR: {
+    en: 'Stripe failed a read only check. This is on the Stripe side; run cimiento doctor again.',
+    es: 'Stripe fallo una revision de solo lectura. Es del lado de Stripe; ejecuta cimiento doctor de nuevo.',
+  },
+  RESEND_KEY_INVALID: {
+    en: 'Resend refused the API key. Make a new one at resend.com/api-keys and run cimiento secret rotate RESEND_API_KEY.',
+    es: 'Resend rechazo la clave. Crea una nueva en resend.com/api-keys y ejecuta cimiento secret rotate RESEND_API_KEY.',
+  },
+  RESEND_API_ERROR: {
+    en: 'Resend did not send the check email. If it names the sender, use onboarding@resend.dev until your own domain is verified in Resend.',
+    es: 'Resend no envio el correo de prueba. Si menciona el remitente, usa onboarding@resend.dev hasta verificar tu propio dominio en Resend.',
+  },
+  POSTHOG_KEY_INVALID: {
+    en: 'The PostHog key is not a project key. Copy the Project token, which starts with phc_, from your PostHog project settings.',
+    es: 'La clave de PostHog no es una clave de proyecto. Copia el Project token, que empieza con phc_, de la configuracion de tu proyecto en PostHog.',
+  },
+  POSTHOG_API_ERROR: {
+    en: 'PostHog did not accept the check event. This is on the PostHog side; run cimiento doctor again.',
+    es: 'PostHog no acepto el evento de prueba. Es del lado de PostHog; ejecuta cimiento doctor de nuevo.',
+  },
+  HOSTING_DOMAIN_FAILED: {
+    en: 'The custom domain could not be added to or removed from the hosting project. A domain belongs to one project at a time.',
+    es: 'No se pudo agregar o quitar el dominio del proyecto de hosting. Un dominio pertenece a un solo proyecto a la vez.',
+  },
+  HOSTING_DOMAIN_DNS_NEEDED: {
+    en: "Your domain is on the hosting project, but its DNS does not point there yet. Add the one record cimiento names where you manage the domain's DNS.",
+    es: 'Tu dominio esta en el proyecto de hosting, pero su DNS aun no apunta alli. Agrega el registro que cimiento indica donde administras el DNS del dominio.',
+  },
+  HOSTING_DOMAIN_NOT_SERVING: {
+    en: 'Your domain points at the hosting, but the site does not answer on it yet. The https certificate takes a few minutes; run cimiento doctor again.',
+    es: 'Tu dominio apunta al hosting, pero el sitio aun no responde en el. El certificado https tarda unos minutos; ejecuta cimiento doctor de nuevo.',
+  },
 }

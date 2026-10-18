@@ -111,6 +111,9 @@ describe('cimiento new --guided --lang es --preset designer, the fresh-machine c
       'Que sistema de inicio de sesion debe usar el proyecto?',
       'Que servicio de tareas en segundo plano debe usar el proyecto?',
       'Que proteccion contra bots debe usar el proyecto?',
+      'Que servicio de envio de correo debe usar el proyecto?',
+      'Que servicio de pagos (modo de prueba) debe usar el proyecto?',
+      'Que servicio de analitica debe usar el proyecto?',
       'Que proveedor de IA debe usar el proyecto?',
     ])
   })

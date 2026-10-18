@@ -3,6 +3,7 @@
 // resource missing from the cloud is reported, and up is the command that creates it.
 
 import { readFileSync } from 'node:fs'
+import { hostingOf } from '../../core/hosting'
 import { join } from 'node:path'
 import { CimientoError, ExitCode, needsPerson, type CimientoErrorFields } from '../../core/errors'
 import { runUp, runVerifyAll, type VerifyReport } from '../../core/executor'
@@ -44,8 +45,9 @@ export async function joinCommand(session: Session): Promise<number> {
   // 3. env pull, once the hosting project is reachable from this machine.
   let envPull: { file: string; names: string[] } | undefined
   const errors: CimientoErrorFields[] = [...setup.errors]
-  const hostingOk = reports.some((r) => r.id === 'vercel.project' && r.ok)
-  if (project.manifest.slots.hosting === 'vercel' && hostingOk) {
+  const hosting = hostingOf(project.manifest)
+  const hostingOk = hosting !== undefined && reports.some((r) => r.id === `${hosting}.project` && r.ok)
+  if (hostingOk) {
     try {
       const pulled = await pullEnv(session, { ...project, ctx: { ...project.ctx, state: setup.state } })
       envPull = { file: pulled.target, names: pulled.names }

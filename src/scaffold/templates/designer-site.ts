@@ -6,6 +6,7 @@ import type { Manifest } from '../../manifest/schema'
 import { nextjsAppFiles } from './nextjs-app'
 
 export function designerSiteFiles(m: Manifest): Record<string, string> {
+  const host = m.slots.hosting === 'netlify' ? 'Netlify' : 'Vercel'
   return {
     ...nextjsAppFiles(m),
     'app/page.tsx': `export default function Home() {
@@ -17,7 +18,7 @@ export function designerSiteFiles(m: Manifest): Record<string, string> {
         <li>Export your design from Claude Design and put the zip in design/exports.</li>
         <li>Unzip it into design/current.</li>
         <li>Ask Claude Code: turn design/current into app/page.tsx.</li>
-        <li>Push to main. Vercel publishes the new version by itself.</li>
+        <li>Push to main. ${host} publishes the new version by itself.</li>
       </ol>
     </main>
   )
@@ -37,7 +38,7 @@ To update the site from a new design:
 1. Export from Claude Design and save the zip in \`design/exports/\`.
 2. Replace the contents of \`design/current/\` with the unzipped export.
 3. Ask Claude Code: turn design/current into app/page.tsx, keeping the cimiento-project meta tag.
-4. Commit and push to main. Vercel deploys it, and \`cimiento doctor\` checks the live page.
+4. Commit and push to main. ${host} deploys it, and \`cimiento doctor\` checks the live page.
 `,
     'design/exports/.gitkeep': '',
     'design/current/.gitkeep': '',

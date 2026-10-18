@@ -3,13 +3,11 @@
 // via-hosting: the project is created through the Vercel Marketplace and the keys land in the
 // Vercel env by themselves. The first install needs a person to accept the Marketplace terms.
 //
-// direct: the project is created through the Supabase API and cimiento pushes the URL, the anon
-// key and the service role key into the Vercel env, per environment.
+// direct: see hosting-supabase-direct.ts, which serves every hosting provider.
 
 import type { ProjectState } from '../core/state'
 import type { ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
-import { envResourceId } from '../providers/vercel'
 import type { WiringResult, WiringRule } from './types'
 
 const MARKETPLACE_URL = 'https://vercel.com/marketplace/supabase'
@@ -25,20 +23,13 @@ const EXPLAIN: Record<string, { en: string; es?: string }> = {
   },
 }
 
-/** The three values a Next.js application needs to reach Supabase. */
-const DIRECT_KEYS: { key: string; ref: string; publicValue: boolean }[] = [
-  { key: 'NEXT_PUBLIC_SUPABASE_URL', ref: 'supabase.project:projectUrl', publicValue: true },
-  { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', ref: 'supabase.project:anonKey', publicValue: false },
-  { key: 'SUPABASE_SERVICE_ROLE_KEY', ref: 'supabase.project:serviceRoleKey', publicValue: false },
-]
-
 export const vercelSupabaseRule: WiringRule = {
   id: 'vercel+supabase',
   pair: ['vercel', 'supabase'],
 
   applies(m: Manifest): boolean {
     const usesSupabase = m.slots.database === 'supabase' || m.slots.auth === 'supabase'
-    return usesSupabase && m.slots.hosting === 'vercel'
+    return usesSupabase && m.slots.hosting === 'vercel' && m.accounts.supabase === 'via-hosting'
   },
 
   build(m: Manifest, _state: ProjectState): WiringResult {
@@ -97,31 +88,8 @@ export const vercelSupabaseRule: WiringRule = {
       }
     }
 
-    const specs: ResourceSpec[] = [database]
-    const envIds: string[] = []
-    for (const environment of m.environments) {
-      for (const entry of DIRECT_KEYS) {
-        const id = envResourceId(entry.key, environment)
-        envIds.push(id)
-        specs.push({
-          id,
-          kind: 'binding',
-          provider: 'vercel',
-          dependsOn: ['vercel.project', 'supabase.project'],
-          inputs: {
-            projectId,
-            key: entry.key,
-            environment,
-            source: 'literal',
-            value: { deferred: entry.ref },
-          },
-        })
-      }
-    }
-    return {
-      specs,
-      edges: envIds.map((id) => ({ from: 'vercel.deployment', to: id })),
-    }
+    // The direct path is hosting-supabase-direct.ts, shared with Netlify.
+    return { specs: [], edges: [] }
   },
 
   explain(key: string, lang: 'en' | 'es'): string | undefined {

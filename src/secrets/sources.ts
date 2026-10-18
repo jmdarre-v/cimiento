@@ -6,7 +6,9 @@ import type { Io } from '../core/io'
 import type { SecretDecl, SecretSource } from '../manifest/schema'
 import { askHidden } from './prompt'
 import type { PersonStep } from '../core/person'
-import { secretStep } from '../core/person-steps'
+import { secretSignupStep, secretStep } from '../core/person-steps'
+import { assertTestModeValue } from './guard'
+import type { ChoiceOption } from '../core/types'
 
 export interface SourceContext {
   projectSlug: string
@@ -17,6 +19,9 @@ export interface SourceContext {
   promptHidden?: (question: string) => Promise<string>
   /** Walks the person to the page where the value is created, before the hidden prompt. */
   walkStep?: (step: PersonStep, open?: () => Promise<void>) => Promise<void>
+  /** Asks one multiple choice question, for whether the person has an account yet. */
+  choose?: (question: string, options: ChoiceOption[]) => Promise<string>
+  lang?: 'en' | 'es'
 }
 
 export interface Source {
@@ -33,9 +38,21 @@ async function hidden(name: string, ctx: SourceContext): Promise<string | undefi
   if (!ctx.interactive) return undefined
   // Where to create the key and what to call it, before the prompt that takes it (BUG-41).
   const step = secretStep(name, ctx.projectSlug, ctx.declaration?.url)
+  // Someone new to the vendor needs an account before the page with the key exists for them.
+  const signup = secretSignupStep(name)
+  if (signup && ctx.walkStep && ctx.choose) {
+    const es = ctx.lang === 'es'
+    const has = await ctx.choose(es ? `Tienes una cuenta de ${signup.vendor}?` : `Do you have a ${signup.vendor} account?`, [
+      { value: 'yes', label: es ? 'Si' : 'Yes' },
+      { value: 'no', label: es ? 'No, crearla ahora; es gratis' : 'No, create one now; it is free' },
+    ])
+    if (has === 'no') await ctx.walkStep(signup.step)
+  }
   if (step && ctx.walkStep) await ctx.walkStep(step)
-  const value = await (ctx.promptHidden ?? askHidden)(`Value for ${name} (input is hidden): `)
-  return value.trim() || undefined
+  const value = (await (ctx.promptHidden ?? askHidden)(`Value for ${name} (input is hidden): `)).trim()
+  // Refused before the keychain source stores it.
+  if (value) assertTestModeValue(name, value)
+  return value || undefined
 }
 
 export const promptSource: Source = {

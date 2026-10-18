@@ -377,3 +377,42 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 5: hosting.preview is a passive check. It never pushes a branch itself: with no
   branch besides production it passes and says so, and otherwise every other branch (up to ten)
   must have a ready preview of its head commit. A failed preview build is HOSTING_PREVIEW_NOT_READY.
+- 2026-10-18 Goal 5: the hosting slot has one resource shape for every provider (<id>.session,
+  <id>.project with projectId, <id>.deployment with productionUrl, <id>.env.<NAME>.<env>), in
+  src/core/hosting.ts, so the "any hosting" wiring rules (supabase auth URLs, supabase direct keys,
+  turnstile, neon, posthog, custom domain) serve Vercel and Netlify alike. Commands reach the
+  hosting provider through src/providers/hosting.ts.
+- 2026-10-18 Goal 5: Netlify links the GitHub repository the way netlify init does without the
+  GitHub app: a read only deploy key added with gh, the repo settings on the site, and a repository
+  webhook to the site's deploy_hook. No GitHub app install is asked of the person. Netlify hosting
+  therefore needs slots.repo github. Supabase on Netlify uses the direct path; via-hosting is the
+  Vercel Marketplace and is refused with netlify.
+- 2026-10-18 Goal 5: Netlify env values are written per deploy context: production to production,
+  preview to deploy-preview and branch-deploy, dev to dev. Values are not marked is_secret, because
+  Netlify refuses secret values in the dev context that env pull reads; cimiento never prints them.
+- 2026-10-18 Goal 5: Netlify's hosting.preview accepts a ready branch deploy or deploy preview of
+  each branch head; Netlify builds previews for pull requests, so a branch with neither is told to
+  open one.
+- 2026-10-18 Goal 5: Neon migrations run through Neon's HTTP query endpoint (the serverless
+  driver's protocol), each file in one transaction, recorded in cimiento_migrations, so no Postgres
+  client is needed. The migrations workflow in .github stays Supabase only. DATABASE_URL (pooled)
+  and DATABASE_URL_UNPOOLED go to the hosting env. A personal Neon login always names the
+  organization (accounts.neon), and an expired neonctl token is refreshed by running neonctl me.
+- 2026-10-18 Goal 5: Resend, Stripe and PostHog have no session in cimiento; each key is a declared
+  keychain secret, added by completeFragment when the slot is chosen, with a sign-up step offered
+  before the key page. Checks prove function at no cost: Resend sends to delivered@resend.dev from
+  onboarding@resend.dev; Stripe reads the test balance and requires livemode false; PostHog sends
+  one event. PostHog's edge only checks a key's shape, so the PostHog check also checks for phc_ and
+  its evidence says received, not validated.
+- 2026-10-18 Goal 5: Stripe is test mode only. A value starting sk_live_, rk_live_ or pk_live_ is
+  refused the moment it is read (src/secrets/guard.ts), before the keychain stores it or any sink
+  or check sees it. No Stripe webhook endpoint is created: its signing secret is shown once, and
+  cimiento keeps no copy of a secret to write it again later.
+- 2026-10-18 Goal 5: one custom domain per project, in stack.yaml's domain. cimiento domain add and
+  remove change only that field and apply the affected items. The domain check fetches
+  https://<domain>; when it fails, DNS over HTTPS (through io) tells a missing record, a person step
+  naming the exact CNAME (cname.vercel-dns.com, or <site>.netlify.app), from a certificate still
+  being issued. Vercel's productionUrl stays the vercel.app alias, so removing a domain changes
+  nothing else.
+- 2026-10-18 Goal 5: a check that fails after its resource was applied, with a code that needs a
+  person (a DNS record, a key to make), is pending with exit code 2, like the same failure in ensure.

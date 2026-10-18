@@ -7,6 +7,11 @@ import { selectedProviderIds, type Manifest } from './manifest/schema'
 import { createAnthropicProvider } from './providers/anthropic'
 import { createGithubProvider } from './providers/github'
 import { createInngestProvider } from './providers/inngest'
+import { createNeonProvider } from './providers/neon'
+import { createNetlifyProvider } from './providers/netlify'
+import { createPosthogProvider } from './providers/posthog'
+import { createResendProvider } from './providers/resend'
+import { createStripeProvider } from './providers/stripe'
 import { createSupabaseProvider } from './providers/supabase'
 import { createTurnstileProvider } from './providers/turnstile'
 import { createVercelProvider } from './providers/vercel'
@@ -18,10 +23,15 @@ type ProviderFactory = (m?: Manifest) => Provider
 const FACTORIES: Record<string, ProviderFactory> = {
   github: createGithubProvider,
   vercel: createVercelProvider,
+  netlify: createNetlifyProvider,
   supabase: createSupabaseProvider,
   inngest: createInngestProvider,
   turnstile: createTurnstileProvider,
   anthropic: createAnthropicProvider,
+  neon: createNeonProvider,
+  resend: createResendProvider,
+  stripe: createStripeProvider,
+  posthog: createPosthogProvider,
 }
 
 export function knownProviderIds(): string[] {

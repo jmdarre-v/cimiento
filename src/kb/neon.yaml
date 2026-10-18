@@ -1,0 +1,34 @@
+- code: NEON_TOKEN_MISSING
+  provider: neon
+  title: no Neon token for the API
+  signatures:
+    - "could not find a Neon token"
+  hint: cimiento up opens the Neon login in your browser. On a machine with no browser, set NEON_API_KEY in the environment.
+  fix: neonctl keeps a short lived token and refreshes it on every command; cimiento runs neonctl me first when the stored one expired.
+
+- code: NEON_API_ERROR
+  provider: neon
+  title: Neon returned an unexpected error
+  signatures:
+    - "Listing Neon projects failed"
+    - "Creating the Neon project"
+  hint: Read the Neon message in the error, then run cimiento doctor --json.
+  fix: With a personal login, cimiento always names the organization in accounts.neon, because Neon lists and creates projects per organization.
+
+- code: NEON_PROJECT_LIMIT
+  provider: neon
+  title: the Neon organization is at its project limit
+  signatures:
+    - "the organization is at its project limit"
+  hint: Delete a Neon project you no longer need at https://console.neon.tech/app/projects, then run cimiento up again.
+  fix: The Free plan allows a limited number of projects per organization. cimiento never deletes a project it did not create.
+
+- code: NEON_MIGRATION_FAILED
+  provider: neon
+  title: a migration did not run on Neon
+  signatures:
+    - "failed on Neon"
+    - "not applied yet"
+    - "Querying public.cimiento_baseline on Neon failed"
+  hint: Fix the SQL file the error names and run cimiento up again.
+  fix: cimiento applies each file in db/migrations once, in name order, in one transaction through Neon's HTTP endpoint, and records it in cimiento_migrations. Statements end at a semicolon at the end of a line.

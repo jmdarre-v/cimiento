@@ -4,10 +4,11 @@
 // hostnames and preview hosts are not subdomains of production (docs/DECISIONS.md). After the
 // first deployment the widget's domains follow the production host.
 
+import { defaultHost, HOSTING_NAMES, hostingDeploymentId, hostingEnvSpec, hostingOf, productionUrlRef } from '../core/hosting'
+import { parseHostingEnvId } from '../core/sink-ids'
 import type { ProjectState } from '../core/state'
 import type { ResourceSpec, Value } from '../core/types'
 import type { Manifest } from '../manifest/schema'
-import { envResourceId } from '../providers/vercel'
 import { TURNSTILE_TEST_SECRET_KEY, TURNSTILE_TEST_SITE_KEY } from '../providers/turnstile'
 import type { WiringResult, WiringRule } from './types'
 
@@ -16,15 +17,15 @@ export const TURNSTILE_SECRET_KEY_NAME = 'TURNSTILE_SECRET_KEY'
 
 export const hostingTurnstileRule: WiringRule = {
   id: 'hosting+turnstile',
-  pair: ['vercel', 'turnstile'],
+  pair: ['hosting', 'turnstile'],
 
   applies(m: Manifest): boolean {
-    return m.slots.bot_protection === 'turnstile' && m.slots.hosting === 'vercel'
+    return m.slots.bot_protection === 'turnstile' && hostingOf(m) !== undefined
   },
 
   build(m: Manifest, _state: ProjectState): WiringResult {
-    const projectId = { deferred: 'vercel.project:projectId' }
-    const domains = [m.domain, `${m.slug}.vercel.app`].filter(Boolean).join(',')
+    const hosting = hostingOf(m)!
+    const domains = [m.domain, defaultHost(hosting, m.slug)].filter(Boolean).join(',')
     const specs: ResourceSpec[] = [
       { id: 'turnstile.widget', kind: 'resource', provider: 'turnstile', dependsOn: [], inputs: { domains } },
     ]
@@ -36,37 +37,33 @@ export const hostingTurnstileRule: WiringRule = {
         [TURNSTILE_SECRET_KEY_NAME, production ? { deferred: 'turnstile.widget:secret' } : TURNSTILE_TEST_SECRET_KEY],
       ]
       for (const [key, value] of values) {
-        const id = envResourceId(key, environment)
-        envIds.push(id)
-        specs.push({
-          id,
-          kind: 'binding',
-          provider: 'vercel',
-          dependsOn: production ? ['vercel.project', 'turnstile.widget'] : ['vercel.project'],
-          inputs: { projectId, key, environment, source: 'literal', value, ...(key === TURNSTILE_SITE_KEY_NAME ? { public: 'true' } : {}) },
-        })
+        const spec = hostingEnvSpec(hosting, key, environment, { source: 'literal', value, public: key === TURNSTILE_SITE_KEY_NAME }, production ? ['turnstile.widget'] : [])
+        envIds.push(spec.id)
+        specs.push(spec)
       }
     }
     specs.push({
       id: 'turnstile.binding.domains',
       kind: 'binding',
       provider: 'turnstile',
-      dependsOn: ['turnstile.widget', 'vercel.deployment'],
+      dependsOn: ['turnstile.widget', hostingDeploymentId(hosting)],
       inputs: {
         accountId: { deferred: 'turnstile.session:account' },
-        productionUrl: { deferred: 'vercel.deployment:productionUrl' },
+        productionUrl: productionUrlRef(hosting),
         domain: m.domain ?? '',
       },
     })
     return {
       specs,
-      edges: envIds.map((id) => ({ from: 'vercel.deployment', to: id })),
+      edges: envIds.map((id) => ({ from: hostingDeploymentId(hosting), to: id })),
     }
   },
 
   explain(key: string, lang: 'en' | 'es'): string | undefined {
-    if (!key.startsWith(`vercel.env.${TURNSTILE_SITE_KEY_NAME}.`) && !key.startsWith(`vercel.env.${TURNSTILE_SECRET_KEY_NAME}.`)) return undefined
-    const environment = key.split('.')[3] ?? 'an environment'
+    const parsed = parseHostingEnvId(key)
+    if (!parsed || (parsed.key !== TURNSTILE_SITE_KEY_NAME && parsed.key !== TURNSTILE_SECRET_KEY_NAME)) return undefined
+    const environment = parsed.environment
+    const vendor = HOSTING_NAMES[parsed.provider as 'vercel' | 'netlify']
     const isSecret = key.includes(TURNSTILE_SECRET_KEY_NAME)
     if (environment !== 'production') {
       return lang === 'es'
@@ -74,7 +71,7 @@ export const hostingTurnstileRule: WiringRule = {
         : `The Turnstile ${isSecret ? 'secret' : 'site'} key for ${environment}: Cloudflare's test key, which always passes, because preview addresses change with every deployment and a widget only loads on hosts it knows.`
     }
     return lang === 'es'
-      ? `La clave ${isSecret ? 'secreta' : 'publica'} del widget de Turnstile de este proyecto, puesta en el entorno de produccion de Vercel. cimiento la escribe y nunca la imprime.`
-      : `The ${isSecret ? 'secret' : 'site'} key of this project's Turnstile widget, written to the Vercel production env. ${isSecret ? 'cimiento writes it and never prints it.' : 'It is public by design: the page needs it to show the widget.'}`
+      ? `La clave ${isSecret ? 'secreta' : 'publica'} del widget de Turnstile de este proyecto, puesta en el entorno de produccion de ${vendor}. cimiento la escribe y nunca la imprime.`
+      : `The ${isSecret ? 'secret' : 'site'} key of this project's Turnstile widget, written to the ${vendor} production env. ${isSecret ? 'cimiento writes it and never prints it.' : 'It is public by design: the page needs it to show the widget.'}`
   },
 }

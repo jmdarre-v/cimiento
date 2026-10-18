@@ -4,8 +4,13 @@
 import type { ProjectState } from '../core/state'
 import type { ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
+import { githubNetlifyRule } from './github-netlify'
 import { githubVercelRule } from './github-vercel'
 import { hostingSupabaseRule } from './hosting-supabase'
+import { hostingSupabaseDirectRule } from './hosting-supabase-direct'
+import { hostingDomainRule } from './hosting-domain'
+import { hostingNeonRule } from './hosting-neon'
+import { hostingPosthogRule } from './hosting-posthog'
 import { hostingTurnstileRule } from './hosting-turnstile'
 import { vercelInngestRule } from './vercel-inngest'
 import { vercelSupabaseRule } from './vercel-supabase'
@@ -15,10 +20,15 @@ export * from './types'
 
 export const WIRING_RULES: WiringRule[] = [
   githubVercelRule,
+  githubNetlifyRule,
   vercelSupabaseRule,
+  hostingSupabaseDirectRule,
   hostingSupabaseRule,
   vercelInngestRule,
   hostingTurnstileRule,
+  hostingPosthogRule,
+  hostingNeonRule,
+  hostingDomainRule,
 ]
 
 export function activeRules(m: Manifest): WiringRule[] {

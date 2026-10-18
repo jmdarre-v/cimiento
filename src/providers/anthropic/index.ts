@@ -3,6 +3,7 @@
 // module adds is proof that the key works, with one read only call that costs nothing.
 
 import { CimientoError } from '../../core/errors'
+import { declaredSecretEnvIds } from '../../core/hosting'
 import type { ProjectState } from '../../core/state'
 import type { CheckResult, Ctx, Detection, EnsureResult, Lang, Output, Provider, ResourceSpec, Session, Slot } from '../../core/types'
 import type { Manifest } from '../../manifest/schema'
@@ -40,11 +41,7 @@ export function createAnthropicProvider(_m?: Manifest): Provider {
       if (manifest.slots.ai !== ID) return []
       // After the key reaches the hosting env, so a key nobody has typed yet is one step waiting on
       // a person, not a failed check on top of it.
-      const declared = manifest.secrets.find((x) => x.name === ANTHROPIC_KEY_NAME)
-      const dependsOn =
-        manifest.slots.hosting === 'vercel' && declared?.sinks.includes('hosting')
-          ? declared.environments.map((environment) => `vercel.env.${ANTHROPIC_KEY_NAME}.${environment}`)
-          : []
+      const dependsOn = declaredSecretEnvIds(manifest, ANTHROPIC_KEY_NAME)
       return [{ id: 'anthropic.check.key', kind: 'check', provider: ID, dependsOn, inputs: { secret: ANTHROPIC_KEY_NAME } }]
     },
 

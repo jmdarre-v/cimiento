@@ -517,12 +517,14 @@ async function ensureDomains(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult
   const widget = await findWidget(ctx, { ...spec, inputs: { ...spec.inputs, name: ctx.manifest.slug } })
   if (!widget) throw (await verifyWidget({ ...spec, inputs: { name: ctx.manifest.slug } }, ctx)).error!
   const wanted = wantedDomains(spec)
+  // cimiento domain remove names the custom domain it takes off the widget.
+  const removed = str(spec.inputs.removed).split(',').filter(Boolean)
   const current = [...widget.domains].sort()
-  if (wanted.every((d) => current.includes(d))) {
+  if (wanted.every((d) => current.includes(d)) && !removed.some((d) => current.includes(d))) {
     return { action: 'noop', externalId: widget.sitekey, outputs: { domains: { value: current.join(','), secret: false } } }
   }
   if (ctx.dryRun) return { action: 'noop' }
-  const domains = [...new Set([...current, ...wanted])].sort()
+  const domains = [...new Set([...current, ...wanted])].filter((d) => !removed.includes(d)).sort()
   const updated = await cloudflareCall<Widget>(ctx, spec.id, 'PUT', `${widgetsPath(ctx, spec)}/${encodeURIComponent(widget.sitekey)}`, {
     name: widget.name,
     mode: widget.mode,

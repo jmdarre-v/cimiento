@@ -1,0 +1,58 @@
+- code: RESEND_KEY_INVALID
+  provider: resend
+  title: Resend refused the key
+  signatures:
+    - "Resend refused RESEND_API_KEY"
+  hint: Make a new key at https://resend.com/api-keys, then run cimiento secret rotate RESEND_API_KEY.
+  fix: A revoked, restricted to another domain or suspended key is refused. Sending access is enough for cimiento's check.
+
+- code: RESEND_API_ERROR
+  provider: resend
+  title: Resend failed the send check
+  signatures:
+    - "Resend answered"
+  hint: If the message says the sender is not allowed, set options.resend.from to onboarding@resend.dev or an address on a domain you verified in Resend.
+  fix: The check sends one email from the sender in options.resend.from to Resend's test inbox delivered@resend.dev, which reaches nobody.
+
+- code: STRIPE_LIVE_KEY_REFUSED
+  provider: stripe
+  title: a Stripe live key was refused
+  signatures:
+    - "is a Stripe live mode key"
+    - "Stripe did not confirm test mode"
+  hint: Copy the test key from https://dashboard.stripe.com/apikeys with your sandbox or Test mode selected, then run cimiento secret set NAME again.
+  fix: cimiento only uses Stripe test mode. A key starting with sk_live_, rk_live_ or pk_live_ is refused the moment it is read, before it reaches the keychain, a sink or a check.
+
+- code: STRIPE_KEY_INVALID
+  provider: stripe
+  title: Stripe refused the key, or it is the wrong kind
+  signatures:
+    - "Stripe refused STRIPE_SECRET_KEY"
+    - "is not a Stripe test mode key of the right kind"
+  hint: STRIPE_SECRET_KEY starts with sk_test_ and NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY with pk_test_. Copy them again and run cimiento secret rotate NAME.
+  fix: The check reads the test balance with the secret key, which moves no money.
+
+- code: STRIPE_API_ERROR
+  provider: stripe
+  title: Stripe failed the check
+  signatures:
+    - "Stripe answered"
+  hint: This is on the Stripe side. Run cimiento doctor again; it changes nothing.
+  fix: The check only reads the test balance.
+
+- code: POSTHOG_KEY_INVALID
+  provider: posthog
+  title: the PostHog key is not a project key
+  signatures:
+    - "does not look like a PostHog project key"
+    - "PostHog refused"
+  hint: Copy the Project token (phc_) from your PostHog project settings, then run cimiento secret rotate NEXT_PUBLIC_POSTHOG_KEY.
+  fix: The page sends events with the public project key. A personal key (phx_) must never go to the page, so cimiento refuses it.
+
+- code: POSTHOG_API_ERROR
+  provider: posthog
+  title: PostHog did not accept the check event
+  signatures:
+    - "PostHog answered"
+  hint: This is on the PostHog side. Run cimiento doctor again; it changes nothing.
+  fix: PostHog's ingestion edge checks only the shape of a project key, so a received event proves the address and key format, and the event then shows under Activity.

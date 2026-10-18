@@ -1,0 +1,70 @@
+- code: NETLIFY_TOKEN_MISSING
+  provider: netlify
+  title: no Netlify token for the API
+  signatures:
+    - "could not find a Netlify token"
+  hint: cimiento up opens the Netlify login in your browser. On a machine with no browser, set NETLIFY_AUTH_TOKEN in the environment.
+  fix: cimiento reads the token netlify login stores in the CLI's config. It never asks you to paste one into chat.
+
+- code: NETLIFY_API_ERROR
+  provider: netlify
+  title: Netlify returned an unexpected error
+  signatures:
+    - "Listing Netlify sites failed"
+    - "Deleting the Netlify site"
+  hint: Read the Netlify message in the error, then run cimiento doctor --json.
+  fix: A 401 means the login expired; cimiento up logs in again. A 403 means the login is not a member of the team in accounts.netlify.
+
+- code: NETLIFY_SITE_NAME_TAKEN
+  provider: netlify
+  title: the site name is taken on Netlify
+  signatures:
+    - "Netlify refused the site name"
+  hint: Set slug in stack.yaml to a name nobody uses yet, then run cimiento up again.
+  fix: Netlify site names are global, because the name is the address <name>.netlify.app. cimiento adopts a site it can see; a taken name it cannot see belongs to someone else.
+
+- code: NETLIFY_SITE_NOT_FOUND
+  provider: netlify
+  title: no Netlify site with this name
+  signatures:
+    - "No Netlify site named"
+    - "has no Netlify project yet"
+  hint: Run cimiento up to create it. If it lives in another team, set accounts.netlify to that team's slug.
+  fix: cimiento looks for the site by name in the pinned team.
+
+- code: NETLIFY_REPO_LINK_FAILED
+  provider: netlify
+  title: Netlify could not be linked to the repository
+  signatures:
+    - "Linking Netlify to"
+    - "Linking the Netlify site to"
+    - "is not linked to"
+  hint: Check with cimiento doctor that gh is logged in as an administrator of the repository, then run cimiento up again.
+  fix: cimiento links Netlify the way netlify init does without the GitHub app, with a read only deploy key and a repository webhook to the site's deploy hook. Adding both needs admin rights on the repository.
+
+- code: NETLIFY_ENV_WRITE_FAILED
+  provider: netlify
+  title: an env var could not be written to the Netlify site
+  signatures:
+    - "to the Netlify site failed"
+  hint: Run cimiento secret set NAME again; it only writes what is missing.
+  fix: Netlify keeps one variable per name with a value per deploy context. cimiento writes production to production, preview to deploy-preview and branch-deploy, and dev to dev.
+
+- code: NETLIFY_DEPLOY_FAILED
+  provider: netlify
+  title: a Netlify build failed
+  signatures:
+    - "Netlify's deploy of"
+    - "Starting a Netlify build failed"
+  hint: Open the deploy log in the Netlify site under Deploys. A failing build is almost always an error in the site's code.
+  fix: Fix the error the log shows, push, and run cimiento publish or cimiento up again.
+
+- code: NETLIFY_DEPLOYMENT_NOT_READY
+  provider: netlify
+  title: the Netlify deploy is not ready
+  signatures:
+    - "No ready Netlify deploy"
+    - "No production deploy exists for this Netlify site"
+    - "The latest production deploy is"
+  hint: Wait for the build to finish and run cimiento doctor again. A first build takes a few minutes.
+  fix: When an env var changed after the last deploy, cimiento up builds again so the live site reads the new value.

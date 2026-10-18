@@ -100,6 +100,9 @@ const SLOT_NAMES: Record<string, { en: string; es: string }> = {
   auth: { en: 'login system', es: 'sistema de inicio de sesion' },
   jobs: { en: 'background jobs service', es: 'servicio de tareas en segundo plano' },
   bot_protection: { en: 'bot protection', es: 'proteccion contra bots' },
+  email: { en: 'email sending service', es: 'servicio de envio de correo' },
+  payments: { en: 'payments service (test mode)', es: 'servicio de pagos (modo de prueba)' },
+  analytics: { en: 'analytics service', es: 'servicio de analitica' },
   ai: { en: 'AI provider', es: 'proveedor de IA' },
 }
 
@@ -113,7 +116,7 @@ export function slotName(lang: Lang, slot: string): string {
  */
 export function nextAction(hint: string): string {
   const match =
-    /\bcimiento (?:up(?: --allow-billing)?|doctor|plan|down(?: --yes)?|join|dev|env pull|secret (?:set|rotate|remove) [A-Z0-9_]+|accounts set [a-z]+|explain [\w.-]+)/.exec(
+    /\bcimiento (?:up(?: --allow-billing)?|doctor|plan|down(?: --yes)?|join|dev|env pull|secret (?:set|rotate|remove) [A-Z0-9_]+|accounts set [a-z]+|domain (?:add|remove) [a-z0-9.-]+|explain [\w.-]+)/.exec(
       hint,
     )
   return match ? match[0] : 'cimiento doctor'

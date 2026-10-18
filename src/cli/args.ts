@@ -19,7 +19,7 @@ const GLOBAL_BOOLEANS = new Set([
   'no-verify',
 ])
 
-const COMMANDS_WITH_SUB = new Set(['env', 'secret', 'accounts'])
+const COMMANDS_WITH_SUB = new Set(['env', 'secret', 'accounts', 'domain'])
 
 export function parseArgs(argv: string[]): ParsedArgs {
   const flags: Record<string, string | boolean> = {}

@@ -144,6 +144,8 @@ export function openProject(session: Session, options: { dryRun: boolean; cwd?: 
     // Every hidden prompt is recorded as a prompt with the answer ****, never the value.
     promptHidden: session.runLog.recordAsk('hidden', session.deps.promptHidden ?? askHidden),
     ...(canWalk(session) ? { walkStep: walker(session) } : {}),
+    ...(canWalk(session) && sessionChooser(session) ? { choose: sessionChooser(session)! } : {}),
+    lang: session.lang,
   })
   const chooser = sessionChooser(session)
   const asker = sessionAsker(session)
