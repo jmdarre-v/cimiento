@@ -133,3 +133,21 @@ Guided mode in English and Spanish per section 10, `scripts/install.sh` per sect
 5. README with the expert and guided paths, `docs/TROUBLESHOOTING.md` generated from the knowledge base, and a CHANGELOG.
 
 End with the install one-liner and the two commands a new person runs. User zero, the first beginner on her own Mac, comes after this goal (SPEC section 17).
+
+---
+
+## Goal 5: close v1 and build v2 (SPEC section 18); version 0.2.0
+
+1. Build the database sink (Supabase secrets) and the ci sink (`gh secret set`) from SPEC section 8, covered by `secret set`, `rotate` and `check`. Build the `hosting.preview` check from section 12 for Vercel and Netlify.
+2. Providers `netlify` (hosting), `neon` (database), `resend` (email), `stripe` (payments, test mode only, never live keys), `posthog` (analytics), each with the full Provider interface, wiring rules per section 6 (env vars into the hosting provider, auth URLs and domains following hosting), person steps in the BUG-41 format in en and es including account sign-up, down, KB entries and unit tests. The custom domain rule from section 6 as `cimiento domain add <domain>`, updating hosting, Supabase Auth URLs and Turnstile domains, and `cimiento domain remove`.
+3. Windows via WSL: `install.sh` supports Ubuntu under WSL. Add a GitHub Actions workflow running build, tests and `install.sh --dry-run` on ubuntu-latest and macos-latest.
+4. Field tests on existing sessions, unattended, recorded in `docs/FIELD-TEST-5.md` with timings from the run logs:
+   - a) `cimiento new cimiento-test-5 --preset designer --json --yes`; change the title in `app/page.tsx`, run `cimiento publish`, confirm the new title is live; push a branch and confirm `hosting.preview` passes; declare `CIMIENTO_TEST_SECRET` with sinks hosting and ci, set it from the env source with a fake value, check, rotate with a second fake value, check; run `cimiento dev` for 30 seconds and confirm the local page answers 200; clone the repo into a second folder and run `cimiento join`, every check ok.
+   - b) A second project `cimiento-test-5b` with hosting netlify, database neon, email resend, payments stripe, analytics posthog: up to a live URL with every check passing.
+   - c) `cimiento domain add` with a cimiento-test subdomain of a domain listed by `vercel domains ls`, confirm it serves, then `cimiento domain remove`.
+
+   Then `doctor` twice and `down --yes` for both projects, and confirm with each provider's CLI or API that nothing remains. A missing account, session or key is a person step: end with `BLOCKED:` and the exact attended command as Next. If `vercel domains ls` lists no domain, end with `BLOCKED: domain` and say what is needed.
+5. Every failure is a bug: fix it with a KB entry and a regression test, continuing from BUG-58.
+6. Mark v1 and v2 done in SPEC section 18. Bump to 0.2.0, CHANGELOG, regenerate `docs/TROUBLESHOOTING.md`, README covering every provider, `npm pack` check, push. Do not run `npm publish`; end with `BLOCKED: npm publish`.
+
+The GOAL REPORT includes the bug table and timings inline.
