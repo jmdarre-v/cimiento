@@ -479,3 +479,14 @@ One line per decision the spec does not cover, with the reasoning.
   install.sh takes CIMIENTO_VERSION to pin a release.
 
 - 2026-10-18 Goal 6: completed. 0.3.0 is published on npm, and 0.1.0 and 0.2.0 are deprecated.
+
+- 2026-10-18 Goal 7: down deletes only by the id state recorded. Vercel, Netlify, Neon, Supabase
+  and Turnstile send it to the API; GitHub, whose delete takes a name, reads the repository first
+  and refuses on a node id mismatch (DOWN_IDENTITY_MISMATCH). A record without an id is never
+  looked up by name (DOWN_ID_MISSING). The Supabase Marketplace path already resolves the store
+  from the recorded ref and refuses when more than one store shares the name. The env, secret and
+  domain deletes are keyed by the recorded project id plus the key or domain, which is their
+  identity. Resend, Stripe, PostHog, Anthropic and Inngest delete nothing.
+- 2026-10-18 Goal 7: down --release ID[,ID] stops tracking resources and deletes nothing. It is
+  the reconcile path for both refusals above and for unresolved legacy state, and needs no typed
+  confirmation because nothing outside the project changes.

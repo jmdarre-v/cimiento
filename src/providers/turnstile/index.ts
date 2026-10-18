@@ -5,6 +5,7 @@
 import { presenceFromStatus, type Presence } from '../../core/types'
 import { sameResource } from '../../core/state'
 import { CimientoError } from '../../core/errors'
+import { recordedId } from '../../core/identity'
 import type { ProjectState } from '../../core/state'
 import {
   attendedUpHint,
@@ -171,11 +172,11 @@ export function createTurnstileProvider(_m?: Manifest): Provider {
 
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
       if (spec.id !== 'turnstile.widget') return
-      const widget = await findWidget(ctx, spec)
-      if (!widget) return
-      const result = await cloudflareCall(ctx, spec.id, 'DELETE', `${widgetsPath(ctx, spec)}/${encodeURIComponent(widget.sitekey)}`)
+      // The recorded sitekey only; findWidget would fall back to a widget with the same name.
+      const sitekey = recordedId(ctx, spec, `the Turnstile widget ${str(spec.inputs.name) || ctx.manifest.slug}`)
+      const result = await cloudflareCall(ctx, spec.id, 'DELETE', `${widgetsPath(ctx, spec)}/${encodeURIComponent(sitekey)}`)
       if (!result.ok && result.status !== 404) {
-        throw cloudflareError(spec.id, result, `Deleting the Turnstile widget ${widget.name} failed.`, 'cimiento down retries safely.')
+        throw cloudflareError(spec.id, result, `Deleting the Turnstile widget ${sitekey} failed.`, 'cimiento down retries safely.')
       }
     },
 

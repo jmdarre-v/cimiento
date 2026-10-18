@@ -6,6 +6,7 @@
 // pushes by themselves.
 
 import { CimientoError } from '../../core/errors'
+import { recordedId } from '../../core/identity'
 import { netlifyLoginStep, netlifySignupStep, netlifyTeamStep } from '../../core/person-steps-v2'
 import { hostingEnvId } from '../../core/sink-ids'
 import { sameResource, type ProjectState } from '../../core/state'
@@ -204,8 +205,7 @@ export function createNetlifyProvider(_m?: Manifest): Provider {
 
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
       if (spec.id !== 'netlify.project') return
-      const id = ctx.state.resources[spec.id]?.externalId ?? (await findSite(ctx, spec, str(spec.inputs.name)))?.id
-      if (!id) return
+      const id = recordedId(ctx, spec, `the Netlify site ${str(spec.inputs.name)}`)
       const result = await netlifyCall(ctx, spec.id, 'DELETE', `/sites/${encodeURIComponent(id)}`)
       if (!result.ok && result.status !== 404) {
         throw netlifyError(spec.id, result, {

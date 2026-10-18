@@ -181,6 +181,8 @@ export const ERROR_CODES = [
   'DOWN_UNCONFIRMED',
   'ORPHANS_DECISION_NEEDED',
   'NEON_MIGRATION_HISTORY_UNREADABLE',
+  'DOWN_ID_MISSING',
+  'DOWN_IDENTITY_MISMATCH',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -209,6 +211,8 @@ export const PERSON_CODES: ReadonlySet<string> = new Set([
   'NETLIFY_SITE_NAME_TAKEN',
   'HOSTING_DOMAIN_DNS_NEEDED',
   'ORPHANS_DECISION_NEEDED',
+  'DOWN_ID_MISSING',
+  'DOWN_IDENTITY_MISMATCH',
 ])
 
 export function needsPerson(err: { code: string; needsHuman: boolean }): boolean {

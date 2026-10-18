@@ -163,6 +163,9 @@ something you configure, not something cimiento implies.
   reach the remote, and waits for the deploy when the live site is not built from it.
 - `cimiento down` forgets a resource only when the provider confirms it is gone. A timeout or an
   auth error keeps it in state and exits non zero; run it again.
+- `cimiento down` deletes only by the id the provider gave when cimiento made the resource. A
+  same-name project or repository someone made later is never touched: down refuses, keeps the
+  record, and `cimiento down --release ID` stops tracking it without deleting anything.
 - Changed a provider in `stack.yaml`, such as hosting from vercel to netlify? `plan` lists the old
   resources as orphans, and `up` asks whether to retain, release or destroy them:
 
@@ -192,6 +195,7 @@ cimiento up --orphans destroy
 | `cimiento secret rotate NAME` | A new value, written over every destination |
 | `cimiento secret remove NAME` | Take a secret out of the project and every destination |
 | `cimiento down` | Delete everything in state, after you type the project name back |
+| `cimiento down --release ID` | Stop tracking a resource, deleting nothing |
 | `cimiento doctor --smoke` | Also run the checks that act: a test email, an event, a test token |
 | `cimiento up --orphans <choice>` | Retain, release or destroy resources `stack.yaml` no longer selects |
 | `cimiento new <name> --scaffold-only` | Write the project files and stop, touching no account |

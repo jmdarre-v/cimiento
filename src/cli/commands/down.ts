@@ -12,6 +12,7 @@ import type { Ctx, Leftover, Presence, Provider, ResourceSpec } from '../../core
 import { manifestForOrphan, orphanSpecs } from '../../core/orphans'
 import { ask } from '../../secrets/prompt'
 import { createdOrganizationLeftovers, type OrganizationLeftover } from '../../providers/supabase'
+import { flagList } from '../args'
 import { openProject, type Session } from '../context'
 
 export interface DownEvent {
@@ -34,6 +35,9 @@ export async function downCommand(session: Session): Promise<number> {
     .filter((s) => s.kind === 'resource' && ctx.state.resources[s.id])
     .reverse()
   const toDelete = targets.filter((t) => ctx.state.resources[t.id]?.origin !== 'adopted')
+
+  const release = flagList(session.args.flags, 'release')
+  if (release.length > 0) return releaseRecords(session, project.ctx, release, allSpecs)
 
   if (targets.length === 0) {
     // Nothing left to delete, but an organization cimiento created may still be waiting for the
@@ -139,6 +143,33 @@ export async function downCommand(session: Session): Promise<number> {
     for (const left of others) session.printer.line(`Left over: the ${left.what} ${left.name}, which cimiento set up. ${left.hint}`)
   }
   return exitCode
+}
+
+/**
+ * down --release ID: stops tracking resources without touching any provider. The way out when down
+ * refused because a name answers with another id, or state has no id at all (BUG-83, BUG-84).
+ */
+function releaseRecords(session: Session, ctx: Ctx, ids: string[], allSpecs: ResourceSpec[]): number {
+  const unknown = ids.filter((id) => !ctx.state.resources[id])
+  if (unknown.length > 0) {
+    throw new CimientoError({
+      code: 'DOWN_ID_MISSING',
+      provider: 'core',
+      resource: 'down',
+      message: `State has no record of ${unknown.join(', ')}, so there is nothing to release.`,
+      hint: 'Run cimiento plan --json to see the ids state tracks, then pass one of them to cimiento down --release.',
+      retryable: false,
+      needsHuman: false,
+    })
+  }
+  let state = ctx.state
+  for (const id of ids) state = forget(state, id, allSpecs)
+  writeProjectState(ctx.cwd, { ...state, manifestHash: hashManifest(readFileSync(join(ctx.cwd, 'stack.yaml'), 'utf8')) })
+  const message = `Released ${ids.join(', ')}: cimiento no longer tracks them and deleted nothing.`
+  if (session.json) {
+    session.printer.emit({ ok: true, command: 'down', exitCode: ExitCode.ok, destroyed: [], released: ids, leftovers: [], pending: [], errors: [], message })
+  } else session.printer.line(message)
+  return ExitCode.ok
 }
 
 function dependsOnDeferred(spec: ResourceSpec, id: string): boolean {

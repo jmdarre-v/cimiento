@@ -6,6 +6,7 @@
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
+import { recordedId } from '../../core/identity'
 import { neonLoginStep, neonOrganizationStep, neonSignupStep } from '../../core/person-steps-v2'
 import { sameResource, type ProjectState } from '../../core/state'
 import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool } from '../../core/toolkit'
@@ -169,8 +170,7 @@ export function createNeonProvider(_m?: Manifest): Provider {
 
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
       if (spec.id !== 'neon.project') return
-      const id = ctx.state.resources[spec.id]?.externalId ?? (await findProject(ctx, spec))?.id
-      if (!id) return
+      const id = recordedId(ctx, spec, `the Neon project ${str(spec.inputs.name) || ctx.manifest.slug}`)
       const result = await neonCall(ctx, spec.id, 'DELETE', `/projects/${encodeURIComponent(id)}`)
       if (!result.ok && result.status !== 404) {
         throw neonError(spec.id, result, {

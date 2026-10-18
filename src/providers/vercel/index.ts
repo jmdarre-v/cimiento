@@ -5,6 +5,7 @@ import { sameResource } from '../../core/state'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
+import { recordedId } from '../../core/identity'
 import type { ProjectState } from '../../core/state'
 import {
   attendedUpHint,
@@ -267,7 +268,9 @@ export function createVercelProvider(m?: Manifest): Provider {
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
       if (spec.id !== 'vercel.project') return
       const name = str(spec.inputs.name)
-      const result = await vercelCall(ctx, spec.id, 'DELETE', `/v9/projects/${encodeURIComponent(name)}`)
+      // By the recorded id: a project made later under the same name is not this one (BUG-82).
+      const id = recordedId(ctx, spec, `the Vercel project ${name}`)
+      const result = await vercelCall(ctx, spec.id, 'DELETE', `/v9/projects/${encodeURIComponent(id)}`)
       if (!result.ok && result.status !== 404) {
         throw vercelError(spec.id, result, {
           code: 'VERCEL_API_ERROR',

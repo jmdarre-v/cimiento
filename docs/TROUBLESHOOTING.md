@@ -86,6 +86,26 @@ Cimiento down needs the project name typed back.
 
 **Looks like:** `type the project name`
 
+### DOWN_ID_MISSING
+
+Down has no recorded id for a resource, so it deletes nothing.
+
+**What to do:** Run cimiento up once so it records the id it can rebuild, or run cimiento down --release ID to stop tracking the resource without touching the provider.
+
+**Why:** down deletes a resource only by the id the provider gave when cimiento made it. A record without one, from state an older version wrote, could only be found by its name, and a name can belong to something cimiento did not make. down refuses, keeps the record and exits non zero until the record is reconciled.
+
+**Looks like:** `cannot prove which`
+
+### DOWN_IDENTITY_MISMATCH
+
+The name now answers with another id than the one cimiento made.
+
+**What to do:** If the resource cimiento made was deleted or renamed, run cimiento down --release ID to stop tracking it; nothing is deleted.
+
+**Why:** Where a provider deletes only by name, as gh repo delete does, down first reads the resource and compares its id with the one state recorded. On a mismatch it refuses, keeps the record and explains. Vercel, Netlify, Neon, Supabase and Turnstile delete by the recorded id directly.
+
+**Looks like:** `is another resource with the same name`
+
 ### DOWN_LEFTOVER
 
 Down left something it created but cannot delete.

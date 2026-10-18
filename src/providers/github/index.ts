@@ -7,6 +7,7 @@ import { githubLoginStep, githubSignupStep } from '../../core/person-steps'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
+import { identityMismatch, recordedId } from '../../core/identity'
 import { presenceFromStatus, type Presence } from '../../core/types'
 import type {
   CheckResult,
@@ -224,7 +225,11 @@ export const githubProvider: Provider = {
   async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
     if (spec.id !== 'github.repo') return
     const full = fullName(spec)
-    if (!(await viewRepo(ctx, full))) return
+    const recorded = recordedId(ctx, spec, `the repository ${full}`)
+    const view = await viewRepo(ctx, full)
+    if (!view) return
+    // gh deletes by name, so the name must still answer with the node id cimiento recorded (BUG-83).
+    if (view.id !== recorded) throw identityMismatch(spec, `The repository ${full}`, recorded, view.id)
     let result = await ctx.io.exec('gh', ['repo', 'delete', full, '--yes'])
     if (result.code !== 0 && needsDeleteScope(result)) {
       // gh never asks for delete_repo at login. Granting it is a browser step, so cimiento runs

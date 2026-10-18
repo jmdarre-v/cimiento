@@ -231,3 +231,20 @@
   fix: When a slot is removed or filled by another provider, such as hosting changed from vercel to netlify, the old resources stay in state with the spec they were made with. plan lists them as orphan. up asks once, before changing anything; retain keeps tracking them and down deletes them later, release forgets them and leaves them where they are, destroy deletes them now and confirms each gone. down always deletes them.
   seen: "Field test 6, 2026-10-18 (BUG-81). After hosting changed to netlify and down deleted the old Vercel project, state kept vercel.check.deployed, preview and repo-linked, because down judged what was a check only by the specs stack.yaml selects. It now also reads the kinds state recorded. Goal 6, 2026-10-18 (BUG-74). After hosting changed from vercel to netlify in stack.yaml, plan did not mention the old Vercel project and down left it running and untracked, because both only looked at the specs stack.yaml selects. State, now version 2, records each resource's unresolved spec and the account it was made in."
 
+- code: DOWN_ID_MISSING
+  provider: core
+  title: down has no recorded id for a resource, so it deletes nothing
+  signatures:
+    - "cannot prove which"
+  hint: Run cimiento up once so it records the id it can rebuild, or run cimiento down --release ID to stop tracking the resource without touching the provider.
+  fix: down deletes a resource only by the id the provider gave when cimiento made it. A record without one, from state an older version wrote, could only be found by its name, and a name can belong to something cimiento did not make. down refuses, keeps the record and exits non zero until the record is reconciled.
+  seen: "Goal 7, 2026-10-18 (BUG-84). Netlify, Neon and Turnstile destroy fell back to finding the site, project or widget by name when state had no id, so down could delete a same-name resource cimiento never made."
+
+- code: DOWN_IDENTITY_MISMATCH
+  provider: core
+  title: the name now answers with another id than the one cimiento made
+  signatures:
+    - "is another resource with the same name"
+  hint: If the resource cimiento made was deleted or renamed, run cimiento down --release ID to stop tracking it; nothing is deleted.
+  fix: Where a provider deletes only by name, as gh repo delete does, down first reads the resource and compares its id with the one state recorded. On a mismatch it refuses, keeps the record and explains. Vercel, Netlify, Neon, Supabase and Turnstile delete by the recorded id directly.
+  seen: "Goal 7, 2026-10-18 (BUG-82, BUG-83). Vercel destroy sent DELETE /v9/projects/<name>, and GitHub destroy ran gh repo delete <name> without comparing the node id, so a project or repository made later under the same name was deleted in place of the one cimiento made."

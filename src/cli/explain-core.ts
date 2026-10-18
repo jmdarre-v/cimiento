@@ -170,6 +170,14 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'cimiento asked a provider to delete something but could not confirm it is gone, so it keeps it on its list. Run cimiento down again later; it only forgets a resource once the provider says it is gone.',
     es: 'cimiento pidio a un proveedor borrar algo pero no pudo confirmar que ya no existe, asi que lo mantiene en su lista. Ejecuta cimiento down de nuevo mas tarde; solo lo olvida cuando el proveedor confirma que ya no existe.',
   },
+  DOWN_ID_MISSING: {
+    en: 'cimiento only deletes what it can prove it made, by the id the provider gave it. This record has no id, so cimiento deletes nothing. Run cimiento up to record it, or cimiento down --release with the id to stop tracking it.',
+    es: 'cimiento solo borra lo que puede probar que creo, por el id que le dio el proveedor. Este registro no tiene id, asi que cimiento no borra nada. Ejecuta cimiento up para registrarlo, o cimiento down --release con el id para dejar de seguirlo.',
+  },
+  DOWN_IDENTITY_MISMATCH: {
+    en: 'The name cimiento would delete now belongs to another resource, with another id than the one cimiento made. cimiento leaves it alone. If the one it made is gone, run cimiento down --release with the id to stop tracking it.',
+    es: 'El nombre que cimiento borraria ahora pertenece a otro recurso, con otro id que el que cimiento creo. cimiento no lo toca. Si el que creo ya no existe, ejecuta cimiento down --release con el id para dejar de seguirlo.',
+  },
   ORPHANS_DECISION_NEEDED: {
     en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
     es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',
