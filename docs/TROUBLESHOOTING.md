@@ -546,7 +546,7 @@ Vercel returned an unexpected error.
 
 **What to do:** Read the Vercel message in the error, then run cimiento doctor --json.
 
-**Why:** A 403 almost always means the login belongs to a different team than accounts.vercel in stack.yaml.
+**Why:** A 403 almost always means the login belongs to a different team than accounts.vercel in stack.yaml. options.vercel.deployment_protection none turns Vercel Authentication off on a project cimiento made, and strict protects every deployment; standard leaves the project's own setting alone.
 
 **Looks like:** `Vercel answered`
 

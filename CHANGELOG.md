@@ -14,6 +14,12 @@
 - `new` with `--template` writes `scaffold.ci: true`, so a project made from flags gets its
   workflows, as the presets do.
 
+### Vercel
+
+- `options.vercel.deployment_protection` is applied: `none` turns Vercel Authentication off on a
+  project cimiento made, `strict` protects every deployment, and `standard` leaves the project's
+  own setting alone. Before, the option was never sent to Vercel.
+
 ### Publish
 
 - The commit stamp on Vercel CLI deploys now applies after any cimiento run: a tree where only

@@ -68,6 +68,8 @@ interface VercelProject {
   framework?: string | null
   link?: { type?: string; org?: string; repo?: string; repoId?: number; productionBranch?: string } | null
   targets?: { production?: { alias?: string[]; url?: string; readyState?: string } } | null
+  /** Vercel Authentication on deployments; null is none. */
+  ssoProtection?: { deploymentType?: string } | null
 }
 
 interface VercelEnv {
@@ -497,13 +499,46 @@ async function getProject(ctx: Ctx, spec: ResourceSpec, idOrName: string): Promi
   return result.body
 }
 
+/**
+ * Vercel Authentication as stack.yaml asks (BUG-103): none turns it off, strict protects every
+ * deployment. standard is what Vercel gives a new project, and cimiento leaves the project's own
+ * setting alone for it, so a choice made in the dashboard is never undone.
+ */
+const PROTECTION: Record<string, { deploymentType: string } | null> = { none: null, strict: { deploymentType: 'all' } }
+
+function protectionDiffers(project: VercelProject, wanted: string): boolean {
+  if (!(wanted in PROTECTION)) return false
+  const target = PROTECTION[wanted]
+  const current = project.ssoProtection ?? null
+  return target === null ? current !== null : current?.deploymentType !== target.deploymentType
+}
+
+async function applyProtection(ctx: Ctx, spec: ResourceSpec, project: VercelProject, wanted: string): Promise<void> {
+  const patched = await vercelCall<VercelProject>(ctx, spec.id, 'PATCH', `/v9/projects/${encodeURIComponent(project.id)}`, { ssoProtection: PROTECTION[wanted] })
+  if (!patched.ok) {
+    throw vercelError(spec.id, patched, {
+      code: 'VERCEL_API_ERROR',
+      message: `Setting deployment protection to ${wanted} on the Vercel project ${project.name} failed.`,
+      hint: 'cimiento up retries this safely. On a plan without that protection setting, set options.vercel.deployment_protection to standard.',
+    })
+  }
+}
+
 async function ensureProject(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const name = str(spec.inputs.name)
   const known = ctx.state.resources[spec.id]
   const existing = await getProject(ctx, spec, name)
+  const protection = str(spec.inputs.deploymentProtection) || 'standard'
   if (existing) {
+    const adopted = !sameResource(known?.externalId, existing.id)
+    // Only on a project cimiento made: an adopted one keeps its owner's settings.
+    if (!adopted && protectionDiffers(existing, protection)) {
+      if (ctx.dryRun) return { action: 'noop' }
+      await applyProtection(ctx, spec, existing, protection)
+      return { action: 'updated', externalId: existing.id, url: dashboardUrl(existing), outputs: projectOutputs(existing) }
+    }
     return {
-      action: sameResource(known?.externalId, existing.id) ? 'noop' : 'adopted',
+      action: adopted ? 'adopted' : 'noop',
       externalId: existing.id,
       url: dashboardUrl(existing),
       outputs: projectOutputs(existing),
@@ -521,6 +556,7 @@ async function ensureProject(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult
       hint: 'Pick a different name in stack.yaml, or check that accounts.vercel points at a team you belong to.',
     })
   }
+  if (protectionDiffers(created.body, protection)) await applyProtection(ctx, spec, created.body, protection)
   return {
     action: 'created',
     externalId: created.body.id,

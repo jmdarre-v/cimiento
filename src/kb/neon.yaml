@@ -15,7 +15,7 @@
     - "Creating the Neon project"
   hint: Read the Neon message in the error, then run cimiento doctor --json.
   fix: With a personal login, cimiento always names the organization in accounts.neon, because Neon lists and creates projects per organization. The key for previews, neon.api-key, is an organization API key scoped to the one project; a member of the organization can make it. When this machine's keychain no longer holds its value, cimiento up makes a new one, revokes the old one, and writes the new one to the Actions secret and the preview env.
-  seen: "Goal 8, 2026-10-18 (BUG-102, BUG-96). Field test 8 showed a key scoped to one project gets 404 on GET /projects, not allowed outside the project it is scoped to, while it reads the project and its branches; the preview workflow failed with NEON_API_KEY reaches 0 Neon projects. NEON_PROJECT_ID now goes beside the key, to the Actions secrets and the preview env. Before that, The preview database workflow and the previews needed a Neon key nobody had: cimiento now makes one scoped to the project, keeps it as a generated secret and down revokes it."
+  seen: "Goal 8, 2026-10-18 (BUG-102, BUG-96). Field test 8 showed a key scoped to one project gets 404 on GET /projects, not allowed outside the project it is scoped to, while it reads the project and its branches; the preview workflow failed with NEON_API_KEY reaches 0 Neon projects. NEON_PROJECT_ID now goes beside the key, to the Actions secrets and the preview env. Before that, the preview database workflow and the previews needed a Neon key nobody had: cimiento now makes one scoped to the project, keeps it as a generated secret and down revokes it."
 
 - code: NEON_PROJECT_LIMIT
   provider: neon

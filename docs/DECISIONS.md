@@ -557,3 +557,7 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 8: a project scoped Neon key cannot list projects (404, outside the project), so
   NEON_PROJECT_ID, which is not a secret, is written beside it: a preview env value marked public
   and an Actions secret from a literal, since the ci sink writes secrets only (BUG-102).
+- 2026-10-18 Goal 8: options.vercel.deployment_protection is applied with PATCH ssoProtection on a
+  project cimiento created: none is null, strict is deploymentType all. standard is Vercel's own
+  default for a new project, so cimiento never patches toward it and a setting changed in the
+  dashboard stays. An adopted project is never changed (BUG-103).

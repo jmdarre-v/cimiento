@@ -27,6 +27,8 @@ export interface FakeVercelProject {
   link: { type: string; org: string; repo: string; productionBranch: string } | null
   productionAlias: string | null
   createdAt?: number
+  /** Vercel Authentication. New projects get standard protection; null is none. */
+  ssoProtection?: { deploymentType: string } | null
 }
 
 export interface FakeVercelEnv {
@@ -1000,6 +1002,11 @@ export class FakeCloud implements Io {
         return json(200, {})
       }
       if (!project) return json(404, { error: { message: 'project not found' } })
+      if (method === 'PATCH') {
+        const body = req.body as { ssoProtection?: { deploymentType: string } | null }
+        if ('ssoProtection' in body) project.ssoProtection = body.ssoProtection ?? null
+        return json(200, this.renderVercelProject(project))
+      }
       return json(200, this.renderVercelProject(project))
     }
 
@@ -1049,6 +1056,7 @@ export class FakeCloud implements Io {
       framework: project.framework,
       link: project.link,
       targets: project.productionAlias ? { production: { alias: [project.productionAlias] } } : null,
+      ssoProtection: project.ssoProtection === undefined ? { deploymentType: 'all_except_custom_domains' } : project.ssoProtection,
     }
   }
 

@@ -12,7 +12,8 @@
   signatures:
     - "Vercel answered"
   hint: Read the Vercel message in the error, then run cimiento doctor --json.
-  fix: A 403 almost always means the login belongs to a different team than accounts.vercel in stack.yaml.
+  fix: A 403 almost always means the login belongs to a different team than accounts.vercel in stack.yaml. options.vercel.deployment_protection none turns Vercel Authentication off on a project cimiento made, and strict protects every deployment; standard leaves the project's own setting alone.
+  seen: "Goal 8, 2026-10-18 (BUG-103). Field test 8 set deployment_protection none, and the preview still answered Protected by Vercel Authentication: the option was read into the plan and never sent to Vercel."
 
 - code: VERCEL_PROJECT_CREATE_FAILED
   provider: vercel

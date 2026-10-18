@@ -368,3 +368,18 @@ describe('BUG-101: a CLI deploy of a dirty tree is not the commit it names', () 
     expect(publish.writer.outText).toContain('PUBLISH_LIVE_COMMIT_UNKNOWN')
   })
 })
+
+describe('BUG-103: options.vercel.deployment_protection was never applied', () => {
+  it('none leaves previews public, and a second up changes nothing', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const scaffolded = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--scaffold-only', '--json', '--dir', dir], root)
+    expect(scaffolded.code).toBe(ExitCode.ok)
+    const file = join(dir, 'stack.yaml')
+    writeFileSync(file, readFileSync(file, 'utf8').replace('deployment_protection: standard', 'deployment_protection: none'))
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-600)).toBe(ExitCode.ok)
+    expect([...cloud.vercelProjects.values()][0].ssoProtection).toBeNull()
+    const again = await cli(cloud, ['up', '--json', '--yes'])
+    expect(again.writer.outText).toMatch(/"id":"vercel.project","kind":"resource","provider":"vercel","action":"noop"/)
+  })
+})
