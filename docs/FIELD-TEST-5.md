@@ -128,7 +128,7 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 | BUG-62 | secret rotate on a Netlify project said Vercel reads env when it builds | f120fac |
 | BUG-63 | secret set and rotate wrote the hosting env but did not deploy again, so the live app kept the old value and a fresh join failed vercel.deployment | 4d59548 |
 | BUG-64 | The DNS step named cname.vercel-dns.com while Vercel recommends a project specific CNAME first, and could not name a TXT challenge | 4c88d5c |
-| BUG-65 | The first CI run failed on ubuntu-latest: the installer tests used the machine's /usr/bin, where the GitHub runner has gh, so gh counted as already installed | see git log |
+| BUG-65 | The first CI run failed on ubuntu-latest: the installer tests used the machine's /usr/bin, where the GitHub runner has gh, so gh counted as already installed | e721e4d |
 
 ## Left for a person
 
