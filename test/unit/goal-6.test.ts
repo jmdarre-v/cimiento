@@ -556,4 +556,16 @@ describe('BUG-81: down leaves no check of a swapped out provider in state', () =
     expect((await cli(cloud, ['down', '--yes', '--json'])).code).toBe(ExitCode.ok)
     expect(Object.keys(stateOf().resources).filter((id) => id.includes('.check.') || id.includes('.binding.') || id.includes('.env.'))).toEqual([])
   })
+
+  it('a down with nothing left to destroy still clears checks an older down left behind', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    await cli(cloud, ['down', '--yes', '--json'])
+    const { writeFileSync } = await import('node:fs')
+    const state = JSON.parse(readFileSync(join(dir, '.cimiento', 'state.json'), 'utf8'))
+    state.resources['vercel.check.deployed'] = { createdAt: '2026-10-18T00:00:00.000Z' }
+    writeFileSync(join(dir, '.cimiento', 'state.json'), JSON.stringify(state))
+    expect((await cli(cloud, ['down', '--yes', '--json'])).code).toBe(ExitCode.ok)
+    expect(stateOf().resources['vercel.check.deployed']).toBeUndefined()
+  })
 })

@@ -41,7 +41,8 @@ export async function downCommand(session: Session): Promise<number> {
     const leftovers = project.providers.some((p) => p.id === 'supabase')
       ? await createdOrganizationLeftovers(ctx).catch(() => [])
       : []
-    const next = recordLeftovers(ctx.state, leftovers)
+    // Checks an older down left behind go too (BUG-81).
+    const next = dropOrphanChecks(recordLeftovers(ctx.state, leftovers), allSpecs)
     writeProjectState(ctx.cwd, { ...next, manifestHash: hashManifest(readFileSync(join(ctx.cwd, 'stack.yaml'), 'utf8')) })
     const payload = {
       ok: true,
