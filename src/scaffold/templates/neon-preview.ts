@@ -11,7 +11,8 @@ import type { Manifest } from '../../manifest/schema'
 /** The one helper the workflow script and the app share, so both use the same branch name. */
 export const NEON_PREVIEW_HELPER = `// Written by cimiento. Finds, makes and removes the Neon branch a preview reads. The workflow in
 // .github/workflows/preview-database.yml and lib/db.ts both use it, so they agree on the name.
-// NEON_API_KEY is a key scoped to this one Neon project, which cannot delete the project.
+// NEON_API_KEY is a key scoped to this one Neon project, which cannot delete the project, and
+// NEON_PROJECT_ID names that project: a scoped key cannot list projects to find it.
 
 const API = process.env.CIMIENTO_NEON_API || 'https://console.neon.tech/api/v2'
 
@@ -33,13 +34,14 @@ async function neon(path, init = {}) {
   return res.json()
 }
 
-/** The one project the key reaches. A key that reaches more is not the one cimiento made. */
+/** This app's Neon project, which the key must reach. */
 export async function previewProject() {
-  const projects = (await neon('/projects?limit=10'))?.projects ?? []
-  if (projects.length !== 1) {
-    throw new Error(\`NEON_API_KEY reaches \${projects.length} Neon projects; cimiento gives previews a key scoped to this app's project only.\`)
+  const projectId = process.env.NEON_PROJECT_ID
+  if (!projectId) throw new Error('NEON_PROJECT_ID is not set, so this preview cannot find its database. cimiento up writes it for previews.')
+  if (!(await neon(\`/projects/\${encodeURIComponent(projectId)}\`))) {
+    throw new Error(\`NEON_API_KEY cannot reach the Neon project \${projectId}; cimiento up makes a key scoped to it.\`)
   }
-  return projects[0].id
+  return projectId
 }
 
 async function findBranch(projectId, name) {
@@ -145,6 +147,7 @@ jobs:
       - name: Make or remove the Neon branch
         env:
           NEON_API_KEY: \${{ secrets.NEON_API_KEY }}
+          NEON_PROJECT_ID: \${{ secrets.NEON_PROJECT_ID }}
           EVENT: \${{ github.event_name }}
           GIT_BRANCH: \${{ github.event_name == 'delete' && github.event.ref || github.ref_name }}
         run: node .github/scripts/preview-database.mjs

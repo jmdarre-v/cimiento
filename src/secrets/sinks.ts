@@ -16,6 +16,8 @@ function str(value: Value | undefined): string {
 
 /** The value of a declared secret, or the person step that provides it. */
 export async function secretValue(ctx: Ctx, spec: ResourceSpec, key: string): Promise<string> {
+  // A value the plan knows, such as the Neon project id the preview workflow needs (BUG-102).
+  if (str(spec.inputs.source) === 'literal' && str(spec.inputs.value)) return str(spec.inputs.value)
   const value = await ctx.secrets.get(key)
   if (value) {
     ctx.redactor.addName(key)

@@ -120,10 +120,11 @@ describe('BUG-95: the workflow script and the app find the preview database by t
     server = undefined
     delete process.env.CIMIENTO_NEON_API
     delete process.env.NEON_API_KEY
+    delete process.env.NEON_PROJECT_ID
   })
 
-  /** A tiny Neon: projects the key reaches, branches, connection strings. */
-  async function fakeNeon(projects = ['proj-one']): Promise<{ branches: { id: string; name: string }[]; calls: string[] }> {
+  /** A tiny Neon, as a key scoped to one project sees it: that project, its branches, addresses. */
+  async function fakeNeon(project = 'proj-one'): Promise<{ branches: { id: string; name: string }[]; calls: string[] }> {
     const branches = [{ id: 'br-main', name: 'main' }]
     const calls: string[] = []
     server = createServer((req, res) => {
@@ -137,7 +138,12 @@ describe('BUG-95: the workflow script and the app find the preview database by t
           res.end(data === undefined ? '' : JSON.stringify(data))
         }
         if (req.headers.authorization !== 'Bearer neon-key-fake') return send(401, { message: 'unauthorized' })
-        if (url.pathname === '/projects') return send(200, { projects: projects.map((id) => ({ id })) })
+        // As real Neon answers a project scoped key (field test 8): nothing outside its project.
+        const outside = { code: '', message: `not allowed to perform actions outside the project this key is scoped to; subject_project_id:"${project}"` }
+        if (url.pathname === '/projects') return send(404, outside)
+        const one = /^\/projects\/([^/]+)/.exec(url.pathname)
+        if (one && one[1] !== project) return send(404, outside)
+        if (one && url.pathname === `/projects/${project}`) return send(200, { project: { id: project } })
         const m = /^\/projects\/([^/]+)\/(branches|connection_uri)(?:\/([^/]+)(\/databases)?)?$/.exec(url.pathname)
         if (!m) return send(404, { message: 'no route' })
         if (m[2] === 'connection_uri') return send(200, { uri: `postgresql://u:p@ep-${url.searchParams.get('branch_id')}-pooler.example.neon.tech/neondb` })
@@ -161,6 +167,7 @@ describe('BUG-95: the workflow script and the app find the preview database by t
     await new Promise((resolve) => server!.listen(0, '127.0.0.1', () => resolve(undefined)))
     process.env.CIMIENTO_NEON_API = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`
     process.env.NEON_API_KEY = 'neon-key-fake'
+    process.env.NEON_PROJECT_ID = project
     return { branches, calls }
   }
 
@@ -217,10 +224,13 @@ describe('BUG-95: the workflow script and the app find the preview database by t
     expect(found.url).not.toContain('br-main')
   })
 
-  it('a key that reaches more than one project is refused', async () => {
-    await fakeNeon(['proj-one', 'proj-two'])
+  it('BUG-102: a key scoped to one project cannot list projects, so the project id comes with it; a wrong one is named', async () => {
+    await fakeNeon('proj-one')
     const { helper } = await generated()
-    await expect(helper.previewDatabaseUrl('feature/login')).rejects.toThrow(/reaches 2 Neon projects/)
+    process.env.NEON_PROJECT_ID = 'proj-other'
+    await expect(helper.previewDatabaseUrl('feature/login')).rejects.toThrow(/NEON_API_KEY cannot reach the Neon project proj-other/)
+    delete process.env.NEON_PROJECT_ID
+    await expect(helper.previewDatabaseUrl('feature/login')).rejects.toThrow(/NEON_PROJECT_ID is not set/)
   })
 })
 
@@ -241,6 +251,10 @@ describe('BUG-96: cimiento makes the key the workflow and the previews use, scop
     const env = (cloud.vercelEnv.get(projectId) ?? []).filter((e) => e.key === 'NEON_API_KEY')
     expect(env.map((e) => e.target)).toEqual([['preview']])
     expect(env[0].value).toBe(value)
+    // A scoped key cannot list projects, so the project id goes with it (BUG-102).
+    expect(cloud.actionsSecrets.get(repo)?.get('NEON_PROJECT_ID')).toBe(project.id)
+    const projectEnv = (cloud.vercelEnv.get(projectId) ?? []).filter((e) => e.key === 'NEON_PROJECT_ID')
+    expect(projectEnv.map((e) => [e.target, e.value])).toEqual([[['preview'], project.id]])
 
     const up = await cli(cloud, ['up', '--json', '--yes'])
     expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)

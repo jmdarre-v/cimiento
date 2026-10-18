@@ -8,6 +8,8 @@ import type { ResourceSpec } from '../core/types'
 
 /** The declared secret that carries the Neon key for previews (Goal 8). */
 export const NEON_KEY_SECRET = 'NEON_API_KEY'
+/** The project that key is scoped to, which the key itself cannot list. */
+export const NEON_PROJECT_ENV = 'NEON_PROJECT_ID'
 import type { ProjectState } from '../core/state'
 import type { Manifest } from '../manifest/schema'
 import type { WiringResult, WiringRule } from './types'
@@ -60,6 +62,17 @@ export const hostingNeonRule: WiringRule = {
         inputs: { projectId: { deferred: 'neon.project:projectId' }, name: `cimiento-${m.slug}-preview`, secret: NEON_KEY_SECRET },
       })
       edges.push({ from: hostingEnvId(hosting, NEON_KEY_SECRET, 'preview'), to: 'neon.api-key' }, { from: ciSecretId(NEON_KEY_SECRET), to: 'neon.api-key' })
+      // A key scoped to one project cannot list projects, so the id of that project goes with it
+      // to the workflow and to previews (BUG-102). It is not a secret.
+      const projectId = { deferred: 'neon.project:projectId' }
+      specs.push(hostingEnvSpec(hosting, NEON_PROJECT_ENV, 'preview', { source: 'literal', value: projectId, public: true }, ['neon.project']), {
+        id: ciSecretId(NEON_PROJECT_ENV),
+        kind: 'binding',
+        provider: 'github',
+        dependsOn: ['github.repo', 'neon.project'],
+        inputs: { repo: { deferred: 'github.repo:fullName' }, key: NEON_PROJECT_ENV, source: 'literal', value: projectId },
+      })
+      edges.push({ from: hostingDeploymentId(hosting), to: hostingEnvId(hosting, NEON_PROJECT_ENV, 'preview') })
     }
     return { specs, edges }
   },

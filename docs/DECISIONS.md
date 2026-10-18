@@ -554,3 +554,6 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 8: field test 8 showed the Vercel CLI records githubCommitSha and githubCommitRef on
   CLI deploys too, with gitDirty 1 when the tree had changes. The live commit is githubCommitSha
   unless gitDirty is set, then cimiento's own stamp, else unknown (BUG-101).
+- 2026-10-18 Goal 8: a project scoped Neon key cannot list projects (404, outside the project), so
+  NEON_PROJECT_ID, which is not a secret, is written beside it: a preview env value marked public
+  and an Actions secret from a literal, since the ci sink writes secrets only (BUG-102).
