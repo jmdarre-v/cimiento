@@ -2,6 +2,7 @@
 // with checks and receipts.
 
 import { acquireProjectLock } from '../../core/lock'
+import { sharedPreviewWarning } from '../../core/hosting'
 import { flagString } from '../args'
 import { orphanSpecs, undecidedOrphans } from '../../core/orphans'
 import { destroyTargets, forget } from './down'
@@ -49,6 +50,11 @@ async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> 
   let project = openProject(session, { dryRun: false, cwd })
   if (await settleOrphans(session, project)) project = openProject(session, { dryRun: false, cwd })
   announceSmoke(session, project)
+  const shared = sharedPreviewWarning(project.manifest)
+  if (shared) {
+    if (session.json) session.printer.emit({ event: 'warning', code: 'PREVIEW_DATABASE_SHARED', message: shared })
+    else session.printer.line(`Warning: ${shared}`)
+  }
   let personPhase: { pending: string[] } = { pending: [] }
   if (session.interactive) {
     // Everything that needs the person comes first, so the rest can run without them (BUG-42):

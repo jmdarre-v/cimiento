@@ -186,6 +186,14 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'publish could not learn from the hosting which commit the live site is built from, so it does not claim your change is live. Check the hosting login with cimiento doctor, then run cimiento publish again.',
     es: 'publish no pudo saber por el hosting de que commit esta hecho el sitio en linea, asi que no afirma que tu cambio este publicado. Revisa la sesion del hosting con cimiento doctor y vuelve a ejecutar cimiento publish.',
   },
+  PREVIEW_DATABASE_FAILED: {
+    en: 'A preview of one of your branches has no database of its own yet, so it gets none rather than your production data. Run cimiento up to make it, then push the branch again.',
+    es: 'Una vista previa de una de tus ramas aun no tiene base de datos propia, asi que no recibe ninguna en lugar de tus datos de produccion. Ejecuta cimiento up para crearla y vuelve a subir la rama.',
+  },
+  PREVIEW_DATABASE_SHARED: {
+    en: 'stack.yaml says previews share the production database, so a preview of unfinished work can change real data. Remove that setting to give previews their own database.',
+    es: 'stack.yaml dice que las vistas previas comparten la base de datos de produccion, asi que una vista previa de trabajo sin terminar puede cambiar datos reales. Quita esa opcion para darles su propia base de datos.',
+  },
   ORPHANS_DECISION_NEEDED: {
     en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
     es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',

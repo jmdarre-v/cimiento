@@ -257,3 +257,88 @@ describe('BUG-87: publish never fills a failed live-commit lookup from cached st
     expect(publish.writer.outText).toContain('"published":false')
   })
 })
+
+const VERCEL_NEON = ['--repo', 'github', '--hosting', 'vercel', '--database', 'neon', '--template', 'nextjs-app']
+
+/** A branch pushed with plain git, with the ready preview Vercel builds for it. */
+function pushBranch(cloud: FakeCloud, branch: string): void {
+  const sha = cloud.gitSha()
+  cloud.pushedBranches.set(branch, sha)
+  const project = [...cloud.vercelProjects.values()][0]
+  const list = cloud.deployments.get(project.id) ?? []
+  list.unshift({ uid: `dpl_${branch}`, url: `${project.name}-git-preview.vercel.app`, readyState: 'READY', target: null as unknown as string, createdAt: Date.now(), meta: { githubCommitSha: sha, githubCommitRef: branch } })
+  cloud.deployments.set(project.id, list)
+}
+
+describe('BUG-88: previews never read the production Neon database by default', () => {
+  it('the preview environment gets no DATABASE_URL of its own; each branch gets a Neon branch, created and removed with it', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    const envs = () => cloud.vercelEnv.get(projectId) ?? []
+    expect(envs().filter((e) => e.key === 'DATABASE_URL' && e.target.includes('preview') && !e.gitBranch)).toEqual([])
+    const production = envs().find((e) => e.key === 'DATABASE_URL' && e.target.includes('production'))!.value
+
+    pushBranch(cloud, 'feature/login')
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    const neon = [...cloud.v2.neonProjects.values()][0]
+    expect(neon.branches.map((b) => b.name)).toContain('preview/feature-login')
+    const scoped = envs().filter((e) => e.key === 'DATABASE_URL' && e.gitBranch === 'feature/login')
+    expect(scoped).toHaveLength(1)
+    expect(scoped[0].target).toEqual(['preview'])
+    expect(scoped[0].value).not.toBe(production)
+    expect(up.writer.outText).not.toContain(scoped[0].value)
+
+    const again = await cli(cloud, ['up', '--json', '--yes'])
+    expect(again.code).toBe(ExitCode.ok)
+    expect(again.writer.outText).toMatch(/"id":"neon\.preview-branches"[^}]*"action":"noop"/)
+
+    cloud.pushedBranches.delete('feature/login')
+    const pruned = await cli(cloud, ['up', '--json', '--yes'])
+    expect(pruned.code, pruned.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(neon.branches.map((b) => b.name)).not.toContain('preview/feature-login')
+    expect(envs().filter((e) => e.gitBranch === 'feature/login')).toEqual([])
+  })
+
+  it('on Netlify the branch address is a value for that branch context only', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, keychain: V2_KEYS })
+    await made(cloud, V2_ARGS)
+    const site = [...cloud.v2.netlifySites.values()][0]
+    const sha = cloud.gitSha()
+    cloud.pushedBranches.set('feature/login', sha)
+    cloud.v2.netlifyDeploys.unshift({ id: 'dep_branch', site_id: site.id, state: 'ready', context: 'branch-deploy', branch: 'feature/login', commit_ref: sha, deploy_ssl_url: 'https://feature-login--my-app.netlify.app', created_at: new Date().toISOString() })
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    const entry = cloud.v2.netlifyEnv.get(site.id)!.find((e) => e.key === 'DATABASE_URL')!
+    expect(entry.values.filter((v) => v.context === 'deploy-preview' || v.context === 'branch-deploy')).toEqual([])
+    const branch = entry.values.find((v) => v.context === 'branch' && v.context_parameter === 'feature/login')
+    expect(branch?.value).toBeDefined()
+    expect(branch?.value).not.toBe(entry.values.find((v) => v.context === 'production')?.value)
+  })
+
+  it('down removes the preview branches with the project and confirms them gone', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    pushBranch(cloud, 'feature/login')
+    await cli(cloud, ['up', '--json', '--yes'])
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code, down.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(cloud.v2.neonProjects.size).toBe(0)
+    expect(stateOf().resources['neon.preview-branches']).toBeUndefined()
+  })
+
+  it('environments.preview.database: shared keeps the old behavior and warns', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    const file = join(dir, 'stack.yaml')
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/environments:\n(  - .*\n)+/, 'environments:\n  dev: {}\n  preview:\n    database: shared\n  production: {}\n'))
+    const plan = await cli(cloud, ['plan', '--json'])
+    expect(plan.writer.outText).toContain('every preview deployment reads and writes the production database')
+    const up = await cli(cloud, ['up', '--json', '--yes', '--orphans', 'destroy'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(up.writer.outText).toContain('PREVIEW_DATABASE_SHARED')
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    expect((cloud.vercelEnv.get(projectId) ?? []).some((e) => e.key === 'DATABASE_URL' && e.target.includes('preview') && !e.gitBranch)).toBe(true)
+  })
+})

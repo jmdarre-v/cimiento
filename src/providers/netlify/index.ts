@@ -70,7 +70,8 @@ export interface NetlifyDeploy {
 
 interface NetlifyEnvVar {
   key: string
-  values?: { id?: string; value?: string; context?: string }[]
+  /** context branch with context_parameter names the one git branch a value is for. */
+  values?: { id?: string; value?: string; context?: string; context_parameter?: string }[]
   updated_at?: string
 }
 
@@ -469,6 +470,47 @@ async function listEnv(ctx: Ctx, spec: ResourceSpec, siteId: string, accountId: 
     throw netlifyError(spec.id, result, { code: 'NETLIFY_API_ERROR', message: 'Listing the env vars of the Netlify site failed', hint: 'cimiento doctor shows whether the Netlify session reaches this site.' })
   }
   return result.body ?? []
+}
+
+/** A value only the deploys of one git branch read: Netlify's branch context. */
+export async function setNetlifyBranchEnv(ctx: Ctx, spec: ResourceSpec, siteId: string, key: string, value: string, branch: string): Promise<void> {
+  ctx.redactor.addValue(value)
+  const accountId = await accountOf(ctx, spec, siteId)
+  const exists = (await listEnv(ctx, spec, siteId, accountId)).some((e) => e.key === key)
+  const base = `/accounts/${encodeURIComponent(accountId)}/env`
+  const site = `site_id=${encodeURIComponent(siteId)}`
+  const entry = { context: 'branch', context_parameter: branch, value }
+  const written = exists
+    ? await netlifyCall(ctx, spec.id, 'PATCH', `${base}/${encodeURIComponent(key)}?${site}`, entry)
+    : await netlifyCall(ctx, spec.id, 'POST', `${base}?${site}`, [{ key, values: [entry] }])
+  if (!written.ok) {
+    throw netlifyError(spec.id, written, {
+      code: 'NETLIFY_ENV_WRITE_FAILED',
+      message: `Writing ${key}=**** for the deploys of ${branch} failed`,
+      hint: 'cimiento up retries this safely; it writes the same value again.',
+    })
+  }
+}
+
+export async function removeNetlifyBranchEnv(ctx: Ctx, spec: ResourceSpec, siteId: string, key: string, branch: string): Promise<void> {
+  const accountId = await accountOf(ctx, spec, siteId)
+  const entry = (await listEnv(ctx, spec, siteId, accountId)).find((e) => e.key === key)
+  for (const v of (entry?.values ?? []).filter((x) => x.context === 'branch' && x.context_parameter === branch && x.id)) {
+    const deleted = await netlifyCall(ctx, spec.id, 'DELETE', `/accounts/${encodeURIComponent(accountId)}/env/${encodeURIComponent(key)}/value/${encodeURIComponent(v.id!)}?site_id=${encodeURIComponent(siteId)}`)
+    if (!deleted.ok && deleted.status !== 404) {
+      throw netlifyError(spec.id, deleted, {
+        code: 'NETLIFY_ENV_WRITE_FAILED',
+        message: `Removing ${key} from the deploys of ${branch} failed`,
+        hint: 'cimiento up retries this safely; it only removes what is still there.',
+      })
+    }
+  }
+}
+
+export async function netlifyBranchEnvBranches(ctx: Ctx, spec: ResourceSpec, siteId: string, key: string): Promise<string[]> {
+  const accountId = await accountOf(ctx, spec, siteId)
+  const entry = (await listEnv(ctx, spec, siteId, accountId)).find((e) => e.key === key)
+  return (entry?.values ?? []).filter((v) => v.context === 'branch' && v.context_parameter).map((v) => v.context_parameter!)
 }
 
 async function accountOf(ctx: Ctx, spec: ResourceSpec, siteId: string): Promise<string> {

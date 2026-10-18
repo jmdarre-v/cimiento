@@ -79,3 +79,29 @@ export function declaredSecretEnvIds(m: Manifest, name: string): string[] {
   if (!hosting || !declared?.sinks.includes('hosting')) return []
   return declared.environments.map((environment) => hostingEnvId(hosting, name, environment))
 }
+
+/**
+ * Whether previews get their own database: a hosting with a preview environment, unless stack.yaml
+ * says environments.preview.database: shared (Goal 7).
+ */
+export function previewDatabaseIsolated(m: Manifest): boolean {
+  return hostingOf(m) !== undefined && m.environments.includes('preview') && m.previewDatabase !== 'shared'
+}
+
+/** The environments a database's own env bindings cover: preview only when it is shared. */
+export function sharedDatabaseEnvironments(m: Manifest): Manifest['environments'] {
+  return previewDatabaseIsolated(m) ? m.environments.filter((e) => e !== 'preview') : m.environments
+}
+
+/** The Neon branch name for a git branch: preview/ and the branch in lowercase letters, digits and dashes. */
+export function previewBranchName(gitBranch: string): string {
+  const slug = gitBranch.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return `preview/${slug || 'branch'}`
+}
+
+/** The warning plan and up give when previews share the production database. */
+export function sharedPreviewWarning(m: Manifest): string | undefined {
+  if (!hostingOf(m) || !m.environments.includes('preview') || m.previewDatabase !== 'shared') return undefined
+  if (m.slots.database === 'none') return undefined
+  return 'environments.preview.database is shared: every preview deployment reads and writes the production database. Remove it from stack.yaml to give previews their own.'
+}

@@ -165,6 +165,23 @@ const scaffoldSchema = z
   })
   .strict()
 
+/** Per environment options, the object form of environments. Only preview takes one today. */
+const environmentOptionsSchema = z
+  .object({
+    /** isolated, the default, gives previews their own database; shared reuses production's. */
+    database: z.enum(['isolated', 'shared']).optional(),
+  })
+  .strict()
+
+const environmentsSchema = z
+  .union([
+    z.array(z.enum(ENVIRONMENTS)).min(1),
+    z
+      .record(z.enum(ENVIRONMENTS), environmentOptionsSchema.nullable())
+      .refine((r) => Object.keys(r).length > 0, 'name at least one environment'),
+  ])
+  .default([...ENVIRONMENTS])
+
 export const manifestSchema = z
   .object({
     version: z.literal(1).default(1),
@@ -176,14 +193,20 @@ export const manifestSchema = z
       .optional(),
     slots: slotsSchema,
     accounts: accountsSchema.default({}),
-    environments: z.array(z.enum(ENVIRONMENTS)).min(1).default([...ENVIRONMENTS]),
+    environments: environmentsSchema,
     options: optionsSchema.default({}),
     secrets: z.array(secretSchema).default([]),
     domain: z.string().min(1).nullable().default(null),
     scaffold: scaffoldSchema.default({}),
   })
   .strict()
-  .transform((m) => ({ ...m, slug: m.slug ?? slugify(m.name) }))
+  .transform((m) => {
+    const form = m.environments
+    const environments: Environment[] = Array.isArray(form) ? form : ENVIRONMENTS.filter((e) => e in form)
+    // Previews get their own database unless stack.yaml says shared (Goal 7).
+    const previewDatabase: 'isolated' | 'shared' = !Array.isArray(form) && form.preview?.database === 'shared' ? 'shared' : 'isolated'
+    return { ...m, slug: m.slug ?? slugify(m.name), environments, previewDatabase }
+  })
 
 export type Manifest = z.infer<typeof manifestSchema>
 export type ManifestInput = z.input<typeof manifestSchema>

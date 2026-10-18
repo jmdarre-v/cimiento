@@ -73,6 +73,8 @@ interface VercelEnv {
   id: string
   key: string
   target: string[]
+  /** Set on a preview value that only one git branch's previews read. */
+  gitBranch?: string
   type: string
   createdAt?: number
   updatedAt?: number
@@ -761,6 +763,42 @@ export async function removeEnv(spec: ResourceSpec, ctx: Ctx): Promise<boolean> 
     }
   }
   return entries.length > 0
+}
+
+/** A preview value only the previews of one git branch read, written over any earlier one. */
+export async function setVercelBranchEnv(ctx: Ctx, spec: ResourceSpec, projectId: string, key: string, value: string, branch: string): Promise<void> {
+  ctx.redactor.addValue(value)
+  const written = await vercelCall<unknown>(ctx, spec.id, 'POST', `/v10/projects/${encodeURIComponent(projectId)}/env?upsert=true`, {
+    key,
+    value,
+    type: 'encrypted',
+    target: ['preview'],
+    gitBranch: branch,
+  })
+  if (!written.ok) {
+    throw vercelError(spec.id, written, {
+      code: 'VERCEL_ENV_WRITE_FAILED',
+      message: `Writing ${key}=**** for the previews of ${branch} failed.`,
+      hint: 'cimiento up retries this safely; it writes the same value again.',
+    })
+  }
+}
+
+export async function removeVercelBranchEnv(ctx: Ctx, spec: ResourceSpec, projectId: string, key: string, branch: string): Promise<void> {
+  for (const entry of (await listEnv(ctx, spec, projectId)).filter((e) => e.key === key && e.gitBranch === branch)) {
+    const deleted = await vercelCall<unknown>(ctx, spec.id, 'DELETE', `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(entry.id)}`)
+    if (!deleted.ok && deleted.status !== 404) {
+      throw vercelError(spec.id, deleted, {
+        code: 'VERCEL_ENV_WRITE_FAILED',
+        message: `Removing ${key} from the previews of ${branch} failed.`,
+        hint: 'cimiento up retries this safely; it only removes what is still there.',
+      })
+    }
+  }
+}
+
+export async function vercelBranchEnvBranches(ctx: Ctx, spec: ResourceSpec, projectId: string, key: string): Promise<string[]> {
+  return (await listEnv(ctx, spec, projectId)).filter((e) => e.key === key && e.gitBranch).map((e) => e.gitBranch!)
 }
 
 async function resolveEnvValue(spec: ResourceSpec, ctx: Ctx, key: string): Promise<string> {

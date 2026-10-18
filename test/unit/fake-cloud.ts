@@ -34,6 +34,7 @@ export interface FakeVercelEnv {
   key: string
   value: string
   target: string[]
+  gitBranch?: string
   type: string
   createdAt?: number
   updatedAt?: number
@@ -928,9 +929,14 @@ export class FakeCloud implements Io {
       const project = this.findVercelProject(decodeURIComponent(envMatch[1]))
       if (!project) return json(404, { error: { message: 'project not found' } })
       if (method === 'GET') return json(200, { envs: this.vercelEnv.get(project.id) ?? [] })
-      const body = req.body as { key: string; value: string; target: string[] }
+      const body = req.body as { key: string; value: string; target: string[]; gitBranch?: string }
       const envs = this.vercelEnv.get(project.id) ?? []
-      envs.push({ id: this.id('env'), key: body.key, value: body.value, target: body.target, type: 'encrypted', createdAt: this.now() })
+      // As Vercel does with upsert=true: the same key, targets and branch is written over.
+      if (url.searchParams.get('upsert') === 'true') {
+        const same = envs.findIndex((e) => e.key === body.key && e.gitBranch === body.gitBranch && e.target.join() === body.target.join())
+        if (same >= 0) envs.splice(same, 1)
+      }
+      envs.push({ id: this.id('env'), key: body.key, value: body.value, target: body.target, ...(body.gitBranch ? { gitBranch: body.gitBranch } : {}), type: 'encrypted', createdAt: this.now() })
       this.vercelEnv.set(project.id, envs)
       return json(200, { key: body.key, target: body.target })
     }

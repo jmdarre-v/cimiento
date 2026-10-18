@@ -267,3 +267,22 @@
   hint: Run cimiento doctor to check the hosting session, then cimiento publish again; it resumes and only waits for the deploy.
   fix: publish asks the hosting which commit the live production deployment is built from. A failed lookup, any non 2xx or a timeout, is unknown and is never filled from what an earlier run recorded in state, so publish exits non zero instead of saying there is nothing to publish. A Vercel deploy from the CLI with a clean tree carries the commit in its meta; a live deployment from 0.3.0 or older records none, and the next publish with a change brings one that does.
   seen: "Goal 7, 2026-10-18 (BUG-87). liveCommit returned the commit state recorded whenever Vercel or Netlify answered the deployments lookup with an error, so a 503, a 401 or a timeout made publish report the site as live at HEAD and exit 0; on Netlify the error was read as no deploys and publish waited out its whole deploy timeout."
+
+- code: PREVIEW_DATABASE_FAILED
+  provider: core
+  title: a preview has no database of its own yet
+  signatures:
+    - "No preview database yet"
+    - "which previews need a database"
+  hint: Run cimiento up. It makes the preview database for each branch and writes its address for that branch only; push the branch again so its preview is built with it.
+  fix: Previews never read the production database by default. With Neon, up gives every git branch besides production a Neon branch of the project and writes DATABASE_URL and DATABASE_URL_UNPOOLED for that branch's previews only, and removes both once the git branch is gone. cimiento is not running when the hosting builds a preview, so a branch pushed with plain git has no database until the next up, and its preview fails instead of reaching production.
+  seen: "Goal 7, 2026-10-18 (BUG-88). The hosting env gave the preview environment the same DATABASE_URL as production, so every preview deployment read and wrote the production database."
+
+- code: PREVIEW_DATABASE_SHARED
+  provider: core
+  title: previews share the production database on purpose
+  signatures:
+    - "every preview deployment reads and writes the production database"
+  hint: Remove preview.database shared from environments in stack.yaml, then run cimiento up, to give previews their own database.
+  fix: environments.preview.database shared is the opt out from preview isolation. plan and up warn on every run while it is set, because a preview of an unfinished branch can change production data.
+  seen: "Goal 7, 2026-10-18. Added with preview isolation, so sharing is a choice stack.yaml states and never a default."

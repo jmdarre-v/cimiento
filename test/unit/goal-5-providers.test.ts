@@ -84,7 +84,9 @@ describe('a netlify, neon, resend, stripe and posthog project on the fake cloud'
     expect(cloud.v2.repoHooks.get('test-handle/my-app')).toEqual(['https://api.netlify.com/hooks/github'])
     expect(cloud.v2.deployKeys.get('test-handle/my-app')).toHaveLength(1)
     expect(cloud.v2.netlifyValue(site.id, 'DATABASE_URL', 'production')).toContain('-pooler.us-east-2.aws.neon.tech')
-    expect(cloud.v2.netlifyValue(site.id, 'DATABASE_URL_UNPOOLED', 'deploy-preview')).not.toContain('-pooler')
+    expect(cloud.v2.netlifyValue(site.id, 'DATABASE_URL_UNPOOLED', 'dev')).not.toContain('-pooler')
+    // Previews never get the production address (Goal 7, BUG-88).
+    expect(cloud.v2.netlifyValue(site.id, 'DATABASE_URL_UNPOOLED', 'deploy-preview')).toBeUndefined()
     expect(cloud.v2.netlifyValue(site.id, 'STRIPE_SECRET_KEY', 'branch-deploy')).toBe(KEYS['my-app/STRIPE_SECRET_KEY'])
     expect(cloud.v2.netlifyValue(site.id, 'NEXT_PUBLIC_POSTHOG_HOST', 'production')).toBe('https://us.i.posthog.com')
     expect([...cloud.v2.neonProjects.values()][0].migrations).toEqual(['20250101000000_cimiento_baseline.sql'])

@@ -23,6 +23,13 @@
   (DOWN_IDENTITY_MISMATCH). A record without an id is never looked up by name (DOWN_ID_MISSING).
 - `down --release ID[,ID]` stops tracking resources and deletes nothing.
 
+### Preview data
+
+- Previews never share the production database by default. Neon: every git branch besides
+  production gets a Neon branch, its address written for that branch's previews only, made and
+  removed by `up` and removed by `down`. `environments.preview.database: shared` opts out, with a
+  warning on every `plan` and `up`.
+
 ### Publish
 
 - `publish` reads the live commit from the hosting only. A failed lookup, any non 2xx or a

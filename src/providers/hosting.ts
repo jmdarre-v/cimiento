@@ -7,8 +7,8 @@ import { CimientoError } from '../core/errors'
 import { HOSTING_NAMES, hostingOf, type HostingId } from '../core/hosting'
 import type { Ctx, LiveCommit, ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
-import { netlifyDevEnv, netlifyLiveCommit, removeNetlifyEnv, waitForNetlifyCommit } from './netlify'
-import { ensureLocalLink, removeEnv, vercelLiveCommit, waitForCommitDeployment } from './vercel'
+import { netlifyBranchEnvBranches, netlifyDevEnv, netlifyLiveCommit, removeNetlifyBranchEnv, removeNetlifyEnv, setNetlifyBranchEnv, waitForNetlifyCommit } from './netlify'
+import { ensureLocalLink, removeEnv, removeVercelBranchEnv, setVercelBranchEnv, vercelBranchEnvBranches, vercelLiveCommit, waitForCommitDeployment } from './vercel'
 
 export interface CommitDeploy {
   url: string
@@ -106,3 +106,31 @@ export async function liveCommit(ctx: Ctx, hosting: HostingId, projectId: string
   }
 }
 
+/**
+ * The branches of the repository, or undefined when gh could not list them. Preview databases are
+ * removed for branches that are gone, so a failed listing must never read as no branches.
+ */
+export async function remoteBranches(ctx: Ctx, repo: string): Promise<{ name: string; sha: string }[] | undefined> {
+  const result = await ctx.io.exec('gh', ['api', `repos/${repo}/branches?per_page=100`, '--jq', '[.[] | {name: .name, sha: .commit.sha}]'])
+  if (result.code !== 0) return undefined
+  try {
+    return JSON.parse(result.stdout || '[]') as { name: string; sha: string }[]
+  } catch {
+    return undefined
+  }
+}
+
+/** Writes one env value for the previews of one git branch only. */
+export async function setBranchEnv(ctx: Ctx, spec: ResourceSpec, hosting: HostingId, projectId: string, key: string, value: string, branch: string): Promise<void> {
+  return hosting === 'netlify' ? setNetlifyBranchEnv(ctx, spec, projectId, key, value, branch) : setVercelBranchEnv(ctx, spec, projectId, key, value, branch)
+}
+
+/** Removes the env value one git branch's previews had; a value already gone is fine. */
+export async function removeBranchEnv(ctx: Ctx, spec: ResourceSpec, hosting: HostingId, projectId: string, key: string, branch: string): Promise<void> {
+  return hosting === 'netlify' ? removeNetlifyBranchEnv(ctx, spec, projectId, key, branch) : removeVercelBranchEnv(ctx, spec, projectId, key, branch)
+}
+
+/** The git branches that have their own value of key in the hosting env. */
+export async function branchEnvBranches(ctx: Ctx, spec: ResourceSpec, hosting: HostingId, projectId: string, key: string): Promise<string[]> {
+  return hosting === 'netlify' ? netlifyBranchEnvBranches(ctx, spec, projectId, key) : vercelBranchEnvBranches(ctx, spec, projectId, key)
+}

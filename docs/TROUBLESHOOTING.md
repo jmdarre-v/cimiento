@@ -276,6 +276,26 @@ A step waits on something nothing produces.
 
 **Looks like:** `which no provider or wiring rule produces`
 
+### PREVIEW_DATABASE_FAILED
+
+A preview has no database of its own yet.
+
+**What to do:** Run cimiento up. It makes the preview database for each branch and writes its address for that branch only; push the branch again so its preview is built with it.
+
+**Why:** Previews never read the production database by default. With Neon, up gives every git branch besides production a Neon branch of the project and writes DATABASE_URL and DATABASE_URL_UNPOOLED for that branch's previews only, and removes both once the git branch is gone. cimiento is not running when the hosting builds a preview, so a branch pushed with plain git has no database until the next up, and its preview fails instead of reaching production.
+
+**Looks like:** `No preview database yet`, `which previews need a database`
+
+### PREVIEW_DATABASE_SHARED
+
+Previews share the production database on purpose.
+
+**What to do:** Remove preview.database shared from environments in stack.yaml, then run cimiento up, to give previews their own database.
+
+**Why:** environments.preview.database shared is the opt out from preview isolation. plan and up warn on every run while it is set, because a preview of an unfinished branch can change production data.
+
+**Looks like:** `every preview deployment reads and writes the production database`
+
 ### PROJECT_LOCKED
 
 Another cimiento run is working on this project.

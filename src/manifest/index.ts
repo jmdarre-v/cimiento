@@ -66,7 +66,11 @@ export function renderManifest(m: Manifest): string {
     slug: m.slug,
     slots: m.slots,
     accounts: pruneUndefined(m.accounts),
-    environments: m.environments,
+    // The object form only when it says something the list cannot.
+    environments:
+      m.previewDatabase === 'shared'
+        ? Object.fromEntries(m.environments.map((e) => [e, e === 'preview' ? { database: 'shared' } : {}]))
+        : m.environments,
     options: m.options,
     secrets: m.secrets,
     domain: m.domain,

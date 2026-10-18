@@ -150,9 +150,25 @@ this table is about real accounts.
 ## Environments and databases
 
 `stack.yaml` lists `dev`, `preview` and `production`, and secrets go to each environment you name.
-That does not create separate databases: by default preview and production use the same Supabase
-or Neon database, with the same connection values in both. Separate databases per environment are
-something you configure, not something cimiento implies.
+Previews never read the production database by default.
+
+- Neon: every git branch besides production gets a Neon branch of the project, and its
+  `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are written for that branch's previews only.
+  `cimiento up` makes the missing ones and removes those whose git branch is gone; `down` removes
+  them all. cimiento is not running when the hosting builds a preview, so a branch pushed with
+  plain git has no database until the next `up`, and its preview fails instead of reaching
+  production. Push the branch again after `up` so its preview is built with the address. A Neon
+  branch starts as a copy of production taken when it is made; what the preview writes stays in it.
+- To share the production database with previews on purpose, say so in `stack.yaml`; `plan` and
+  `up` warn while it is set:
+
+```yaml
+environments:
+  dev: {}
+  preview:
+    database: shared
+  production: {}
+```
 
 ## When something breaks
 

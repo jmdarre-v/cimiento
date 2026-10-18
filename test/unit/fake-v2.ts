@@ -41,6 +41,7 @@ interface FakeNeonProject {
   org_id?: string
   tables: Set<string>
   migrations: string[]
+  branches: { id: string; name: string; default?: boolean }[]
 }
 
 function ok(stdout: string): ExecResult {
@@ -60,7 +61,7 @@ export class FakeV2 {
   neonLoggedIn = true
   readonly netlifyAccounts = [{ id: 'acct_fake', slug: 'fake-team', name: 'Fake Team' }]
   readonly netlifySites = new Map<string, FakeNetlifySite>()
-  readonly netlifyEnv = new Map<string, { key: string; updated_at: string; values: { id: string; context: string; value: string }[] }[]>()
+  readonly netlifyEnv = new Map<string, { key: string; updated_at: string; values: { id: string; context: string; value: string; context_parameter?: string }[] }[]>()
   readonly netlifyDeploys: FakeNetlifyDeploy[] = []
   /** Adds a site linked the way cimiento did before BUG-61: repository settings, no Next.js runtime. */
   linkWithoutRuntime(siteId: string): void {
@@ -290,10 +291,10 @@ export class FakeV2 {
       const entry = list.find((e) => e.key === env[2])
       if (!entry) return json(404, { message: 'Not Found' })
       if (method === 'PATCH') {
-        const { context, value } = req.body as { context: string; value: string }
-        const existing = entry.values.find((v) => v.context === context)
+        const { context, value, context_parameter } = req.body as { context: string; value: string; context_parameter?: string }
+        const existing = entry.values.find((v) => v.context === context && v.context_parameter === context_parameter)
         if (existing) existing.value = value
-        else entry.values.push({ id: this.id('val'), context, value })
+        else entry.values.push({ id: this.id('val'), context, value, ...(context_parameter ? { context_parameter } : {}) })
         entry.updated_at = this.iso()
         return json(201, entry)
       }
@@ -318,12 +319,20 @@ export class FakeV2 {
     if (path === '/projects' && method === 'GET') {
       const search = url.searchParams.get('search') ?? ''
       const org = url.searchParams.get('org_id') ?? undefined
-      return json(200, { projects: [...this.neonProjects.values()].filter((p) => p.name.includes(search) && (!org || p.org_id === org)).map(({ tables: _t, migrations: _m, ...p }) => p) })
+      return json(200, { projects: [...this.neonProjects.values()].filter((p) => p.name.includes(search) && (!org || p.org_id === org)).map(({ tables: _t, migrations: _m, branches: _b, ...p }) => p) })
     }
     if (path === '/projects' && method === 'POST') {
       if (this.neonProjects.size >= this.neonProjectLimit) return json(422, { code: '', message: 'projects limit exceeded' })
       const input = (req.body as { project: { name: string; region_id: string; org_id?: string } }).project
-      const project: FakeNeonProject = { id: `fake-neon-${this.id('')}`, name: input.name, region_id: input.region_id, ...(input.org_id ? { org_id: input.org_id } : {}), tables: new Set(), migrations: [] }
+      const project: FakeNeonProject = {
+        id: `fake-neon-${this.id('')}`,
+        name: input.name,
+        region_id: input.region_id,
+        ...(input.org_id ? { org_id: input.org_id } : {}),
+        tables: new Set(),
+        migrations: [],
+        branches: [{ id: 'br-main', name: 'main', default: true }],
+      }
       this.neonProjects.set(project.id, project)
       return json(201, { project: { id: project.id, name: project.name, region_id: project.region_id }, databases: [{ name: 'neondb', owner_name: 'neondb_owner' }] })
     }
@@ -336,11 +345,32 @@ export class FakeV2 {
       this.neonProjects.delete(project.id)
       return json(200, { project: { id: project.id } })
     }
-    if (rest === '/branches') return json(200, { branches: [{ id: 'br-main', name: 'main', default: true }] })
-    if (rest === '/branches/br-main/databases') return json(200, { databases: [{ name: 'neondb', owner_name: 'neondb_owner' }] })
+    if (rest === '/branches' && method === 'GET') return json(200, { branches: project.branches })
+    if (rest === '/branches' && method === 'POST') {
+      const name = (req.body as { branch?: { name?: string } }).branch?.name ?? `br-${this.id('')}`
+      if (project.branches.some((b) => b.name === name)) return json(409, { code: '', message: 'branch with that name already exists' })
+      const branch = { id: `br-${this.id('')}`, name }
+      project.branches.push(branch)
+      return json(201, { branch, endpoints: [{ id: `ep-${branch.id}`, type: 'read_write' }] })
+    }
+    const branchOne = /^\/branches\/([^/]+)(\/databases)?$/.exec(rest)
+    if (branchOne) {
+      const branch = project.branches.find((b) => b.id === branchOne[1])
+      if (!branch) return json(404, { code: '', message: 'branch not found' })
+      if (branchOne[2]) return json(200, { databases: [{ name: 'neondb', owner_name: 'neondb_owner' }] })
+      if (method === 'DELETE') {
+        project.branches.splice(project.branches.indexOf(branch), 1)
+        return json(200, { branch })
+      }
+      return json(200, { branch })
+    }
     if (rest === '/connection_uri') {
       const pooled = url.searchParams.get('pooled') === 'true'
-      return json(200, { uri: `postgresql://neondb_owner:fake-neon-password@ep-${project.id}${pooled ? '-pooler' : ''}.us-east-2.aws.neon.tech/neondb?sslmode=require` })
+      const branchId = url.searchParams.get('branch_id')
+      if (branchId && !project.branches.some((b) => b.id === branchId)) return json(404, { code: '', message: 'branch not found' })
+      // A branch other than the default has its own compute endpoint, so its own host.
+      const host = branchId && branchId !== 'br-main' ? `ep-${project.id}--${branchId}` : `ep-${project.id}`
+      return json(200, { uri: `postgresql://neondb_owner:fake-neon-password@${host}${pooled ? '-pooler' : ''}.us-east-2.aws.neon.tech/neondb?sslmode=require` })
     }
     return json(404, { code: '', message: `fake neon has no route for ${method} ${path}` })
   }

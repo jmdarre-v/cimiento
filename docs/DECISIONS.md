@@ -501,3 +501,11 @@ One line per decision the spec does not cover, with the reasoning.
   is only printed as a step; Netlify listDeploys reads a failed call as no deploys and feeds
   outputs, where the executor keeps the outputs state already has, which name things and decide
   no status. Neither reports a live status from cached state, so both stay.
+- 2026-10-18 Goal 7: Neon preview isolation is reconciled by up, not by a hook at build time:
+  cimiento does not run when the hosting builds a preview, and a GitHub Actions hook would need a
+  hosting token made in a browser. neon.preview-branches lists the remote branches with gh, makes
+  a Neon branch named preview/<branch in lowercase letters, digits and dashes> with a read write
+  endpoint, writes both addresses as Vercel preview values with gitBranch or Netlify branch
+  context values, and deletes only the branches state recorded, by id. A failed branch listing
+  stops the run and removes nothing. environments accepts an object form so preview can carry
+  database: shared; stack.yaml keeps the list form otherwise.

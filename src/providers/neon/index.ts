@@ -16,6 +16,7 @@ import { chooseAndPin } from '../../manifest/pin'
 import type { Manifest } from '../../manifest/schema'
 import { BASELINE_TABLE } from '../../scaffold/templates/nextjs-app'
 import { neonCall, neonError } from './api'
+import { destroyPreviewBranches, ensurePreviewBranches, previewBranchesPresence, verifyPreviewBranches } from './preview'
 import type { Io } from '../../core/io'
 
 const ID = 'neon'
@@ -152,6 +153,7 @@ export function createNeonProvider(_m?: Manifest): Provider {
       if (spec.kind === 'session') return ensureSession(provider, spec, ctx)
       if (spec.id === 'neon.project') return ensureProject(spec, ctx)
       if (spec.id === 'neon.migrations') return ensureMigrations(spec, ctx)
+      if (spec.id === 'neon.preview-branches') return ensurePreviewBranches(spec, ctx)
       throw unknown(spec)
     },
 
@@ -165,10 +167,12 @@ export function createNeonProvider(_m?: Manifest): Provider {
       if (spec.id === 'neon.project') return verifyProject(spec, ctx)
       if (spec.id === 'neon.migrations') return verifyMigrations(spec, ctx)
       if (spec.id === 'neon.check.migrated') return verifyMigrated(spec, ctx)
+      if (spec.id === 'neon.preview-branches') return verifyPreviewBranches(spec, ctx)
       throw unknown(spec)
     },
 
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
+      if (spec.id === 'neon.preview-branches') return destroyPreviewBranches(spec, ctx)
       if (spec.id !== 'neon.project') return
       const id = recordedId(ctx, spec, `the Neon project ${str(spec.inputs.name) || ctx.manifest.slug}`)
       const result = await neonCall(ctx, spec.id, 'DELETE', `/projects/${encodeURIComponent(id)}`)
@@ -182,6 +186,7 @@ export function createNeonProvider(_m?: Manifest): Provider {
     },
 
     async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
+      if (spec.id === 'neon.preview-branches') return previewBranchesPresence(spec, ctx)
       if (spec.id !== 'neon.project' && spec.id !== 'neon.migrations') return 'unknown'
       const id = ctx.state.resources['neon.project']?.externalId
       if (!id) return 'unknown'

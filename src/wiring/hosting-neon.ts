@@ -2,7 +2,8 @@
 // what serverless functions should use, and the direct one as DATABASE_URL_UNPOOLED, for migrations
 // and tools that hold a session. Both are secrets: cimiento writes them and never prints them.
 
-import { hostingDeploymentId, hostingEnvSpec, hostingOf } from '../core/hosting'
+import { hostingDeploymentId, hostingEnvSpec, hostingOf, hostingProjectId, hostingProjectRef, previewDatabaseIsolated, sharedDatabaseEnvironments } from '../core/hosting'
+import type { ResourceSpec } from '../core/types'
 import type { ProjectState } from '../core/state'
 import type { Manifest } from '../manifest/schema'
 import type { WiringResult, WiringRule } from './types'
@@ -22,13 +23,37 @@ export const hostingNeonRule: WiringRule = {
 
   build(m: Manifest, _state: ProjectState): WiringResult {
     const hosting = hostingOf(m)!
-    const specs = m.environments.flatMap((environment) =>
+    // Previews never get the production address unless stack.yaml says shared (BUG-88).
+    const envs = sharedDatabaseEnvironments(m).flatMap((environment) =>
       NEON_ENV_KEYS.map((entry) => hostingEnvSpec(hosting, entry.key, environment, { source: 'literal', value: { deferred: entry.ref } }, ['neon.project'])),
     )
-    return { specs, edges: specs.map((s) => ({ from: hostingDeploymentId(hosting), to: s.id })) }
+    const specs: ResourceSpec[] = [...envs]
+    if (previewDatabaseIsolated(m) && m.slots.repo === 'github') {
+      // One Neon branch per git branch besides production, its addresses written for that branch's
+      // previews only, and removed once the git branch is gone.
+      specs.push({
+        id: 'neon.preview-branches',
+        kind: 'resource',
+        provider: 'neon',
+        dependsOn: ['neon.project', hostingProjectId(hosting), 'github.repo'],
+        inputs: {
+          projectId: { deferred: 'neon.project:projectId' },
+          hosting,
+          hostingProjectId: hostingProjectRef(hosting),
+          repo: { deferred: 'github.repo:fullName' },
+          productionBranch: m.options.github.defaultBranch,
+        },
+      })
+    }
+    return { specs, edges: envs.map((s) => ({ from: hostingDeploymentId(hosting), to: s.id })) }
   },
 
   explain(key: string, lang: 'en' | 'es'): string | undefined {
+    if (key === 'neon.preview-branches') {
+      return lang === 'es'
+        ? 'Una rama de Neon por cada rama de git que no es produccion, con su direccion solo para las vistas previas de esa rama. Las vistas previas nunca leen la base de datos de produccion. cimiento up crea las que faltan y borra las de ramas que ya no existen.'
+        : 'A Neon branch for every git branch besides production, its address written for that branch\'s previews only, so previews never read the production database. cimiento up makes the missing ones and removes those whose git branch is gone.'
+    }
     const entry = NEON_ENV_KEYS.find((e) => key.includes(`.env.${e.key}.`))
     if (!entry) return undefined
     const pooled = entry.key === 'DATABASE_URL'

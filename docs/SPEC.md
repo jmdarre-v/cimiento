@@ -124,6 +124,7 @@ Rules:
 - `secrets` declares names and destinations only. Values are never in the manifest.
 - A secret only one project needs, such as `TYPESAFE_API_KEY` and `XPOZ_API_KEY` above, is declared in that project's `stack.yaml`, never in a preset. `ANTHROPIC_API_KEY` belongs to the standard stack because the `ai` slot needs it.
 - `accounts.supabase: via-hosting` means the Supabase project is created through the Vercel Marketplace and keys arrive automatically. `direct` means the Supabase CLI creates it and cimiento pushes keys to the hosting env store.
+- `environments` is a list, or an object keyed by environment when one needs an option: `environments: { dev: {}, preview: { database: shared }, production: {} }`. Previews never share the production database by default. With Neon, every git branch besides production gets a Neon branch, its address written for that branch's previews only, made and removed by `up`; with Supabase, previews read a separate preview project. `preview: { database: shared }` opts out, and `plan` and `up` warn while it is set.
 - Presets are manifest fragments: `--preset fullstack` merges the fragment above without its per-project secrets, so `ANTHROPIC_API_KEY` is its only secret; `--preset designer` sets hosting and repo only, everything else `none`.
 
 ## 5. Provider module interface
