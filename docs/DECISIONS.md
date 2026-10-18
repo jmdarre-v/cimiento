@@ -519,3 +519,4 @@ One line per decision the spec does not cover, with the reasoning.
   preview.database shared, so they keep testing what they were written for.
 - 2026-10-18 Goal 7: completed. Field test 7 in docs/FIELD-TEST-7.md, BUG-82 to 92, v0.4.0 tagged
   and pushed. npm publish of 0.4.0 and npm deprecate of 0.3.0 are person steps.
+- 2026-10-18 Goal 7: 0.4.0 is published on npm and 0.3.0 is deprecated.

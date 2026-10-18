@@ -181,7 +181,7 @@ The GOAL REPORT includes the bug table and timings inline.
 
 ## Goal 7: identity-safe teardown, honest publish, isolated preview data; version 0.4.0
 
-Status: complete. v0.4.0 is tagged and pushed; publishing it to npm is a person step.
+Status: complete. 0.4.0 is on npm; 0.3.0 is deprecated.
 
 Continue BUG ids from BUG-82, each with a KB entry and a regression test that reproduces the
 failure first.
