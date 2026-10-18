@@ -48,7 +48,7 @@ export interface FakeDeployment {
   createdAt?: number
   /** The env this deployment was built with, as Vercel bakes it in. */
   env?: Record<string, string>
-  meta?: { githubCommitSha?: string; githubCommitRef?: string }
+  meta?: { githubCommitSha?: string; githubCommitRef?: string; gitDirty?: string; cimientoCommit?: string }
 }
 
 export interface FakeWidget {
@@ -619,8 +619,14 @@ export class FakeCloud implements Io {
       const env = Object.fromEntries(
         (this.vercelEnv.get(project.id) ?? []).filter((e) => e.target.includes('production')).map((e) => [e.key, e.value]),
       )
-      // As the CLI does: each --meta KEY=value lands in the deployment's meta.
+      // As the CLI does on real Vercel (field test 8): the git commit and branch of the folder, with
+      // gitDirty when the tree has changes, and each --meta KEY=value.
       const meta: Record<string, string> = {}
+      if (this.gitCommits > 0) {
+        meta.githubCommitSha = this.gitSha()
+        meta.githubCommitRef = this.gitBranch
+        if (this.gitDirty || (this.gitDirtyPaths?.length ?? 0) > 0) meta.gitDirty = '1'
+      }
       args.forEach((a, i) => {
         if ((a === '--meta' || a === '-m') && args[i + 1]) {
           const [key, ...rest] = args[i + 1].split('=')

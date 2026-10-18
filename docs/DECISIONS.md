@@ -551,3 +551,6 @@ One line per decision the spec does not cover, with the reasoning.
   HEAD touches only .cimiento/; the state commit is still made and pushed, and the hosting may
   build it, which publish does not wait for. Netlify builds every deploy from the repository, so
   its commit_ref is always the commit; it needs no stamp.
+- 2026-10-18 Goal 8: field test 8 showed the Vercel CLI records githubCommitSha and githubCommitRef on
+  CLI deploys too, with gitDirty 1 when the tree had changes. The live commit is githubCommitSha
+  unless gitDirty is set, then cimiento's own stamp, else unknown (BUG-101).

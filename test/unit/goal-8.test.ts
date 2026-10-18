@@ -333,3 +333,24 @@ describe('BUG-99 and BUG-100: the commit stamp on CLI deploys works with cimient
     expect(result.live).toMatchObject({ commit: head, source: 'cimiento stamp' })
   })
 })
+
+describe('BUG-101: a CLI deploy of a dirty tree is not the commit it names', () => {
+  it('after a deploy with app changes not committed, a clean publish does not call HEAD live', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'designer'])
+    cloud.gitDirtyPaths = ['stack.yaml', '.cimiento/state.json']
+    expect((await cli(cloud, ['publish', '--json'])).code).toBe(ExitCode.ok)
+    // A redeploy from the CLI while app/page.tsx has a change nobody committed...
+    const file = join(dir, 'stack.yaml')
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/^secrets: \[\]\n/m, 'secrets:\n  - name: DEMO_TOKEN\n    sinks: [hosting]\n    environments: [production]\n    source: env\n'))
+    process.env.DEMO_TOKEN = 'demo-value-not-a-real-key'
+    cloud.gitDirtyPaths = ['app/page.tsx', 'stack.yaml']
+    expect((await cli(cloud, ['up', '--json', '--yes'])).code).toBe(ExitCode.ok)
+    delete process.env.DEMO_TOKEN
+    // ...then the change is thrown away: the tree is clean and HEAD is pushed, but the live app is not HEAD.
+    cloud.gitDirtyPaths = undefined
+    const publish = await cli(cloud, ['publish', '--json'])
+    expect(publish.writer.outText).not.toContain('"published":false')
+    expect(publish.writer.outText).toContain('PUBLISH_LIVE_COMMIT_UNKNOWN')
+  })
+})

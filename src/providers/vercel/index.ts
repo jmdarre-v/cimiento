@@ -1689,7 +1689,9 @@ export async function vercelLiveCommit(ctx: Ctx, spec: ResourceSpec, projectId: 
   )
   if (!list.ok) return { known: false, reason: `Vercel answered ${list.status} to the deployments lookup` }
   const ready = (list.body?.deployments ?? []).find((d) => (d.readyState ?? d.state ?? '').toUpperCase() === 'READY')
-  const git = ready?.meta?.githubCommitSha
+  // The CLI names the folder's commit even when the tree was dirty, with gitDirty set; that upload
+  // is not the commit (BUG-101). cimiento's stamp is only set when the app part was clean.
+  const git = ready?.meta?.gitDirty === '1' ? undefined : ready?.meta?.githubCommitSha
   const stamped = ready?.meta?.[COMMIT_META]
   return { known: true, commit: git ?? stamped, ...(git ? { source: 'git' as const } : stamped ? { source: 'cimiento stamp' as const } : {}) }
 }
