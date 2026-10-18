@@ -32,4 +32,14 @@
     - "not applied yet"
     - "Querying public.cimiento_baseline on Neon failed"
   hint: Fix the SQL file the error names and run cimiento up again.
-  fix: cimiento applies each file in db/migrations once, in name order, in one transaction through Neon's HTTP endpoint, and records it in cimiento_migrations. Statements end at a semicolon at the end of a line.
+  fix: cimiento applies each file in db/migrations once, in name order, whole, through a Postgres client, in one implicit transaction with its record in cimiento_migrations. A file that fails leaves nothing behind.
+
+- code: NEON_MIGRATION_HISTORY_UNREADABLE
+  provider: neon
+  title: the migration history exists but cannot be read
+  signatures:
+    - "exists but cannot be read"
+  hint: Nothing was applied. Check that the role in the connection string can read public.cimiento_migrations, then run cimiento up again.
+  fix: cimiento tells a history table that does not exist yet, which the first run creates, from one it cannot read, which stops the run, because applying every migration again on a database that already has them would break it.
+  seen: "Goal 6, 2026-10-18 (BUG-77). Migrations were split at semicolons at line ends, which cut a dollar quoted function body into broken statements, and any error reading the history table was taken as no migrations yet. Each file now goes whole through a Postgres client, in one implicit transaction with its record."
+

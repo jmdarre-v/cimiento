@@ -1,6 +1,6 @@
 // Neon provider. Fills the database slot with serverless Postgres. neonctl owns the login, the Neon
-// API owns projects, and migrations run through Neon's HTTP query endpoint, so nothing needs a
-// Postgres client on the machine. The pooled and direct connection strings are secret outputs that
+// API owns projects, and migrations and checks run through a Postgres client (io.sql), which
+// sends each file whole. The pooled and direct connection strings are secret outputs that
 // the hosting + neon wiring rule writes into the hosting env.
 
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
@@ -14,7 +14,8 @@ import type { CheckResult, Ctx, Detection, EnsureResult, Lang, Output, Provider,
 import { chooseAndPin } from '../../manifest/pin'
 import type { Manifest } from '../../manifest/schema'
 import { BASELINE_TABLE } from '../../scaffold/templates/nextjs-app'
-import { neonCall, neonError, neonSql, type SqlResult } from './api'
+import { neonCall, neonError } from './api'
+import type { Io } from '../../core/io'
 
 const ID = 'neon'
 
@@ -61,6 +62,10 @@ const EXPLAIN: Record<string, { en: string; es?: string }> = {
   NEON_PROJECT_LIMIT: {
     en: 'Your Neon organization has as many projects as its plan allows. Delete one you no longer need in the Neon console, then run cimiento up again.',
     es: 'Tu organizacion de Neon tiene tantos proyectos como permite su plan. Borra uno que ya no uses en la consola de Neon y vuelve a ejecutar cimiento up.',
+  },
+  NEON_MIGRATION_HISTORY_UNREADABLE: {
+    en: 'The table where cimiento records applied migrations exists but this database role cannot read it, so nothing was applied. Give the role read access to public.cimiento_migrations and run cimiento up again.',
+    es: 'La tabla donde cimiento anota las migraciones aplicadas existe pero este rol no puede leerla, asi que no se aplico nada. Da al rol acceso de lectura a public.cimiento_migrations y vuelve a ejecutar cimiento up.',
   },
   NEON_MIGRATION_FAILED: {
     en: 'A migration file did not run on the Neon database. The message has the Postgres error; fix the SQL file and run cimiento up again.',
@@ -356,14 +361,6 @@ function migrationFiles(ctx: Ctx, dir: string): { name: string; sql: string }[] 
     .map((name) => ({ name, sql: readFileSync(join(path, name), 'utf8') }))
 }
 
-/** One statement per entry. Statements end at a semicolon at the end of a line. */
-export function splitStatements(sql: string): string[] {
-  return sql
-    .split(/;\s*(?:\n|$)/)
-    .map((s) => s.replace(/^\s*--.*$/gm, '').trim())
-    .filter(Boolean)
-}
-
 async function directUrl(spec: ResourceSpec, ctx: Ctx): Promise<string> {
   const projectId = str(spec.inputs.projectId)
   const db = await defaultDatabase(ctx, spec, projectId)
@@ -382,42 +379,78 @@ async function directUrl(spec: ResourceSpec, ctx: Ctx): Promise<string> {
   return uri
 }
 
-function first(result: SqlResult[] | SqlResult): SqlResult {
-  return Array.isArray(result) ? (result[0] ?? { ok: false, status: 0, rows: [] }) : result
+export type History = { state: 'missing' } | { state: 'unreadable'; message: string } | { state: 'ok'; names: string[] }
+
+/**
+ * The migrations already applied. A history table that does not exist yet is missing, and the
+ * first run creates it; one that exists but cannot be read is unreadable, and nothing is applied,
+ * because applying everything again on top of a database that has it would break it (BUG-77).
+ */
+export async function migrationHistory(io: Io, url: string): Promise<History> {
+  const exists = await io.sql(url, `select to_regclass('public.${MIGRATIONS_TABLE}') as t`)
+  if (!exists.ok) return { state: 'unreadable', message: exists.error?.message ?? 'no answer' }
+  if (exists.rows[0]?.t === null || exists.rows[0]?.t === undefined) return { state: 'missing' }
+  const list = await io.sql(url, `select name from public.${MIGRATIONS_TABLE} order by name`)
+  if (!list.ok) return { state: 'unreadable', message: list.error?.message ?? 'no answer' }
+  return { state: 'ok', names: list.rows.map((r) => String(r.name)) }
 }
 
-async function appliedMigrations(ctx: Ctx, url: string): Promise<string[] | undefined> {
-  const result = first(await neonSql(ctx, url, [`select name from public.${MIGRATIONS_TABLE} order by name`]))
-  if (!result.ok) return undefined
-  return result.rows.map((r) => String(r.name))
+function historyUnreadable(spec: ResourceSpec, message: string): CimientoError {
+  return new CimientoError({
+    code: 'NEON_MIGRATION_HISTORY_UNREADABLE',
+    provider: ID,
+    resource: spec.id,
+    message: `The migration history table public.${MIGRATIONS_TABLE} exists but cannot be read: ${message.slice(0, 200)}`,
+    hint: `Nothing was applied. Check that the role in the connection string can read public.${MIGRATIONS_TABLE} (grant select on it), then run cimiento up again.`,
+    retryable: true,
+    needsHuman: true,
+  })
+}
+
+/**
+ * Applies the files not in the history yet, in name order, each whole and in one implicit
+ * transaction with its record. Returns the names applied before and now.
+ */
+export async function applyMigrations(io: Io, url: string, files: { name: string; sql: string }[], spec: ResourceSpec): Promise<{ before: string[]; applied: string[] }> {
+  const history = await migrationHistory(io, url)
+  if (history.state === 'unreadable') throw historyUnreadable(spec, history.message)
+  const before = history.state === 'ok' ? history.names : []
+  const pending = files.filter((f) => !before.includes(f.name))
+  if (pending.length > 0 && history.state === 'missing') {
+    const created = await io.sql(url, `create table if not exists public.${MIGRATIONS_TABLE} (name text primary key, applied_at timestamptz not null default now())`)
+    if (!created.ok) throw migrationFailed(spec, MIGRATIONS_TABLE, created.error?.message)
+  }
+  for (const file of pending) {
+    // The whole file, never split: dollar quoted bodies, comments and semicolons inside strings
+    // reach Postgres as written (BUG-77). The record goes in the same implicit transaction, so a
+    // file that fails leaves no trace and no record.
+    const result = await io.sql(url, `${file.sql}\n;\ninsert into public.${MIGRATIONS_TABLE} (name) values ('${file.name.replace(/'/g, "''")}')`)
+    if (!result.ok) throw migrationFailed(spec, file.name, result.error?.message)
+  }
+  return { before, applied: pending.map((f) => f.name) }
 }
 
 async function ensureMigrations(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const files = migrationFiles(ctx, str(spec.inputs.dir))
   const url = await directUrl(spec, ctx)
-  const applied = (await appliedMigrations(ctx, url)) ?? []
-  const pending = files.filter((f) => !applied.includes(f.name))
-  const outputs = (names: string[]): Record<string, Output> => ({ applied: { value: String(names.length), secret: false } })
-  if (pending.length === 0) return { action: 'noop', externalId: str(spec.inputs.projectId), outputs: outputs(applied) }
-  if (ctx.dryRun) return { action: 'noop' }
-  const setup = first(await neonSql(ctx, url, [`create table if not exists public.${MIGRATIONS_TABLE} (name text primary key, applied_at timestamptz not null default now())`]))
-  if (!setup.ok) throw migrationFailed(spec, MIGRATIONS_TABLE, setup)
-  for (const file of pending) {
-    const statements = [...splitStatements(file.sql), `insert into public.${MIGRATIONS_TABLE} (name) values ('${file.name.replace(/'/g, "''")}')`]
-    const result = await neonSql(ctx, url, statements)
-    const failed = Array.isArray(result) ? result.find((r) => !r.ok) : result
-    if (failed) throw migrationFailed(spec, file.name, failed)
+  const outputs = (count: number): Record<string, Output> => ({ applied: { value: String(count), secret: false } })
+  if (ctx.dryRun) {
+    const history = await migrationHistory(ctx.io, url)
+    if (history.state === 'unreadable') throw historyUnreadable(spec, history.message)
+    return { action: 'noop', ...(history.state === 'ok' ? { outputs: outputs(history.names.length) } : {}) }
   }
-  return { action: applied.length > 0 ? 'updated' : 'created', externalId: str(spec.inputs.projectId), outputs: outputs([...applied, ...pending.map((f) => f.name)]) }
+  const { before, applied } = await applyMigrations(ctx.io, url, files, spec)
+  if (applied.length === 0) return { action: 'noop', externalId: str(spec.inputs.projectId), outputs: outputs(before.length) }
+  return { action: before.length > 0 ? 'updated' : 'created', externalId: str(spec.inputs.projectId), outputs: outputs(before.length + applied.length) }
 }
 
-function migrationFailed(spec: ResourceSpec, name: string, result: SqlResult): CimientoError {
+function migrationFailed(spec: ResourceSpec, name: string, message = 'no answer'): CimientoError {
   return new CimientoError({
     code: 'NEON_MIGRATION_FAILED',
     provider: ID,
     resource: spec.id,
-    message: `The migration ${name} failed on Neon (${result.status}${result.message ? `: ${result.message.slice(0, 300)}` : ''}).`,
-    hint: 'Fix the SQL in that file and run cimiento up again. Each file runs in one transaction, so a failed file leaves nothing half applied.',
+    message: `The migration ${name} failed on Neon: ${message.slice(0, 300)}`,
+    hint: 'Fix the SQL in that file and run cimiento up again. Each file runs in one transaction with its record, so a failed file leaves nothing half applied.',
     retryable: false,
     needsHuman: true,
   })
@@ -425,7 +458,9 @@ function migrationFailed(spec: ResourceSpec, name: string, result: SqlResult): C
 
 async function verifyMigrations(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const files = migrationFiles(ctx, str(spec.inputs.dir))
-  const applied = (await appliedMigrations(ctx, await directUrl(spec, ctx))) ?? []
+  const history = await migrationHistory(ctx.io, await directUrl(spec, ctx))
+  if (history.state === 'unreadable') return { ok: false, error: historyUnreadable(spec, history.message) }
+  const applied = history.state === 'ok' ? history.names : []
   const pending = files.filter((f) => !applied.includes(f.name)).map((f) => f.name)
   if (pending.length > 0) {
     return {
@@ -446,7 +481,7 @@ async function verifyMigrations(spec: ResourceSpec, ctx: Ctx): Promise<CheckResu
 
 async function verifyMigrated(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const url = await directUrl(spec, ctx)
-  const result = first(await neonSql(ctx, url, [`select count(*) as n from public.${BASELINE_TABLE}`]))
+  const result = await ctx.io.sql(url, `select count(*) as n from public.${BASELINE_TABLE}`)
   if (!result.ok) {
     return {
       ok: false,
@@ -454,7 +489,7 @@ async function verifyMigrated(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult
         code: 'NEON_MIGRATION_FAILED',
         provider: ID,
         resource: spec.id,
-        message: `Querying public.${BASELINE_TABLE} on Neon failed (${result.status}${result.message ? `: ${result.message.slice(0, 200)}` : ''}).`,
+        message: `Querying public.${BASELINE_TABLE} on Neon failed: ${(result.error?.message ?? 'no answer').slice(0, 200)}`,
         hint: 'Run cimiento up, which applies the baseline migration. If the file was removed from the migrations folder, restore it.',
         retryable: true,
         needsHuman: false,

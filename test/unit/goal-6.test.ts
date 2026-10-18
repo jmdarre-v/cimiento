@@ -318,3 +318,101 @@ describe('BUG-75: doctor and plan report a failed live check as failed or unknow
     expect(access.status).toBe('unknown')
   })
 })
+
+describe.skip('BUG-76: plan and doctor are passive', () => {
+  const KEYS = {
+    'my-app/RESEND_API_KEY': 're_fake_not_a_real_key',
+    'my-app/STRIPE_SECRET_KEY': 'sk_test_fake_not_a_real_key',
+    'my-app/NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY': 'pk_test_fake_not_a_real_key',
+    'my-app/NEXT_PUBLIC_POSTHOG_KEY': 'phc_fakeprojectkeynotreal0000',
+  }
+  const FIXTURES: Record<string, { args: string[]; cloud: () => FakeCloud }> = {
+    designer: { args: ['--preset', 'designer'], cloud: () => new FakeCloud() },
+    fullstack: { args: ['--preset', 'fullstack', '--allow-billing'], cloud: () => new FakeCloud({ marketplaceDone: true }) },
+    v2: {
+      args: ['--repo', 'github', '--hosting', 'netlify', '--database', 'neon', '--email', 'resend', '--payments', 'stripe', '--analytics', 'posthog', '--template', 'nextjs-app'],
+      cloud: () => new FakeCloud({ keychain: KEYS }),
+    },
+  }
+  const WRITES = /^(POST|PUT|PATCH|DELETE) /
+
+  for (const [name, fixture] of Object.entries(FIXTURES)) {
+    it(`${name}: plan sends no POST, PUT, PATCH or DELETE, and runs nothing that changes anything`, async () => {
+      removeDir(dir)
+      const cloud = fixture.cloud()
+      const made = await cli(cloud, ['new', 'my-app', ...fixture.args, '--json', '--yes', '--dir', dir], root)
+      expect(made.code, made.writer.outText.slice(-400)).toBe(ExitCode.ok)
+      cloud.httpCalls.length = 0
+      cloud.execCalls.length = 0
+      await cli(cloud, ['plan', '--json'])
+      expect(cloud.httpCalls.filter((c) => WRITES.test(c))).toEqual([])
+      expect(cloud.execCalls.filter((c) => /^(git (push|commit|add)|gh (secret set|api -X)|vercel (deploy|link|env add))/.test(c))).toEqual([])
+    })
+
+    it(`${name}: doctor sends no write either, unless --smoke`, async () => {
+      removeDir(dir)
+      const cloud = fixture.cloud()
+      await cli(cloud, ['new', 'my-app', ...fixture.args, '--json', '--yes', '--dir', dir], root)
+      cloud.httpCalls.length = 0
+      cloud.execCalls.length = 0
+      const doctor = await cli(cloud, ['doctor', '--json'])
+      expect(cloud.httpCalls.filter((c) => WRITES.test(c))).toEqual([])
+      expect(cloud.execCalls.filter((c) => /^(git (push|commit|add)|gh (secret set|api -X)|vercel (deploy|link|env add))/.test(c))).toEqual([])
+      expect(doctor.code, doctor.writer.outText.slice(-600)).toBe(ExitCode.ok)
+    })
+  }
+
+  it('doctor --smoke runs the checks that act, and says what each one does first', async () => {
+    removeDir(dir)
+    const cloud = FIXTURES.v2.cloud()
+    await cli(cloud, ['new', 'my-app', ...FIXTURES.v2.args, '--json', '--yes', '--dir', dir], root)
+    cloud.v2.resendSent.length = 0
+    cloud.v2.posthogEvents.length = 0
+    const doctor = await cli(cloud, ['doctor', '--smoke', '--json'])
+    expect(doctor.code).toBe(ExitCode.ok)
+    expect(cloud.v2.resendSent).toHaveLength(1)
+    expect(cloud.v2.posthogEvents).toHaveLength(1)
+    const effects = doctor.writer.jsonObjects().find((o) => (o as { event?: string }).event === 'smoke') as { effects: { id: string; effect: string }[] }
+    expect(effects.effects.map((e) => e.id).sort()).toEqual(['posthog.check.capture', 'resend.check.send'])
+  })
+})
+
+describe('BUG-77: Neon migrations send whole files and tell a missing history from an unreadable one', () => {
+  const KEYS = {
+    'my-app/RESEND_API_KEY': 're_fake_not_a_real_key',
+    'my-app/STRIPE_SECRET_KEY': 'sk_test_fake_not_a_real_key',
+    'my-app/NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY': 'pk_test_fake_not_a_real_key',
+    'my-app/NEXT_PUBLIC_POSTHOG_KEY': 'phc_fakeprojectkeynotreal0000',
+  }
+  const ARGS = ['--repo', 'github', '--hosting', 'netlify', '--database', 'neon', '--email', 'resend', '--payments', 'stripe', '--analytics', 'posthog', '--template', 'nextjs-app']
+  const FUNCTION = `create or replace function public.cimiento_touch() returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+`
+
+  it('a migration with a dollar quoted function body reaches the database as one piece', async () => {
+    const cloud = new FakeCloud({ keychain: KEYS })
+    await cli(cloud, ['new', 'my-app', ...ARGS, '--json', '--yes', '--dir', dir], root)
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(join(dir, 'db/migrations/20260101000000_touch.sql'), FUNCTION)
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(cloud.v2.sqlLog.some((q) => q.includes('new.updated_at = now();') && q.includes('$$ language plpgsql'))).toBe(true)
+  })
+
+  it('a history table this role cannot read stops the run and applies nothing again', async () => {
+    const cloud = new FakeCloud({ keychain: KEYS })
+    await cli(cloud, ['new', 'my-app', ...ARGS, '--json', '--yes', '--dir', dir], root)
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(join(dir, 'db/migrations/20260101000000_more.sql'), 'create table if not exists public.more (id int);\n')
+    cloud.v2.neonHistoryUnreadable = true
+    const before = cloud.v2.sqlLog.length
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code).not.toBe(ExitCode.ok)
+    expect(up.writer.outText).toContain('NEON_MIGRATION_HISTORY_UNREADABLE')
+    expect(cloud.v2.sqlLog.slice(before).some((q) => /create table|insert into public\.cimiento_migrations/i.test(q))).toBe(false)
+  })
+})

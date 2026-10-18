@@ -808,9 +808,19 @@ A migration did not run on Neon.
 
 **What to do:** Fix the SQL file the error names and run cimiento up again.
 
-**Why:** cimiento applies each file in db/migrations once, in name order, in one transaction through Neon's HTTP endpoint, and records it in cimiento_migrations. Statements end at a semicolon at the end of a line.
+**Why:** cimiento applies each file in db/migrations once, in name order, whole, through a Postgres client, in one implicit transaction with its record in cimiento_migrations. A file that fails leaves nothing behind.
 
 **Looks like:** `failed on Neon`, `not applied yet`, `Querying public.cimiento_baseline on Neon failed`
+
+### NEON_MIGRATION_HISTORY_UNREADABLE
+
+The migration history exists but cannot be read.
+
+**What to do:** Nothing was applied. Check that the role in the connection string can read public.cimiento_migrations, then run cimiento up again.
+
+**Why:** cimiento tells a history table that does not exist yet, which the first run creates, from one it cannot read, which stops the run, because applying every migration again on a database that already has them would break it.
+
+**Looks like:** `exists but cannot be read`
 
 ### NEON_PROJECT_LIMIT
 

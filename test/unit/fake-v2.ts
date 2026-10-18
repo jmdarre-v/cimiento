@@ -2,7 +2,7 @@
 // public DNS over HTTPS and Vercel project domains. Stateful like the rest of FakeCloud, so ensure
 // twice is a noop and down leaves nothing. Every value is obviously fake.
 
-import type { ExecResult, HttpRequest, HttpResponse } from '../../src/core/io'
+import type { ExecResult, HttpRequest, HttpResponse, SqlResult } from '../../src/core/io'
 
 export interface V2Host {
   readonly pages: Map<string, { status: number; body: string }>
@@ -77,6 +77,10 @@ export class FakeV2 {
   readonly neonOrganizations = [{ id: 'org-fake-neon', name: 'Fake Neon Org' }]
   readonly neonProjects = new Map<string, FakeNeonProject>()
   neonProjectLimit = 10
+  /** Every SQL text a Neon database received, as sent. */
+  readonly sqlLog: string[] = []
+  /** The migration history table exists but this role cannot read it. */
+  neonHistoryUnreadable = false
   readonly resendSent: { from: string; to: string[] }[] = []
   readonly posthogEvents: { event: string; api_key: string }[] = []
   /** Public DNS answers by name and type, as DNS over HTTPS reports them. */
@@ -352,7 +356,9 @@ export class FakeV2 {
     const tables = new Set(project.tables)
     const migrations = [...project.migrations]
     for (const query of queries) {
+      this.sqlLog.push(query)
       const q = query.toLowerCase()
+      if (this.neonHistoryUnreadable && /from public\.cimiento_migrations/.test(q)) return json(400, { message: 'permission denied for table cimiento_migrations', code: '42501' })
       const created = /create table if not exists public\.(\w+)/.exec(q)
       const selected = /from public\.(\w+)/.exec(q)
       if (created) tables.add(created[1])
@@ -367,6 +373,30 @@ export class FakeV2 {
     project.tables = tables
     project.migrations = migrations
     return json(200, body.queries ? { results } : { command: 'SELECT', rowCount: results[0].rows.length, rows: results[0].rows, fields: [] })
+  }
+
+  /**
+   * A Neon database reached with a Postgres client: one text, run whole in one implicit
+   * transaction, as the simple query protocol does. The fake reads it with patterns only.
+   */
+  sql(connectionString: string, text: string): SqlResult {
+    this.sqlLog.push(text)
+    const host = /@ep-(.+?)(-pooler)?\.us-east-2/.exec(connectionString)?.[1] ?? ''
+    const project = this.neonProjects.get(host)
+    if (!project) return { ok: false, rows: [], error: { code: '08001', message: 'could not connect to server' } }
+    const q = text.toLowerCase()
+    if (/to_regclass\('public\.cimiento_migrations'\)/.test(q)) return { ok: true, rows: [{ t: project.tables.has('cimiento_migrations') ? 'cimiento_migrations' : null }] }
+    if (this.neonHistoryUnreadable && /from public\.cimiento_migrations/.test(q)) return { ok: false, rows: [], error: { code: '42501', message: 'permission denied for table cimiento_migrations' } }
+    if (q.includes('syntax error here')) return { ok: false, rows: [], error: { code: '42601', message: 'syntax error at or near "here"' } }
+    const selected = /from public\.(\w+)/.exec(q)
+    if (selected && !project.tables.has(selected[1]) && !new RegExp(`create table if not exists public\\.${selected[1]}`).test(q)) {
+      return { ok: false, rows: [], error: { code: '42P01', message: `relation "public.${selected[1]}" does not exist` } }
+    }
+    for (const m of q.matchAll(/create table if not exists public\.(\w+)/g)) project.tables.add(m[1])
+    for (const m of text.matchAll(/insert into public\.cimiento_migrations \(name\) values \('([^']+)'\)/gi)) project.migrations.push(m[1])
+    if (selected?.[1] === 'cimiento_migrations') return { ok: true, rows: project.migrations.map((name) => ({ name })) }
+    if (selected?.[1] === 'cimiento_baseline') return { ok: true, rows: [{ n: '1' }] }
+    return { ok: true, rows: [] }
   }
 
   private resend(req: HttpRequest, url: URL): HttpResponse {

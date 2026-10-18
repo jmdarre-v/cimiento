@@ -16,6 +16,22 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    # Service containers run on the Linux runner only; there the Neon migration tests run against
+    # this PostgreSQL, and fail if the URL is missing (test/unit/postgres.test.ts).
+    services:
+      postgres:
+        image: ${{ matrix.os == 'ubuntu-latest' && 'postgres:16' || '' }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CIMIENTO_TEST_PG_URL: ${{ matrix.os == 'ubuntu-latest' && 'postgres://postgres:postgres@localhost:5432/postgres' || '' }}
     steps:
       - uses: actions/checkout@v4
 

@@ -180,6 +180,7 @@ export const ERROR_CODES = [
   'PROJECT_LOCKED',
   'DOWN_UNCONFIRMED',
   'ORPHANS_DECISION_NEEDED',
+  'NEON_MIGRATION_HISTORY_UNREADABLE',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

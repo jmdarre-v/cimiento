@@ -60,6 +60,20 @@ export interface Io {
   /** Starts a process that keeps running until it is killed, such as a dev server. */
   spawn(cmd: string, args: string[], opts?: SpawnOptions): Running
   http(req: HttpRequest): Promise<HttpResponse>
+  /**
+   * Runs SQL text against a Postgres database, as one simple query: several statements, dollar
+   * quoted bodies and comments are sent whole and run in one implicit transaction (BUG-77). The
+   * connection string is a secret; it is never logged.
+   */
+  sql(connectionString: string, text: string): Promise<SqlResult>
+}
+
+export interface SqlResult {
+  ok: boolean
+  /** Rows of the last statement. */
+  rows: Record<string, unknown>[]
+  /** The Postgres SQLSTATE, such as 42P01 for a missing table or 42501 for permission denied. */
+  error?: { code?: string; message: string }
 }
 
 /** Long enough for a person to find the browser tab, sign in and approve, short of forever. */
@@ -152,6 +166,10 @@ export class RealIo implements Io {
     }
   }
 
+  sql(connectionString: string, text: string): Promise<SqlResult> {
+    return runSql(connectionString, text)
+  }
+
   async http(req: HttpRequest): Promise<HttpResponse> {
     const headers: Record<string, string> = { accept: 'application/json', ...(req.headers ?? {}) }
     let body: string | undefined
@@ -192,6 +210,23 @@ export class RealIo implements Io {
       headersOut[key.toLowerCase()] = value
     })
     return { status: res.status, ok: res.ok, text, json, headers: headersOut }
+  }
+}
+
+/** One connection per call: migrations and checks are rare, and nothing is left open. */
+async function runSql(connectionString: string, text: string): Promise<SqlResult> {
+  const { Client } = await import('pg')
+  const client = new Client({ connectionString, connectionTimeoutMillis: 15_000, query_timeout: 120_000 })
+  try {
+    await client.connect()
+    const result = await client.query(text)
+    const last = Array.isArray(result) ? result[result.length - 1] : result
+    return { ok: true, rows: (last?.rows ?? []) as Record<string, unknown>[] }
+  } catch (err) {
+    const e = err as { code?: string; message?: string }
+    return { ok: false, rows: [], error: { ...(e.code ? { code: e.code } : {}), message: (e.message ?? String(err)).replace(connectionString, '****') } }
+  } finally {
+    await client.end().catch(() => undefined)
   }
 }
 
@@ -300,6 +335,10 @@ export class ScriptedIo implements Io {
       return { code: entry.result.code ?? 0, stdout: entry.result.stdout ?? '', stderr: entry.result.stderr ?? '' }
     }
     throw new Error(`ScriptedIo: no recorded exec for "${key}"`)
+  }
+
+  async sql(): Promise<SqlResult> {
+    throw new Error('ScriptedIo: no recorded sql')
   }
 
   async http(req: HttpRequest): Promise<HttpResponse> {

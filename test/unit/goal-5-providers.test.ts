@@ -11,8 +11,6 @@ import { ExitCode } from '../../src/core/errors'
 import { clearToolUpdateCache } from '../../src/core/toolkit'
 import { completeFragment, mergeFragments, parseManifest } from '../../src/manifest'
 import { setNetlifyDeployWait } from '../../src/providers/netlify'
-import { splitStatements } from '../../src/providers/neon'
-import { sqlEndpoint } from '../../src/providers/neon/api'
 import { SecretStore } from '../../src/secrets'
 import { Redactor } from '../../src/core/redact'
 import { clearCloudflareToken } from '../../src/providers/turnstile/api'
@@ -265,10 +263,6 @@ describe('manifest rules for the v2 slots', () => {
     expect(() => parseManifest({ name: 'x', slots: { email: 'resend' } })).toThrow(/RESEND_API_KEY/)
   })
 
-  it('Neon statements split at semicolons at line ends, and the SQL endpoint is the api host of the region', () => {
-    expect(splitStatements('-- c\ncreate table a (id int);\ninsert into a values (1);\n')).toEqual(['create table a (id int)', 'insert into a values (1)'])
-    expect(sqlEndpoint('postgresql://u:p@ep-x-123-pooler.us-east-2.aws.neon.tech/db')).toBe('https://api.us-east-2.aws.neon.tech/sql')
-  })
 })
 
 describe('sign-up before a key', () => {

@@ -8,7 +8,7 @@ import { createHmac } from 'node:crypto'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FakeV2 } from './fake-v2'
-import type { ExecOptions, ExecResult, HttpRequest, HttpResponse, Io, Running, SpawnOptions } from '../../src/core/io'
+import type { ExecOptions, ExecResult, HttpRequest, HttpResponse, Io, Running, SpawnOptions, SqlResult } from '../../src/core/io'
 
 export interface FakeRepo {
   id: string
@@ -655,6 +655,10 @@ export class FakeCloud implements Io {
       )
     }
     return fail(`FakeCloud: no supabase behavior for "${args.join(' ')}"`)
+  }
+
+  async sql(connectionString: string, text: string): Promise<SqlResult> {
+    return this.v2.sql(connectionString, text)
   }
 
   async http(req: HttpRequest): Promise<HttpResponse> {

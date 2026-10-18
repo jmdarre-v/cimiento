@@ -452,4 +452,9 @@ One line per decision the spec does not cover, with the reasoning.
   doctor counts as not ok. manualDone is history: plan and doctor probe manual steps live. In up,
   an unknown on a manual step lets the run go on without asking and without recording it, because
   the step that needs it checks again.
+- 2026-10-18 Goal 6: Neon migrations and checks go through io.sql, a pg client using the simple
+  query protocol, instead of Neon's HTTP endpoint and a semicolon splitter. Each file is sent
+  whole with its history insert, one implicit transaction. A missing history table is created; an
+  unreadable one stops the run. The pg path is proven on a local PostgreSQL in CI; on Neon it was
+  last field tested over HTTP (Goal 5), so it is partially proven until the next attended run.
 

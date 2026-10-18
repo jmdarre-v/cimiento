@@ -87,35 +87,3 @@ export function neonError(resource: string, result: NeonCallResult<unknown>, fal
     needsHuman: result.status === 401,
   })
 }
-
-/**
- * The host of Neon's HTTP query endpoint for a connection string: the endpoint host with its first
- * label replaced by api, the same rule the Neon serverless driver uses. The connection string
- * itself, in a header, says which database to reach.
- */
-export function sqlEndpoint(connectionString: string): string {
-  const host = new URL(connectionString).hostname
-  return `https://api.${host.slice(host.indexOf('.') + 1)}/sql`
-}
-
-export interface SqlResult {
-  ok: boolean
-  status: number
-  rows: Record<string, unknown>[]
-  message?: string
-}
-
-/** Runs statements in one transaction through the HTTP endpoint. The connection string is a secret. */
-export async function neonSql(ctx: Ctx, connectionString: string, queries: string[]): Promise<SqlResult[] | SqlResult> {
-  ctx.redactor.addValue(connectionString)
-  const res = await ctx.io.http({
-    method: 'POST',
-    url: sqlEndpoint(connectionString),
-    headers: { 'neon-connection-string': connectionString, 'neon-raw-text-output': 'true', 'neon-array-mode': 'false', 'content-type': 'application/json' },
-    body: queries.length === 1 ? { query: queries[0], params: [] } : { queries: queries.map((query) => ({ query, params: [] })) },
-  })
-  const json = res.json as { rows?: Record<string, unknown>[]; results?: { rows?: Record<string, unknown>[] }[]; message?: string } | undefined
-  if (!res.ok) return { ok: false, status: res.status, rows: [], ...(json?.message ? { message: json.message } : {}) }
-  if (queries.length === 1) return [{ ok: true, status: res.status, rows: json?.rows ?? [] }]
-  return (json?.results ?? []).map((r) => ({ ok: true, status: res.status, rows: r.rows ?? [] }))
-}
