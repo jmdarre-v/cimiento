@@ -19,7 +19,8 @@ export interface FakeNetlifySite {
   admin_url: string
   custom_domain: string | null
   deploy_hook?: string
-  build_settings: { repo_path?: string; repo_branch?: string; deploy_key_id?: string; provider?: string } | null
+  build_settings: { repo_path?: string; repo_branch?: string; deploy_key_id?: string; provider?: string; updated_at?: string } | null
+  plugins: { package: string }[]
 }
 
 export interface FakeNetlifyDeploy {
@@ -61,6 +62,12 @@ export class FakeV2 {
   readonly netlifySites = new Map<string, FakeNetlifySite>()
   readonly netlifyEnv = new Map<string, { key: string; updated_at: string; values: { id: string; context: string; value: string }[] }[]>()
   readonly netlifyDeploys: FakeNetlifyDeploy[] = []
+  /** Adds a site linked the way cimiento did before BUG-61: repository settings, no Next.js runtime. */
+  linkWithoutRuntime(siteId: string): void {
+    const site = this.netlifySites.get(siteId)!
+    site.plugins = []
+  }
+
   /** Site names someone else on Netlify already has. */
   readonly takenSiteNames = new Set<string>()
   /** What a Netlify build ends as. */
@@ -157,7 +164,11 @@ export class FakeV2 {
       created_at: this.iso(),
     }
     this.netlifyDeploys.unshift(deploy)
-    if (deploy.state === 'ready' && context === 'production') this.servePage(site)
+    // Without the Next.js runtime, Netlify publishes the raw .next folder and the page is a 404.
+    if (deploy.state === 'ready' && context === 'production') {
+      if (site.plugins.some((p) => p.package === '@netlify/plugin-nextjs')) this.servePage(site)
+      else this.host.pages.set(site.ssl_url, { status: 404, body: '<title>Page not found</title>' })
+    }
     return deploy
   }
 
@@ -214,6 +225,7 @@ export class FakeV2 {
         admin_url: `https://app.netlify.com/projects/${name}`,
         custom_domain: null,
         build_settings: null,
+        plugins: [],
       }
       this.netlifySites.set(site.id, site)
       return json(201, site)
@@ -243,11 +255,12 @@ export class FakeV2 {
         this.host.pages.delete(found.ssl_url)
         return json(204)
       }
-      const body = req.body as { repo?: { repo_path: string; repo_branch: string; deploy_key_id: string }; custom_domain?: string | null }
+      const body = req.body as { repo?: { repo_path: string; repo_branch: string; deploy_key_id: string }; custom_domain?: string | null; plugins?: { package: string }[] }
       if (body.repo) {
-        found.build_settings = { provider: 'github', repo_path: body.repo.repo_path, repo_branch: body.repo.repo_branch, deploy_key_id: body.repo.deploy_key_id }
+        found.build_settings = { provider: 'github', repo_path: body.repo.repo_path, repo_branch: body.repo.repo_branch, deploy_key_id: body.repo.deploy_key_id, updated_at: this.iso() }
         found.deploy_hook = `https://api.netlify.com/hooks/github`
       }
+      if (body.plugins) found.plugins = body.plugins
       if ('custom_domain' in body) {
         if (found.custom_domain && !body.custom_domain) this.host.pages.delete(`https://${found.custom_domain}`)
         found.custom_domain = body.custom_domain ?? null

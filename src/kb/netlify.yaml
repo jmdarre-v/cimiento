@@ -41,6 +41,7 @@
     - "is not linked to"
   hint: Check with cimiento doctor that gh is logged in as an administrator of the repository, then run cimiento up again.
   fix: cimiento links Netlify the way netlify init does without the GitHub app, with a read only deploy key and a repository webhook to the site's deploy hook. Adding both needs admin rights on the repository.
+  seen: Field test 5, 2026-10-18 (BUG-61). The first real Netlify site, cimiento-test-5c, built and deployed but every page answered 404, because the raw .next folder was published without the Next.js runtime. netlify init sets plugins @netlify/plugin-nextjs on the site with the repository settings; cimiento now does the same, and a change to the build settings after the last deploy makes up build again.
 
 - code: NETLIFY_ENV_WRITE_FAILED
   provider: netlify

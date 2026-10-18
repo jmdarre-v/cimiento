@@ -38,7 +38,19 @@ export interface NetlifySite {
   custom_domain?: string | null
   domain_aliases?: string[]
   deploy_hook?: string
-  build_settings?: { repo_path?: string; repo_branch?: string; provider?: string; deploy_key_id?: string; allowed_branches?: string[] } | null
+  build_settings?: { repo_path?: string; repo_branch?: string; provider?: string; deploy_key_id?: string; allowed_branches?: string[]; updated_at?: string } | null
+  plugins?: { package: string; pinned_version?: string }[]
+}
+
+/**
+ * The Next.js runtime on Netlify. Without it Netlify publishes the raw .next folder and every page
+ * answers 404 (BUG-61). netlify init sets it on the site with the repository settings; so does
+ * cimiento, for every scaffold it makes, which is Next.js.
+ */
+export const NEXT_PLUGIN = '@netlify/plugin-nextjs'
+
+function wantsNextPlugin(ctx: Ctx): boolean {
+  return ctx.manifest.scaffold.template !== 'none' || ctx.manifest.options.vercel.framework === 'nextjs'
 }
 
 export interface NetlifyDeploy {
@@ -355,7 +367,9 @@ async function ensureGitLink(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult
   const branch = str(spec.inputs.productionBranch) || 'main'
   const site = await getSite(ctx, spec, siteId)
   const linked = site?.build_settings?.repo_path === repo && site.build_settings?.repo_branch === branch
-  if (linked && site?.deploy_hook && (await hasHook(ctx, repo, site.deploy_hook))) return { action: 'noop', externalId: `${siteId}/${repo}` }
+  const plugins = site?.plugins ?? []
+  const pluginOk = !wantsNextPlugin(ctx) || plugins.some((p) => p.package === NEXT_PLUGIN)
+  if (linked && pluginOk && site?.deploy_hook && (await hasHook(ctx, repo, site.deploy_hook))) return { action: 'noop', externalId: `${siteId}/${repo}` }
   if (ctx.dryRun) return { action: 'noop' }
 
   let keyId = site?.build_settings?.deploy_key_id
@@ -378,6 +392,7 @@ async function ensureGitLink(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult
       cmd: ctx.manifest.options.netlify.build_command,
       dir: ctx.manifest.options.netlify.publish_dir,
     },
+    ...(wantsNextPlugin(ctx) && !pluginOk ? { plugins: [...plugins.map((p) => ({ package: p.package })), { package: NEXT_PLUGIN }] } : {}),
   })
   if (!patched.ok || !patched.body) throw netlifyError(spec.id, patched, { code: 'NETLIFY_REPO_LINK_FAILED', message: `Linking the Netlify site to ${repo} failed`, hint: 'cimiento up retries this safely.' })
   const hook = patched.body.deploy_hook
@@ -627,6 +642,10 @@ async function latestProductionDeploy(ctx: Ctx, spec: ResourceSpec, siteId: stri
   return (await listDeploys(ctx, spec, siteId, '&production=true')).find((d) => d.context === 'production' || d.context === undefined)
 }
 
+function staleName(key: string): string {
+  return key === 'the build settings' ? key : `${key}=****`
+}
+
 function productionUrl(site: NetlifySite): string {
   return site.custom_domain ? `https://${site.custom_domain}` : (site.ssl_url ?? `https://${site.name}.netlify.app`)
 }
@@ -641,12 +660,18 @@ function deployOutputs(site: NetlifySite, deploy: NetlifyDeploy): Record<string,
   }
 }
 
-/** Env keys written after a deploy was built: Netlify reads env when it builds. */
-async function envNewerThan(ctx: Ctx, spec: ResourceSpec, siteId: string, deploy: NetlifyDeploy): Promise<string[]> {
+/**
+ * What changed after a deploy was built, since Netlify reads env and build settings when it builds:
+ * env keys by name, and the build settings themselves, such as the Next.js runtime (BUG-61).
+ */
+async function envNewerThan(ctx: Ctx, spec: ResourceSpec, siteId: string, deploy: NetlifyDeploy, site?: NetlifySite): Promise<string[]> {
   const built = deploy.created_at ? Date.parse(deploy.created_at) : NaN
   if (Number.isNaN(built)) return []
   const envs = await listEnv(ctx, spec, siteId, await accountOf(ctx, spec, siteId))
-  return envs.filter((e) => e.updated_at && Date.parse(e.updated_at) > built).map((e) => e.key)
+  const changed = envs.filter((e) => e.updated_at && Date.parse(e.updated_at) > built).map((e) => e.key)
+  const settings = site?.build_settings?.updated_at
+  if (settings && Date.parse(settings) > built) changed.push('the build settings')
+  return changed
 }
 
 async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
@@ -656,13 +681,13 @@ async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureRes
   const known = ctx.state.resources[spec.id]
   const existing = await latestProductionDeploy(ctx, spec, siteId)
   const ready = existing?.state === 'ready'
-  const stale = existing && ready ? await envNewerThan(ctx, spec, siteId, existing) : []
+  const stale = existing && ready ? await envNewerThan(ctx, spec, siteId, existing, site) : []
   if (existing && ready && (stale.length === 0 || ctx.dryRun)) {
     return { action: known ? 'noop' : 'adopted', externalId: existing.id, url: productionUrl(site), outputs: deployOutputs(site, existing) }
   }
   if (ctx.dryRun) return { action: 'noop' }
   if (stale.length > 0) {
-    ctx.logger.log({ level: 'info', event: 'redeploy', resource: spec.id, message: `Building again: ${stale.map((k) => `${k}=****`).join(', ')} changed after the last production deploy, and Netlify only reads env when it builds.` })
+    ctx.logger.log({ level: 'info', event: 'redeploy', resource: spec.id, message: `Building again: ${stale.map(staleName).join(', ')} changed after the last production deploy, and Netlify only reads them when it builds.` })
   }
   // A build of the production branch, from the linked repository.
   const build = await netlifyCall<{ id: string; deploy_id?: string }>(
@@ -733,9 +758,9 @@ async function verifyDeployment(spec: ResourceSpec, ctx: Ctx): Promise<CheckResu
   })
   if (!deploy) return fail('No production deploy exists for this Netlify site yet.', 'Run cimiento up, which starts the first build.')
   if (deploy.state !== 'ready') return fail(`The latest production deploy is ${deploy.state ?? 'in an unknown state'}.`, 'Wait for the build to finish, then run cimiento doctor again. If it failed, open the deploy log in Netlify.')
-  const stale = await envNewerThan(ctx, spec, siteId, deploy)
+  const stale = await envNewerThan(ctx, spec, siteId, deploy, await getSite(ctx, spec, siteId))
   if (stale.length > 0) {
-    return fail(`The production deploy was built before ${stale.map((k) => `${k}=****`).join(', ')} changed, so the live site still runs with the old env.`, 'Run cimiento up. It builds again so the live site reads the current env.')
+    return fail(`The production deploy was built before ${stale.map(staleName).join(', ')} changed, so the live site still runs with the old settings.`, 'Run cimiento up. It builds again so the live site reads the current env and settings.')
   }
   return { ok: true, evidence: `deploy ${deploy.id} ready${deploy.deploy_ssl_url ? ` at ${deploy.deploy_ssl_url}` : ''}` }
 }
