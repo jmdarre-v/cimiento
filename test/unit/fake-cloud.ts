@@ -518,7 +518,8 @@ export class FakeCloud implements Io {
           nameWithOwner: full,
           url: repo.url,
           visibility: repo.visibility,
-          defaultBranchRef: repo.defaultBranch ? { name: repo.defaultBranch } : null,
+          // As gh prints it: an empty repository has a default branch ref with an empty name.
+          defaultBranchRef: { name: repo.defaultBranch ?? '' },
         }),
       )
     }

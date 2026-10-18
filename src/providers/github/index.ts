@@ -308,7 +308,8 @@ async function ensureRepo(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
     await ensureLocalRemote(ctx, existing)
     // An empty repository, such as one created by a run that could not push (BUG-68), gets the
     // local commits now, so everything that builds from it has a branch to build.
-    if (!existing.defaultBranchRef && !ctx.dryRun) {
+    // gh answers {"name": ""} for an empty repository, not null.
+    if (!existing.defaultBranchRef?.name && !ctx.dryRun) {
       const view = await pushFirst(ctx, spec, existing)
       if (view) existing = view
     }
@@ -462,7 +463,7 @@ function repoOutputs(view: RepoView): Record<string, Output> {
     fullName: { value: view.nameWithOwner, secret: false },
     repoUrl: { value: view.url, secret: false },
     cloneUrl: { value: `${view.url}.git`, secret: false },
-    defaultBranch: { value: view.defaultBranchRef?.name ?? 'main', secret: false },
+    defaultBranch: { value: view.defaultBranchRef?.name || 'main', secret: false },
     nodeId: { value: view.id, secret: false },
     visibility: { value: view.visibility, secret: false },
   }
