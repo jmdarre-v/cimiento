@@ -119,3 +119,17 @@ describe('BUG-63: secret set and rotate deploy again, because hosting reads env 
     }
   })
 })
+
+describe('BUG-64: the DNS step names the record Vercel asks for', () => {
+  it('Vercel recommends a project specific CNAME first, and a TXT record when it needs proof of ownership', async () => {
+    const cloud = new FakeCloud()
+    await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    const first = await cli(cloud, ['domain', 'add', 'shop.example.test', '--json'])
+    expect(first.code).toBe(ExitCode.needsHuman)
+    expect(first.writer.outText).toContain('CNAME shop fakeproject.vercel-dns-016.com')
+    cloud.v2.vercelTxtChallenge = 'vc-domain-verify=fake-not-real'
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    const check = (doctor.writer.jsonObjects().pop() as { items: { id: string; error?: { message: string } }[] }).items.find((i) => i.id === 'vercel.check.domain')!
+    expect(check.error?.message).toContain('TXT _vercel vc-domain-verify=fake-not-real')
+  })
+})

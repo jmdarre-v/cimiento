@@ -102,7 +102,7 @@ The domain's DNS does not point at the hosting yet.
 
 **What to do:** Add the one DNS record the message names where the domain's DNS is managed, then run cimiento doctor.
 
-**Why:** A subdomain needs a CNAME to the hosting (cname.vercel-dns.com for Vercel, <site>.netlify.app for Netlify). The DNS provider is the one place cimiento cannot reach, so this is a person step.
+**Why:** A subdomain needs a CNAME to the hosting. For Vercel it is the value Vercel recommends first for the project (a project specific name under vercel-dns, with cname.vercel-dns.com as the fallback), or a TXT record when Vercel first needs proof of ownership; for Netlify it is <site>.netlify.app. The DNS provider is the one place cimiento cannot reach, so this is a person step.
 
 **Looks like:** `but its DNS does not point there yet`
 

@@ -171,7 +171,8 @@
   signatures:
     - "but its DNS does not point there yet"
   hint: Add the one DNS record the message names where the domain's DNS is managed, then run cimiento doctor.
-  fix: A subdomain needs a CNAME to the hosting (cname.vercel-dns.com for Vercel, <site>.netlify.app for Netlify). The DNS provider is the one place cimiento cannot reach, so this is a person step.
+  fix: A subdomain needs a CNAME to the hosting. For Vercel it is the value Vercel recommends first for the project (a project specific name under vercel-dns, with cname.vercel-dns.com as the fallback), or a TXT record when Vercel first needs proof of ownership; for Netlify it is <site>.netlify.app. The DNS provider is the one place cimiento cannot reach, so this is a person step.
+  seen: Field test 5, 2026-10-18 (BUG-64). On cimiento-test-5 the DNS step named cname.vercel-dns.com, while Vercel's domain config recommends a project specific CNAME first, and the step could not name a TXT challenge. It now reads Vercel's recommendation and its misconfigured flag, and names the TXT record when Vercel asks for one.
 
 - code: HOSTING_DOMAIN_NOT_SERVING
   provider: core

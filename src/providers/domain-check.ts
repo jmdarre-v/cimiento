@@ -53,13 +53,17 @@ export async function dnsPointsTo(ctx: Ctx, domain: string, record: DnsRecord): 
   return answers.includes(record.value.replace(/\.$/, '').toLowerCase())
 }
 
-export async function verifyDomainServes(spec: ResourceSpec, ctx: Ctx, opts: { domain: string; record: DnsRecord; vendor: string; requireMarker: boolean }): Promise<CheckResult> {
+export async function verifyDomainServes(
+  spec: ResourceSpec,
+  ctx: Ctx,
+  opts: { domain: string; record: DnsRecord; vendor: string; requireMarker: boolean; dnsReady?: boolean },
+): Promise<CheckResult> {
   const url = `https://${opts.domain}`
   const res = await ctx.io.http({ method: 'GET', url }).catch(() => undefined)
   if (res && res.status === 200 && (!opts.requireMarker || res.text.includes('cimiento-project'))) {
     return { ok: true, evidence: `200 from ${url}` }
   }
-  if (!(await dnsPointsTo(ctx, opts.domain, opts.record))) {
+  if (!(opts.dnsReady ?? (await dnsPointsTo(ctx, opts.domain, opts.record)))) {
     const step = dnsStep(opts.domain, opts.record, opts.vendor)
     return {
       ok: false,

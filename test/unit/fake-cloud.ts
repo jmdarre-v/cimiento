@@ -803,6 +803,8 @@ export class FakeCloud implements Io {
     const method = req.method.toUpperCase()
 
     if (path === '/v2/teams') return json(200, { teams: this.vercelTeams })
+    const domainConfig = /^\/v6\/domains\/([^/]+)\/config$/.exec(path)
+    if (domainConfig) return this.v2.vercelDomainConfig(decodeURIComponent(domainConfig[1]))
     const domains = /^\/v(?:9|10)\/projects\/([^/]+)\/domains(?:\/([^/]+))?$/.exec(path)
     if (domains) return this.v2.vercelDomain(decodeURIComponent(domains[1]), method, domains[2] ? decodeURIComponent(domains[2]) : undefined, req.body)
     if (path === '/v1/integrations/git-namespaces') {

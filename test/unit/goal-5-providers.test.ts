@@ -309,12 +309,13 @@ describe('cimiento domain add and remove', () => {
     let added = await cli(cloud, ['domain', 'add', domain, '--json'])
     expect(added.code, added.writer.outText).toBe(ExitCode.needsHuman)
     expect(added.writer.outText).toContain('HOSTING_DOMAIN_DNS_NEEDED')
-    expect(added.writer.outText).toContain('cname.vercel-dns.com')
+    // BUG-64: the record Vercel recommends first for the project, not only the generic one.
+    expect(added.writer.outText).toContain('fakeproject.vercel-dns-016.com')
     const project = [...cloud.vercelProjects.values()][0]
     expect(cloud.v2.vercelDomains.get(project.id)?.has(domain)).toBe(true)
     expect(parseDocument(readFileSync(join(dir, 'stack.yaml'), 'utf8')).get('domain')).toBe(domain)
 
-    cloud.v2.dns.set(`CNAME ${domain}`, 'cname.vercel-dns.com')
+    cloud.v2.dns.set(`CNAME ${domain}`, 'fakeproject.vercel-dns-016.com')
     cloud.v2.refreshDomainPage(domain, 'my-app')
     added = await cli(cloud, ['domain', 'add', domain, '--json'])
     expect(added.code, added.writer.outText).toBe(ExitCode.ok)

@@ -259,10 +259,7 @@ export function createVercelProvider(m?: Manifest): Provider {
       if (spec.id === 'vercel.check.secrets-present') return verifySecretsPresent(spec, ctx)
       if (spec.id === 'vercel.check.preview') return verifyPreview(spec, ctx)
       if (spec.id === 'vercel.binding.domain') return verifyDomain(spec, ctx)
-      if (spec.id === 'vercel.check.domain') {
-        const domain = str(spec.inputs.domain)
-        return verifyDomainServes(spec, ctx, { domain, record: vercelDnsRecord(domain), vendor: 'Vercel', requireMarker: str(spec.inputs.requireMarker) === 'true' })
-      }
+      if (spec.id === 'vercel.check.domain') return verifyVercelDomainServes(spec, ctx)
       throw unknownResource(spec)
     },
 
@@ -1462,5 +1459,53 @@ async function verifyDomain(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> 
       needsHuman: false,
     }),
   }
+}
+
+interface VercelDomainConfig {
+  misconfigured?: boolean
+  recommendedCNAME?: { rank: number; value: string }[]
+  recommendedIPv4?: { rank: number; value: string[] }[]
+}
+
+/**
+ * The record Vercel itself recommends for this domain, first by rank, and whether Vercel already
+ * sees it configured. Vercel recommends a project specific CNAME first now; cname.vercel-dns.com is
+ * the fallback when it says nothing (BUG-64).
+ */
+async function vercelDomainDns(ctx: Ctx, spec: ResourceSpec, domain: string): Promise<{ record: DnsRecord; ready?: boolean }> {
+  const fallback = vercelDnsRecord(domain)
+  const config = await vercelCall<VercelDomainConfig>(ctx, spec.id, 'GET', `/v6/domains/${encodeURIComponent(domain)}/config`)
+  if (!config.ok || !config.body) return { record: fallback }
+  const byRank = <T extends { rank: number }>(list: T[] | undefined) => [...(list ?? [])].sort((a, b) => a.rank - b.rank)[0]
+  const record =
+    fallback.type === 'CNAME'
+      ? { ...fallback, value: (byRank(config.body.recommendedCNAME)?.value ?? fallback.value).replace(/\.$/, '') }
+      : { ...fallback, value: byRank(config.body.recommendedIPv4)?.value?.[0] ?? fallback.value }
+  return { record, ...(typeof config.body.misconfigured === 'boolean' ? { ready: !config.body.misconfigured } : {}) }
+}
+
+async function verifyVercelDomainServes(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
+  const domain = str(spec.inputs.domain)
+  const projectId = str(spec.inputs.projectId)
+  // A domain whose apex lives in another account must first be proved with a TXT record.
+  const info = await vercelCall<{ verified?: boolean; verification?: { type: string; domain: string; value: string }[] }>(
+    ctx,
+    spec.id,
+    'GET',
+    `/v9/projects/${encodeURIComponent(projectId)}/domains/${encodeURIComponent(domain)}`,
+  )
+  const challenge = info.body?.verified === false ? info.body.verification?.[0] : undefined
+  if (challenge) {
+    const record = { type: challenge.type, name: challenge.domain.replace(`.${domain.split('.').slice(-2).join('.')}`, ''), value: challenge.value }
+    return verifyDomainServes(spec, ctx, { domain, record, vendor: 'Vercel', requireMarker: str(spec.inputs.requireMarker) === 'true', dnsReady: false })
+  }
+  const dns = await vercelDomainDns(ctx, spec, domain)
+  return verifyDomainServes(spec, ctx, {
+    domain,
+    record: dns.record,
+    vendor: 'Vercel',
+    requireMarker: str(spec.inputs.requireMarker) === 'true',
+    ...(dns.ready !== undefined ? { dnsReady: dns.ready } : {}),
+  })
 }
 

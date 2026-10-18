@@ -82,6 +82,8 @@ export class FakeV2 {
   /** Public DNS answers by name and type, as DNS over HTTPS reports them. */
   readonly dns = new Map<string, string>()
   readonly vercelDomains = new Map<string, Set<string>>()
+  /** Vercel asks for a TXT record first, as when the apex belongs to another account. */
+  vercelTxtChallenge: string | undefined
   private counter = 0
 
   constructor(private readonly host: V2Host) {}
@@ -391,6 +393,19 @@ export class FakeV2 {
     return json(200, { status: 'Ok' })
   }
 
+  /** Vercel's view of a domain's DNS: configured once the CNAME points at Vercel. */
+  vercelDomainConfig(domain: string): HttpResponse {
+    const pointed = this.dns.get(`CNAME ${domain}`)
+    return json(200, {
+      misconfigured: !pointed,
+      recommendedCNAME: [
+        { rank: 2, value: 'cname.vercel-dns.com.' },
+        { rank: 1, value: 'fakeproject.vercel-dns-016.com.' },
+      ],
+      recommendedIPv4: [{ rank: 1, value: ['76.76.21.21'] }],
+    })
+  }
+
   /** Vercel project domains, which the main Vercel fake routes here. */
   vercelDomain(projectId: string, method: string, domain: string | undefined, body: unknown): HttpResponse {
     const set = this.vercelDomains.get(projectId) ?? new Set<string>()
@@ -406,6 +421,10 @@ export class FakeV2 {
       set.delete(name)
       this.host.pages.delete(`https://${name}`)
       return json(200, {})
+    }
+    if (set.has(name) && this.vercelTxtChallenge) {
+      const apex = name.split('.').slice(-2).join('.')
+      return json(200, { name, verified: false, verification: [{ type: 'TXT', domain: `_vercel.${apex}`, value: this.vercelTxtChallenge, reason: 'pending_domain_verification' }] })
     }
     return set.has(name) ? json(200, { name, verified: true }) : json(404, { error: { code: 'not_found' } })
   }
