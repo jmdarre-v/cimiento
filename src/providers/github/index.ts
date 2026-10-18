@@ -342,6 +342,16 @@ async function ensureRepo(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   if (created.code !== 0) {
     const text = `${created.stderr}\n${created.stdout}`
     const nameTaken = /already exists|name already/i.test(text)
+    // gh creates the repository before it adds the remote and pushes. When a later part failed, the
+    // repository is still this run's: recorded as created, so down deletes it, never as adopted on
+    // the next run (BUG-70). It gets the local commits when origin points at it.
+    const after = nameTaken ? undefined : await viewRepo(ctx, full)
+    if (after) {
+      const origin = await ctx.io.exec('git', ['remote', 'get-url', 'origin'], { cwd: ctx.cwd })
+      if (origin.code !== 0) await ensureLocalRemote(ctx, after)
+      const view = origin.code !== 0 || sameRepoUrl(origin.stdout.trim(), full) ? ((await pushFirst(ctx, spec, after)) ?? after) : after
+      return { action: 'created', externalId: view.id, url: view.url, outputs: repoOutputs(view) }
+    }
     throw new CimientoError({
       code: nameTaken ? 'GITHUB_REPO_NAME_TAKEN' : 'GITHUB_REPO_CREATE_FAILED',
       provider: ID,

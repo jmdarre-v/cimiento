@@ -225,3 +225,17 @@ describe('BUG-69: two keys on one page open it once', () => {
     expect(walked).toEqual(['stripe.signup', 'secret.STRIPE_SECRET_KEY'])
   })
 })
+
+describe('BUG-70: a repository a failed create left behind is this run\'s, so down deletes it', () => {
+  it('gh creates the repository and then fails on the remote; it is recorded as created, not adopted', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    // An origin cimiento does not own, so it is left alone and gh fails after creating.
+    cloud.gitOrigin = 'https://github.com/someone/elsewhere.git'
+    await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(cloud.repos.has('test-handle/my-app')).toBe(true)
+    const state = JSON.parse(readFileSync(join(dir, '.cimiento/state.json'), 'utf8')) as { resources: Record<string, { origin?: string }> }
+    expect(state.resources['github.repo'].origin).not.toBe('adopted')
+    await cli(cloud, ['down', '--yes', '--json'])
+    expect(cloud.repos.has('test-handle/my-app')).toBe(false)
+  })
+})

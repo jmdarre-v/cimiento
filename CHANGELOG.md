@@ -59,6 +59,11 @@ and Windows through Ubuntu under WSL.
 - BUG-62: `secret rotate` on Netlify talked about Vercel.
 - BUG-63: `secret set` and `rotate` left the live app on the old value until the next deploy.
 - BUG-64: the DNS step named the generic Vercel CNAME instead of the one Vercel recommends.
+- BUG-66: a project without Supabase was asked where its Supabase database should go.
+- BUG-67: the Neon login was not found where current neonctl keeps it.
+- BUG-68: up after down in the same folder created the repository but pushed nothing.
+- BUG-69: two keys on one page (Stripe) opened it twice and asked about the account twice.
+- BUG-70: a repository left by a failed create was adopted on the next run, so down kept it.
 
 ## 0.1.0
 

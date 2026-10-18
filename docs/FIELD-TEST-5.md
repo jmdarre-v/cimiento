@@ -5,7 +5,8 @@ Goal 5 in `docs/GOALS.md`, item 4, on the profile cimiento already runs on, with
 run log in `~/.cimiento/runs/`; all times are UTC on 2026-10-18. Identifiers that belong to the
 accounts (team, project, deployment and site ids, the domain) are written as placeholders.
 
-Status: a passed; b blocked on a person (Neon login and four keys); c blocked on one DNS record.
+Status: a passed; b passed after an attended run for the Neon login and the four keys; c blocked on
+one DNS record.
 Every project was taken down and confirmed gone with each provider.
 
 ## a) cimiento-test-5, designer preset, on Vercel
@@ -27,6 +28,10 @@ Every project was taken down and confirmed gone with each provider.
 | `cimiento new cimiento-test-5b --repo github --hosting netlify --database neon --email resend --payments stripe --analytics posthog --template nextjs-app --json --yes` | Exit 2. Installed the Netlify CLI and neonctl with npm. This Mac already had a Netlify login, so the Netlify part ran for real: the site was created in the only team (pinned in accounts.netlify), linked to the new repository with a read only deploy key and a webhook to the site's deploy hook, and NEXT_PUBLIC_POSTHOG_HOST written to dev, deploy-preview, branch-deploy and production. Waiting on a person: neon.session, and the four keys RESEND_API_KEY, STRIPE_SECRET_KEY, NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY and NEXT_PUBLIC_POSTHOG_KEY (no account or key for Resend or PostHog on this machine; Stripe keys only reach cimiento through a person and secret set) |
 | `doctor --json` twice | 15/39 ok both times; everything else waits on neon.session or a key |
 | `down --yes --json`, then `plan --json` | Down destroyed the Netlify site and the repository. Plan in the folder: 3 create, 6 noop, 30 blocked on the person steps, which is what an attended `cimiento up` there picks up |
+| Attended `up`, by a person | The first attempt asked where a Supabase database should go (BUG-66) and, after the Neon sign-up and login, failed with NEON_TOKEN_MISSING (BUG-67). After both fixes: 3 create, 7 noop, 29 blocked; the person answered the PostHog, Stripe (the keys page opened twice, BUG-69) and Resend questions and typed each key at a hidden prompt. The Neon project, migrations, Netlify site and every env value were made and every key check passed, but github.repo failed: gh created the repository and could not add the origin remote the folder kept after down, so nothing was pushed and the Netlify link and deploy were skipped (BUG-68) |
+| `up --json --yes`, unattended, after the BUG-68 fix | First run exit 1: gh reports an empty repository's default branch with an empty name, so the push was still skipped (BUG-68, second fix). Second run exit 0: the local commits pushed, the site linked, the deploy ready, https://cimiento-test-5b.netlify.app answered 200 with the scaffold marker. Every check passed: neon.check.migrated (public.cimiento_baseline answers with 1 row), resend.check.send (an email to delivered@resend.dev), stripe.check.test-mode (test balance read, livemode false, pk_test_ key), posthog.check.capture (event cimiento_check received), netlify.check.deployed, repo-linked, secrets-present (4 secrets in 8 environments) and preview |
+| `doctor --json` twice | 39/39 ok both times |
+| `down --yes --json` | Exit 0: netlify.deployment, netlify.project, neon.migrations and neon.project deleted; github.repo released, because the run that made the repository failed and the next one recorded it as adopted (BUG-70). The repository, a test repository of this field test, was then deleted with gh repo delete |
 
 Netlify had no real deploy in b, so a small extra project, **cimiento-test-5c** (designer preset on
 Netlify), was created to prove deploy, publish, preview and the Netlify env on a real account
@@ -67,7 +72,7 @@ only in two sentences, covered by the unit tests.
 |---|---|---|
 | cimiento-test-5 | Exit 0: vercel.deployment, vercel.project, github.repo | `gh repo view`: Could not resolve to a Repository. `vercel project ls`: no cimiento-test-5 |
 | cimiento-test-5c | Exit 0: netlify.deployment, netlify.project, github.repo | `gh repo view`: Could not resolve. Netlify API sites?name=cimiento-test-5c: none |
-| cimiento-test-5b | Exit 0: netlify.project, github.repo | `gh repo view`: Could not resolve. Netlify API sites?name=cimiento-test-5b: none. Neon: nothing was created; neon.project never reached state because neon.session stayed pending |
+| cimiento-test-5b | First unattended run: exit 0, netlify.project, github.repo. After the attended run: exit 0, netlify.deployment, netlify.project, neon.migrations, neon.project; github.repo released (BUG-70) and deleted by hand | `gh repo view`: Could not resolve. Netlify API sites?name=cimiento-test-5b: none. `neonctl projects list` in the pinned organization: no cimiento-test-5b |
 
 Deploy keys, webhooks, the pull request and the Actions secret went with the repositories; env
 values went with the Vercel project and Netlify sites. No leftovers were reported.
@@ -109,13 +114,21 @@ From the first and last line of each run log.
 | `doctor` twice, cimiento-test-5b | 02:50:31 to 02:51:12 | 21.6 s and 19.9 s | 2026-10-18T02-50-31-034Z-doctor.jsonl, 2026-10-18T02-50-52-856Z-doctor.jsonl |
 | `down`, cimiento-test-5, 5c, 5b | 02:51:24 to 02:51:39 | 5.2 s, 5.2 s, 4.2 s | 2026-10-18T02-51-24-431Z-down.jsonl, 2026-10-18T02-51-29-826Z-down.jsonl, 2026-10-18T02-51-35-245Z-down.jsonl |
 | b: `plan` after down | 02:52:21 to 02:52:30 | 8.6 s | 2026-10-18T02-52-21-647Z-plan.jsonl |
+| b: attended `up`, first attempt (BUG-66, 67) | 13:52:56 to 14:07:04 | 847.3 s, mostly the person at the Neon pages | 2026-10-18T13-52-56-682Z-up.jsonl |
+| b: `plan` after BUG-66 and 67 | 14:13:08 to 14:13:23 | 14.6 s | 2026-10-18T14-13-08-903Z-plan.jsonl |
+| b: attended `up`, exit 1 (BUG-68) | 14:14:24 to 15:11:16 | 3411.3 s, mostly waiting at the plan confirmation and the key pages | 2026-10-18T14-14-24-844Z-up.jsonl |
+| b: `doctor` by the person, twice | 15:15:44 to 15:17:02 | 32.9 s and 29.4 s | 2026-10-18T15-15-44-000Z-doctor.jsonl, 2026-10-18T15-16-33-345Z-doctor.jsonl |
+| b: `up --json --yes`, exit 1 (BUG-68, empty name) | 15:21:47 to 15:23:47 | 120.0 s | 2026-10-18T15-21-47-301Z-up.jsonl |
+| b: `up --json --yes`, exit 0 | 15:25:06 to 15:28:05 | 178.9 s | 2026-10-18T15-25-06-836Z-up.jsonl |
+| b: `doctor --json` twice | 15:28:17 to 15:29:15 | 30.8 s and 26.6 s | 2026-10-18T15-28-17-934Z-doctor.jsonl, 2026-10-18T15-28-48-979Z-doctor.jsonl |
+| b: `down --yes --json` | 15:29:15 to 15:29:19 | 3.5 s | 2026-10-18T15-29-15-899Z-down.jsonl |
 | Implementation, unit tests, fixes | | not measured | no run log |
 | Confirmation with gh, vercel and the Netlify API | | not measured | not a cimiento command |
 
 ## Bugs found in Goal 5
 
 Ids continue from BUG-57 in `docs/FIELD-TEST-3.md`. Each has a knowledge base entry or `seen:` note
-and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-60 to 64 and 66 to 69 in
+and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-60 to 64 and 66 to 70 in
 `test/unit/goal-5-field.test.ts` (BUG-63 also in `test/unit/goal-2.test.ts`), BUG-65 in
 `test/unit/install-script.test.ts`.
 
@@ -131,8 +144,9 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 | BUG-65 | The first CI run failed on ubuntu-latest: the installer tests used the machine's /usr/bin, where the GitHub runner has gh, so gh counted as already installed | e721e4d |
 | BUG-66 | In the attended up of cimiento-test-5b (Neon on Netlify), up asked where the Supabase database should go and offered a Supabase configuration serving another project, because stack.yaml still had accounts.supabase via-hosting | aea037f |
 | BUG-67 | After the Neon sign-up and login in that run, neon.project failed with NEON_TOKEN_MISSING: neonctl now keeps its login in ~/.config/neon, and cimiento only read ~/.config/neonctl | aea037f |
-| BUG-68 | In the attended up of cimiento-test-5b, gh repo create made the repository but failed to add the origin remote the folder kept after down, so nothing was pushed and the Netlify link and deploy were skipped | 509edf7 |
+| BUG-68 | In the attended up of cimiento-test-5b, gh repo create made the repository but failed to add the origin remote the folder kept after down, so nothing was pushed and the Netlify link and deploy were skipped | 509edf7, f9051ff |
 | BUG-69 | The same run opened the Stripe keys page twice, once per key, and asked about a Stripe account twice | 509edf7 |
+| BUG-70 | down released the cimiento-test-5b repository instead of deleting it: the run whose gh repo create failed after creating it recorded nothing, and the next run adopted it | see git log |
 
 ## Left for a person
 
@@ -140,10 +154,6 @@ Until 0.2.0 is on npm, the attended commands run the built CLI from the reposito
 (`node ~/Code.nosync/cimiento/dist/cli.js`, written `cim5` below); after the release,
 `npm install -g cimiento@latest` and plain `cimiento` do the same.
 
-- b, in a terminal: `cd ~/Code.nosync/cimiento-test-5b`, then `cim5 up`. It walks the Neon sign-up
-  and login, then the page of each key with a hidden prompt (Resend, Stripe in a sandbox or test
-  mode, PostHog), creates the repository, site and database again, and deploys. Then `cim5 doctor`
-  twice and `cim5 down --yes`.
 - c: `cd ~/Code.nosync/cimiento-test-5`, then `up --yes` with `CIMIENTO_TEST_SECRET` set to any
   fake value (stack.yaml still declares it with source env), which recreates the repository,
   project and deployment. Then `cim5 domain add cimiento-test.<domain>`, which prints the CNAME
@@ -151,3 +161,5 @@ Until 0.2.0 is on npm, the attended commands run the built CLI from the reposito
   Add that CNAME where the domain's DNS is managed, run `cim5 domain add cimiento-test.<domain>`
   again until the check passes and the domain serves, then `cim5 domain remove` and
   `cim5 down --yes`.
+- The keys typed in b stay in the macOS keychain (service cimiento, accounts cimiento-test-5b/NAME)
+  and with each vendor; revoke them there when they are no longer wanted.
