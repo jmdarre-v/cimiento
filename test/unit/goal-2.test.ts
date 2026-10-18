@@ -373,7 +373,7 @@ describe('secrets.present and anthropic', () => {
 })
 
 describe('cimiento secret rotate', () => {
-  it('writes a fresh value over every sink and the keychain, prints none of it, and up redeploys', async () => {
+  it('writes a fresh value over every sink and the keychain, prints none of it, and deploys again (BUG-63)', async () => {
     const cloud = new FakeCloud()
     await newProject(cloud)
     const before = envValue(cloud, 'ANTHROPIC_API_KEY', 'production')
@@ -396,15 +396,15 @@ describe('cimiento secret rotate', () => {
     expect(writer.outText).not.toContain(ROTATED)
     expect(cloud.execCalls.some((c) => c.includes(ROTATED))).toBe(false)
 
-    const doctor = new CaptureWriter()
-    await run(['doctor', '--json'], { io: cloud, cwd: dir, writer: doctor, interactive: false })
-    const deployment = (lastJson(doctor, 'doctor').items as { id: string; ok: boolean }[]).find((i) => i.id === 'vercel.deployment')!
-    expect(deployment.ok).toBe(false)
-
-    expect(await run(['up', '--json', '--yes'], { io: cloud, cwd: dir, writer: new CaptureWriter(), interactive: false })).toBe(ExitCode.ok)
+    // BUG-63: rotate itself deploys again, so the live app uses the new value and doctor is green.
+    expect((summary as { redeployed?: string }).redeployed).toBeTruthy()
     const deployments = cloud.deployments.get(onlyProject(cloud).id)!
     expect(deployments).toHaveLength(2)
     expect(deployments[0].env!.ANTHROPIC_API_KEY).toBe(ROTATED)
+    const doctor = new CaptureWriter()
+    await run(['doctor', '--json'], { io: cloud, cwd: dir, writer: doctor, interactive: false })
+    const deployment = (lastJson(doctor, 'doctor').items as { id: string; ok: boolean }[]).find((i) => i.id === 'vercel.deployment')!
+    expect(deployment.ok).toBe(true)
   })
 
   it('with nobody at a terminal, waits on a person and changes nothing', async () => {

@@ -87,9 +87,33 @@ describe('BUG-62: secret rotate names the hosting the project uses', () => {
     try {
       await cli(cloud, ['secret', 'set', 'CIMIENTO_TEST_SECRET', '--json'])
       const { writer } = await cli(cloud, ['secret', 'rotate', 'CIMIENTO_TEST_SECRET', '--json'])
-      const note = (writer.jsonObjects().find((o) => (o as { command?: string }).command === 'secret rotate') as { note: string }).note
-      expect(note).toContain('Netlify reads env when it builds')
-      expect(note).not.toContain('Vercel')
+      const summary = writer.jsonObjects().find((o) => (o as { command?: string }).command === 'secret rotate') as { note: string; redeployed: string | null }
+      expect(summary.note).not.toContain('Vercel')
+      // BUG-63: the rotate deploys again, and the note says where.
+      expect(summary.redeployed).toBe('https://my-app.netlify.app')
+      expect(summary.note).toContain('https://my-app.netlify.app')
+    } finally {
+      delete process.env.CIMIENTO_TEST_SECRET
+    }
+  })
+})
+
+describe('BUG-63: secret set and rotate deploy again, because hosting reads env only when it builds', () => {
+  it('after rotate, a fresh join on a clone passes every check with nothing in between', async () => {
+    const cloud = new FakeCloud()
+    await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    const file = join(dir, 'stack.yaml')
+    const doc = parseDocument(readFileSync(file, 'utf8'))
+    doc.set('secrets', doc.createNode([{ name: 'CIMIENTO_TEST_SECRET', sinks: ['hosting'], environments: ['preview', 'production'], source: 'env' }]))
+    writeFileSync(file, doc.toString(), 'utf8')
+    try {
+      process.env.CIMIENTO_TEST_SECRET = 'fake-bug63-value-one-not-real'
+      const set = await cli(cloud, ['secret', 'set', 'CIMIENTO_TEST_SECRET', '--json'])
+      expect((set.writer.jsonObjects().pop() as { redeployed: string | null }).redeployed).toBeTruthy()
+      process.env.CIMIENTO_TEST_SECRET = 'fake-bug63-value-two-not-real'
+      await cli(cloud, ['secret', 'rotate', 'CIMIENTO_TEST_SECRET', '--json'])
+      const doctor = await cli(cloud, ['doctor', '--json'])
+      expect(doctor.code, doctor.writer.outText).toBe(ExitCode.ok)
     } finally {
       delete process.env.CIMIENTO_TEST_SECRET
     }

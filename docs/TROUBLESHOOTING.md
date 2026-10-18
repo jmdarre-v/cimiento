@@ -446,9 +446,9 @@ No ready production deployment.
 
 **What to do:** Wait for the build to finish, then run cimiento doctor again.
 
-**Why:** A first build on a cold project can take a couple of minutes. doctor is safe to run repeatedly.
+**Why:** A first build on a cold project can take a couple of minutes. doctor is safe to run repeatedly. A deployment built before an env value changed runs with the old value; cimiento up, secret set and secret rotate deploy again.
 
-**Looks like:** `No production deployment exists`, `is BUILDING`, `is QUEUED`
+**Looks like:** `No production deployment exists`, `is BUILDING`, `is QUEUED`, `was built before`
 
 ### VERCEL_ENV_WRITE_FAILED
 

@@ -68,8 +68,10 @@
     - "No production deployment exists"
     - "is BUILDING"
     - "is QUEUED"
+    - "was built before"
   hint: Wait for the build to finish, then run cimiento doctor again.
-  fix: A first build on a cold project can take a couple of minutes. doctor is safe to run repeatedly.
+  fix: A first build on a cold project can take a couple of minutes. doctor is safe to run repeatedly. A deployment built before an env value changed runs with the old value; cimiento up, secret set and secret rotate deploy again.
+  seen: Field test 5, 2026-10-18 (BUG-63). After cimiento secret rotate on cimiento-test-5, a fresh clone's cimiento join failed vercel.deployment, because Vercel reads env only when it builds and nothing had deployed since the env changed. secret set and secret rotate now apply the hosting deployment after they write a hosting env value on a project that was deployed before, so the live app uses the new value at once.
 
 - code: VERCEL_PLAN_REQUIRED
   provider: vercel

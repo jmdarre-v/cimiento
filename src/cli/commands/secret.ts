@@ -11,7 +11,7 @@ import { isMap, isSeq, parseDocument } from 'yaml'
 import { asCimientoError, CimientoError, ExitCode, type CimientoErrorFields } from '../../core/errors'
 import { runUp, runVerifyAll } from '../../core/executor'
 import { OutputResolver } from '../../core/resolve'
-import { hashManifest, writeProjectState } from '../../core/state'
+import { applyEnsureToState, hashManifest, writeProjectState, type ProjectState } from '../../core/state'
 import { manifestPath } from '../../manifest'
 import { parseManifest } from '../../manifest/schema'
 import { removeHostingEnv } from '../../providers/hosting'
@@ -19,7 +19,7 @@ import { removeCiSecret, removeDatabaseSecret } from '../../secrets/sinks'
 import { allSinkSpecs, assertSinkAvailable, sinkSpecsFor } from '../../secrets'
 import { HOSTING_NAMES, hostingOf } from '../../core/hosting'
 import type { Ctx, ResourceSpec } from '../../core/types'
-import { openProject, type Session } from '../context'
+import { openProject, type ProjectSession, type Session } from '../context'
 
 export async function secretSetCommand(session: Session): Promise<number> {
   const name = session.args.positionals[0]
@@ -68,22 +68,64 @@ export async function secretSetCommand(session: Session): Promise<number> {
   // executor only touches what these specs need.
   const needed = withDependencies(specs, project.specs)
   const result = await runUp(project.ctx, project.providers, needed, { onManual: async () => false })
-  writeProjectState(session.cwd, { ...result.state, manifestHash: project.manifestHash })
+  let state = result.state
+  const errors = [...result.errors]
+  let redeployed: string | undefined
+  if (result.exitCode === ExitCode.ok) {
+    const outcome = await redeployAfterEnvChange(project, state)
+    state = outcome.state
+    redeployed = outcome.redeployed
+    if (outcome.error) errors.push(outcome.error)
+  }
+  writeProjectState(session.cwd, { ...state, manifestHash: project.manifestHash })
+  const exitCode = errors.length > result.errors.length ? ExitCode.failed : result.exitCode
 
   if (session.json) {
     session.printer.emit({
-      ok: result.exitCode === ExitCode.ok,
+      ok: exitCode === ExitCode.ok,
       command: 'secret set',
       name,
       sinks: declaration.sinks,
       targets: specs.map((s) => s.id),
-      errors: result.errors,
+      redeployed: redeployed ?? null,
+      errors,
     })
   } else {
     session.printer.line(`${name}=**** pushed to ${specs.length} destinations.`)
-    for (const error of result.errors) session.printer.error(error)
+    if (redeployed) session.printer.line(`Deployed again so the live app uses it: ${redeployed}`)
+    for (const error of errors) session.printer.error(error)
   }
-  return result.exitCode
+  return exitCode
+}
+
+/**
+ * Vercel and Netlify read env only when they build, so a value written to a hosting env after the
+ * last deployment does not reach the live app until it is deployed again (BUG-63). After secret set
+ * or rotate, the hosting deployment is applied: it sees the newer env and deploys again. A project
+ * that was never deployed is left for cimiento up.
+ */
+async function redeployAfterEnvChange(
+  project: ProjectSession,
+  state: ProjectState,
+): Promise<{ state: ProjectState; redeployed?: string; error?: CimientoErrorFields }> {
+  const hosting = hostingOf(project.manifest)
+  const id = hosting ? `${hosting}.deployment` : undefined
+  const spec = id ? project.specs.find((s) => s.id === id) : undefined
+  const provider = hosting ? project.providers.find((p) => p.id === hosting) : undefined
+  if (!id || !spec || !provider || !state.resources[id]) return { state }
+  const ctx = { ...project.ctx, state }
+  try {
+    const attempt = await new OutputResolver(state).resolveWithHydration(spec, project.specs, new Map(project.providers.map((p) => [p.id, p])), ctx)
+    if (attempt.unresolved.length > 0) return { state }
+    const result = await provider.ensure(attempt.spec, ctx)
+    const next = applyEnsureToState(state, spec, result)
+    return { state: next, ...(result.action !== 'noop' ? { redeployed: result.url ?? id } : {}) }
+  } catch (err) {
+    return {
+      state,
+      error: asCimientoError(err, { code: 'CHECK_FAILED', provider: hosting!, resource: id, hint: 'Run cimiento up. It deploys again so the live app reads the current env.' }).toJSON(),
+    }
+  }
 }
 
 export async function secretRotateCommand(session: Session): Promise<number> {
@@ -158,13 +200,21 @@ export async function secretRotateCommand(session: Session): Promise<number> {
     hosting && declaration.sinks.includes('hosting')
       ? `${HOSTING_NAMES[hosting]} reads env when it builds. cimiento up deploys again so the live app uses the new value, and cimiento doctor reports the deployment until then.`
       : 'Every sink holds the new value now.'
+  let redeployed: string | undefined
+  if (errors.length === 0) {
+    const outcome = await redeployAfterEnvChange(project, project.state)
+    redeployed = outcome.redeployed
+    if (outcome.error) errors.push(outcome.error)
+    else if (outcome.state !== project.state) writeProjectState(session.cwd, { ...outcome.state, manifestHash: project.manifestHash })
+  }
   const exitCode = errors.length > 0 ? ExitCode.failed : ExitCode.ok
+  const finalNote = redeployed ? `Deployed again so the live app uses the new value: ${redeployed}` : note
   if (session.json) {
-    session.printer.emit({ ok: exitCode === ExitCode.ok, command: 'secret rotate', name, source: declaration.source, updated, created, errors, note })
+    session.printer.emit({ ok: exitCode === ExitCode.ok, command: 'secret rotate', name, source: declaration.source, updated, created, redeployed: redeployed ?? null, errors, note: finalNote })
   } else {
     session.printer.line(`${name}=**** rotated in ${updated.length + created.length} destinations.`)
     for (const error of errors) session.printer.error(error)
-    session.printer.line(note)
+    session.printer.line(finalNote)
   }
   return exitCode
 }
