@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Preview data
+
+- Neon previews no longer wait for `cimiento up`. The scaffold ships a GitHub Actions workflow
+  that makes a Neon branch for every branch besides production on push and deletes it with the
+  branch, and the app finds its own branch at request time. A preview built before its branch
+  exists answers with one clear sentence and never reads production. The key both use,
+  `NEON_API_KEY`, is made by cimiento, scoped to the one Neon project, kept in the keychain
+  (secret source `generated`), written to the Actions secret and the preview env, and revoked by
+  `down`.
+- `new` with `--template` writes `scaffold.ci: true`, so a project made from flags gets its
+  workflows, as the presets do.
+
 ### Speed
 
 - A noop `up` asks each tool for its version and each vendor CLI who is logged in once per run,

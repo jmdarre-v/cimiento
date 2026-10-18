@@ -124,6 +124,14 @@ export function completeFragment(input: ManifestInput): ManifestInput {
       secrets.push({ name, sinks: ['hosting'], environments: ['preview', 'production'], source: 'keychain' })
     }
   }
+  // Previews on Neon reach their own branch with a key cimiento makes, scoped to the one project
+  // (Goal 8): the preview database workflow and the app both read it.
+  const environments = out.environments
+  const sharedPreviews = environments !== undefined && !Array.isArray(environments) && (environments as Record<string, { database?: string } | null>).preview?.database === 'shared'
+  const hasPreview = environments === undefined || (Array.isArray(environments) ? environments.includes('preview') : 'preview' in environments)
+  if (slots.database === 'neon' && slots.repo === 'github' && hasPreview && !sharedPreviews && !secrets.some((s) => s.name === 'NEON_API_KEY')) {
+    secrets.push({ name: 'NEON_API_KEY', sinks: ['ci', 'hosting'], environments: ['preview'], source: 'generated' })
+  }
   out.secrets = secrets
   return out
 }

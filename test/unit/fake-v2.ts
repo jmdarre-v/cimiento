@@ -77,6 +77,8 @@ export class FakeV2 {
   readonly repoHooks = new Map<string, string[]>()
   readonly neonOrganizations = [{ id: 'org-fake-neon', name: 'Fake Neon Org' }]
   readonly neonProjects = new Map<string, FakeNeonProject>()
+  /** Organization API keys, as Neon keeps them; a revoked one stays listed as revoked. */
+  readonly neonApiKeys: { id: number; name: string; org_id: string; project_id?: string; key: string; revoked: boolean }[] = []
   neonProjectLimit = 10
   /** Every SQL text a Neon database received, as sent. */
   readonly sqlLog: string[] = []
@@ -316,6 +318,25 @@ export class FakeV2 {
     const path = url.pathname.replace(/^\/api\/v2/, '')
     const method = req.method.toUpperCase()
     if (path === '/users/me/organizations') return json(200, { organizations: this.neonOrganizations })
+    const orgKeys = /^\/organizations\/([^/]+)\/api_keys(?:\/(\d+))?$/.exec(path)
+    if (orgKeys) {
+      const org = decodeURIComponent(orgKeys[1])
+      if (!orgKeys[2] && method === 'GET') {
+        return json(200, this.neonApiKeys.filter((k) => k.org_id === org && !k.revoked).map(({ key: _k, revoked: _r, ...k }) => k))
+      }
+      if (!orgKeys[2] && method === 'POST') {
+        const input = req.body as { key_name: string; project_id?: string }
+        const key = { id: 1000 + this.neonApiKeys.length, name: input.key_name, org_id: org, ...(input.project_id ? { project_id: input.project_id } : {}), key: `napi_fake_scoped_${this.neonApiKeys.length}_not_real`, revoked: false }
+        this.neonApiKeys.push(key)
+        return json(200, { id: key.id, key: key.key })
+      }
+      const found = this.neonApiKeys.find((k) => k.org_id === org && String(k.id) === orgKeys[2] && !k.revoked)
+      if (!found) return json(404, { code: '', message: 'api key not found' })
+      if (method === 'DELETE') {
+        found.revoked = true
+        return json(200, { id: found.id, revoked: true })
+      }
+    }
     if (path === '/projects' && method === 'GET') {
       const search = url.searchParams.get('search') ?? ''
       const org = url.searchParams.get('org_id') ?? undefined
@@ -340,7 +361,7 @@ export class FakeV2 {
     const project = one ? this.neonProjects.get(one[1]) : undefined
     if (!one || !project) return json(404, { code: '', message: 'project not found' })
     const rest = one[2] ?? ''
-    if (!rest && method === 'GET') return json(200, { project: { id: project.id, name: project.name, region_id: project.region_id } })
+    if (!rest && method === 'GET') return json(200, { project: { id: project.id, name: project.name, region_id: project.region_id, org_id: project.org_id ?? 'org-fake-neon' } })
     if (!rest && method === 'DELETE') {
       this.neonProjects.delete(project.id)
       return json(200, { project: { id: project.id } })

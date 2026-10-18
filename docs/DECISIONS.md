@@ -527,3 +527,22 @@ One line per decision the spec does not cover, with the reasoning.
   identities on a 401 or 403 and on CLI output saying the login is gone; a login, a command run in
   the person's terminal and an account mismatch clear them too. Tests run with the machine cache
   off (CIMIENTO_DETECT_CACHE=off) and a fresh run cache per test.
+- 2026-10-18 Goal 8: Neon previews find their branch without cimiento up. The scaffold ships
+  .github/workflows/preview-database.yml (push of any branch besides production makes
+  preview/<branch>, delete removes it) and lib/neon-preview.mjs, which the workflow script and the
+  app share so the branch name is computed once. The app resolves its database at request time,
+  not at build, because the build and the workflow start on the same push: DATABASE_URL when set,
+  else on a preview the branch for VERCEL_GIT_COMMIT_REF or Netlify's BRANCH, else an error. There
+  is no other fallback, so a preview cannot reach production's address. app/api/cimiento/database
+  reports the source, the branch and only the Neon endpoint name, never the address.
+- 2026-10-18 Goal 8: the workflow and the previews use NEON_API_KEY, an organization API key scoped
+  to the one project (member level: it makes and removes branches, cannot delete the project or
+  reach another), made by neon.api-key and declared with the new secret source generated: kept in
+  the keychain like a typed one, never asked for, made again when the keychain lost it, the old
+  key revoked. The Actions secret follows the key id through a version input, since GitHub never
+  shows a secret's value; the preview env follows it through the value compare. down revokes it.
+  A preview's code can use the key to read the project, the production branch included; anyone who
+  can push a branch can already change what the preview runs, so this is recorded, not blocked.
+- 2026-10-18 Goal 8: new with --template (other than none) writes scaffold.ci true, as the presets
+  do (BUG-98). Projects made by 0.4.0 or older get the preview database workflow only by copying
+  it from a new scaffold: up never adds scaffold files.

@@ -154,13 +154,17 @@ this table is about real accounts.
 `stack.yaml` lists `dev`, `preview` and `production`, and secrets go to each environment you name.
 Previews never read the production database by default.
 
-- Neon: every git branch besides production gets a Neon branch of the project, and its
-  `DATABASE_URL` and `DATABASE_URL_UNPOOLED` are written for that branch's previews only.
-  `cimiento up` makes the missing ones and removes those whose git branch is gone; `down` removes
-  them all. cimiento is not running when the hosting builds a preview, so a branch pushed with
-  plain git has no database until the next `up`, and its preview fails instead of reaching
-  production. Push the branch again after `up` so its preview is built with the address. A Neon
-  branch starts as a copy of production taken when it is made; what the preview writes stays in it.
+- Neon: every git branch besides production gets a Neon branch of the project. The scaffold's
+  GitHub Actions workflow, `preview-database`, makes it on every push and deletes it when the git
+  branch is deleted, and the app finds its own branch at request time, so plain `git push` is
+  enough. A preview whose branch is not made yet answers with one sentence saying so and never
+  reads production; reload once the workflow has run. Both use `NEON_API_KEY`, a key cimiento makes
+  scoped to the one Neon project (it cannot delete the project or reach another), keeps in the
+  keychain and writes only to the Actions secret and the preview env; `down` revokes it.
+  `cimiento up` also writes each branch's address for its previews, and `down` removes every
+  branch. A Neon branch starts as a copy of production taken when it is made; what the preview
+  writes stays in it. A project made by 0.4.0 or older gets the workflow by copying it from a new
+  scaffold.
 - Supabase: previews read a second project, `<slug>-preview`, with the same migrations and its own
   sign in addresses. Through the Vercel Marketplace it is a second Marketplace database connected
   to the preview environment only, and production's is connected to production and development.

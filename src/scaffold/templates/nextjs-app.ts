@@ -59,6 +59,7 @@ export function nextjsAppFiles(m: Manifest): Record<string, string> {
           ...(usesSupabase ? { '@supabase/supabase-js': '^2.45.0' } : {}),
           ...(usesInngest ? { inngest: '^3.54.0' } : {}),
           ...(usesAnthropic ? { '@anthropic-ai/sdk': '^0.135.0' } : {}),
+          ...(m.slots.database === 'neon' ? { '@neondatabase/serverless': '^1.0.0' } : {}),
         },
         devDependencies: {
           '@types/node': '^22.7.4',

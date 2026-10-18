@@ -3,6 +3,7 @@
 // the repository. The value comes from the secret store, is registered with the redactor, and goes
 // in a request body or on stdin, never on a command line.
 
+import { previewDatabaseIsolated } from '../core/hosting'
 import { CimientoError } from '../core/errors'
 import { ciSecretId, databaseSecretId } from '../core/sink-ids'
 import type { CheckResult, Ctx, EnsureResult, ResourceSpec, Value } from '../core/types'
@@ -46,6 +47,9 @@ export function databaseSinkSpecs(m: Manifest): ResourceSpec[] {
     }))
 }
 
+/** Where the version of a value cimiento makes comes from, so an Actions secret follows a new one. */
+const GENERATED_VERSIONS: Record<string, string> = { NEON_API_KEY: 'neon.api-key:keyId' }
+
 export function ciSinkSpecs(m: Manifest): ResourceSpec[] {
   if (m.slots.repo !== 'github') return []
   return m.secrets
@@ -55,7 +59,14 @@ export function ciSinkSpecs(m: Manifest): ResourceSpec[] {
       kind: 'binding' as const,
       provider: 'github',
       dependsOn: ['github.repo'],
-      inputs: { repo: { deferred: 'github.repo:fullName' }, key: s.name },
+      inputs: {
+        repo: { deferred: 'github.repo:fullName' },
+        key: s.name,
+        // A value cimiento made can be made again; the secret follows the version it was written from.
+        ...(s.source === 'generated' && GENERATED_VERSIONS[s.name] && m.slots.database === 'neon' && previewDatabaseIsolated(m)
+          ? { version: { deferred: GENERATED_VERSIONS[s.name] } }
+          : {}),
+      },
     }))
 }
 
@@ -148,7 +159,11 @@ export async function ensureCiSecret(spec: ResourceSpec, ctx: Ctx): Promise<Ensu
   const key = str(spec.inputs.key)
   const rotate = str(spec.inputs.rotate) === 'true'
   const exists = (await githubSecretNames(ctx, spec)).includes(key)
-  if (exists && !rotate) return { action: 'noop', externalId: `${repo}/${key}` }
+  // GitHub never shows a secret's value, so a generated one is judged by the version it was written from.
+  const version = str(spec.inputs.version)
+  const stale = version !== '' && ctx.state.resources[spec.id]?.outputs?.version !== version
+  const versionOut = version ? { outputs: { version: { value: version, secret: false } } } : {}
+  if (exists && !rotate && !stale) return { action: 'noop', externalId: `${repo}/${key}`, ...versionOut }
   if (ctx.dryRun) return { action: 'noop' }
   const value = await secretValue(ctx, spec, key)
   // gh reads the value from stdin when no --body is given, so it never shows in the process list.
@@ -164,7 +179,7 @@ export async function ensureCiSecret(spec: ResourceSpec, ctx: Ctx): Promise<Ensu
       needsHuman: false,
     })
   }
-  return { action: exists ? 'updated' : 'created', externalId: `${repo}/${key}` }
+  return { action: exists ? 'updated' : 'created', externalId: `${repo}/${key}`, ...versionOut }
 }
 
 export async function verifyCiSecret(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {

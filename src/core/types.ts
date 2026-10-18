@@ -122,6 +122,8 @@ export interface SecretResolver {
   get(name: string): Promise<string | undefined>
   /** Whether this run already holds the value, without reading any source. */
   has?(name: string): boolean
+  /** Keeps a value cimiento made itself, such as the Neon key for previews. */
+  keep?(name: string, value: string): Promise<void>
 }
 
 export interface Ctx {

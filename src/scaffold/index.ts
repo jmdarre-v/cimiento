@@ -9,6 +9,8 @@ import type { ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
 import { BASELINE_FILE, BASELINE_SQL, nextjsAppFiles } from './templates/nextjs-app'
 import { designerSiteFiles } from './templates/designer-site'
+import { neonPreviewFiles } from './templates/neon-preview'
+import { previewDatabaseIsolated } from '../core/hosting'
 
 export { BASELINE_FILE, BASELINE_SQL, BASELINE_TABLE, MARKER_NAME } from './templates/nextjs-app'
 
@@ -45,6 +47,10 @@ export function scaffoldFiles(m: Manifest, options: ScaffoldOptions = {}): Recor
   if (m.scaffold.claude_md) files['CLAUDE.md'] = claudeMd(m)
   // The baseline migration neon.check.migrated queries, whatever the template.
   if (m.slots.database === 'neon') files[`${m.options.neon.migrations}/${BASELINE_FILE}`] = BASELINE_SQL
+  // Previews reach their own Neon branch without cimiento up (BUG-94).
+  if (m.scaffold.template === 'nextjs-app' && m.scaffold.ci && m.slots.database === 'neon' && m.slots.repo === 'github' && previewDatabaseIsolated(m)) {
+    Object.assign(files, neonPreviewFiles(m))
+  }
   // The workflow runs supabase db push; Neon migrations are applied by cimiento up.
   if (m.scaffold.ci && m.slots.database === 'supabase') {
     files['.github/workflows/migrations.yml'] = migrationsWorkflow(m)

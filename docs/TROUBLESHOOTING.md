@@ -280,7 +280,7 @@ A step waits on something nothing produces.
 
 A preview has no database of its own yet.
 
-**What to do:** Run cimiento up. It makes the preview database for each branch and writes its address for that branch only; push the branch again so its preview is built with it.
+**What to do:** Check the preview database workflow in the repository's Actions tab, which makes the branch on every push; cimiento up makes any that are missing too.
 
 **Why:** Previews never read the production database by default. With Neon, up gives every git branch besides production a Neon branch of the project and writes DATABASE_URL and DATABASE_URL_UNPOOLED for that branch's previews only, and removes both once the git branch is gone. cimiento is not running when the hosting builds a preview, so a branch pushed with plain git has no database until the next up, and its preview fails instead of reaching production.
 
@@ -878,7 +878,7 @@ Neon returned an unexpected error.
 
 **What to do:** Read the Neon message in the error, then run cimiento doctor --json.
 
-**Why:** With a personal login, cimiento always names the organization in accounts.neon, because Neon lists and creates projects per organization.
+**Why:** With a personal login, cimiento always names the organization in accounts.neon, because Neon lists and creates projects per organization. The key for previews, neon.api-key, is an organization API key scoped to the one project; a member of the organization can make it. When this machine's keychain no longer holds its value, cimiento up makes a new one, revokes the old one, and writes the new one to the Actions secret and the preview env.
 
 **Looks like:** `Listing Neon projects failed`, `Creating the Neon project`
 

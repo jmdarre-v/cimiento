@@ -209,9 +209,24 @@ export const onePasswordSource: Source = {
   },
 }
 
+/**
+ * A value cimiento makes itself, such as the Neon key for previews (Goal 8), kept in the keychain
+ * like a typed one but never asked for: a missing one is made again by the resource that owns it.
+ */
+export const generatedSource: Source = {
+  id: 'generated',
+  available: true,
+  async read(name: string, ctx: SourceContext): Promise<string | undefined> {
+    return keychainLookup(keychainAccount(ctx.projectSlug, name), ctx)
+  },
+  write: (name, value, ctx) => keychainSource.write!(name, value, ctx),
+  remove: (name, ctx) => keychainSource.remove!(name, ctx),
+}
+
 export const SOURCES: Record<SecretSource, Source> = {
   prompt: promptSource,
   env: envSource,
   keychain: keychainSource,
   '1password': onePasswordSource,
+  generated: generatedSource,
 }

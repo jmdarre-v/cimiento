@@ -10,7 +10,7 @@ export type Environment = (typeof ENVIRONMENTS)[number]
 export const SINKS = ['hosting', 'database', 'ci'] as const
 export type Sink = (typeof SINKS)[number]
 
-export const SECRET_SOURCES = ['prompt', 'keychain', '1password', 'env'] as const
+export const SECRET_SOURCES = ['prompt', 'keychain', '1password', 'env', 'generated'] as const
 export type SecretSource = (typeof SECRET_SOURCES)[number]
 
 /** Which provider ids may fill each slot. `none` leaves the slot empty. */

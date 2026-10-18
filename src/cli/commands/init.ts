@@ -153,7 +153,8 @@ function buildManifest(session: Session, name: string) {
   if (Object.keys(accounts).length > 0) overrides.accounts = accounts as ManifestInput['accounts']
 
   const template = flagString(session.args.flags, 'template')
-  if (template) overrides.scaffold = { template } as ManifestInput['scaffold']
+  // A template is an app, and an app gets its workflows, as the presets give them (BUG-98).
+  if (template) overrides.scaffold = { template, ci: template !== 'none' } as ManifestInput['scaffold']
 
   return parseManifest(completeFragment(mergeFragments(base, overrides)), 'stack.yaml')
 }

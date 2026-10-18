@@ -13,6 +13,6 @@ export async function knownEnvValue(spec: ResourceSpec, ctx: Ctx): Promise<strin
   if (str(spec.inputs.source) === 'literal') return str(spec.inputs.value) || undefined
   if (ctx.secrets.has?.(key)) return ctx.secrets.get(key)
   const source = ctx.manifest.secrets.find((s) => s.name === key)?.source
-  if (source !== 'env' && source !== 'keychain') return undefined
+  if (source !== 'env' && source !== 'keychain' && source !== 'generated') return undefined
   return ctx.secrets.get(key).catch(() => undefined)
 }

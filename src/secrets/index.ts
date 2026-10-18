@@ -85,6 +85,24 @@ export class SecretStore implements SecretResolver {
     const decl = this.declaration(name)
     const sourceId = decl?.source ?? 'prompt'
     const ctx = this.sourceContext(name)
+    if (sourceId === 'generated') {
+      // Nobody types a value cimiento makes; the one stored is pushed again, and a missing one is
+      // made again by cimiento up.
+      const stored = await SOURCES.generated.read(name, ctx)
+      if (stored !== undefined) {
+        this.set(name, stored)
+        return stored
+      }
+      throw new CimientoError({
+        code: 'SECRET_MISSING',
+        provider: 'secrets',
+        resource: `secret.${name}`,
+        message: `${name} is made by cimiento, and this machine's keychain does not hold it.`,
+        hint: 'Run cimiento up. It makes a new one, revokes the old one and writes the new one everywhere it goes.',
+        retryable: true,
+        needsHuman: false,
+      })
+    }
     let value: string | undefined
     if (sourceId === 'prompt' || sourceId === 'keychain') {
       value = await SOURCES.prompt.read(name, ctx)
@@ -109,6 +127,13 @@ export class SecretStore implements SecretResolver {
     assertTestModeValue(name, value)
     this.set(name, value)
     return value
+  }
+
+  /** Keeps a value cimiento made, for this run and in its declared source when that is a store. */
+  async keep(name: string, value: string): Promise<void> {
+    this.set(name, value)
+    const sourceId = this.declaration(name)?.source
+    if (sourceId === 'generated' || sourceId === 'keychain') await SOURCES[sourceId].write!(name, value, this.sourceContext(name))
   }
 
   /** Deletes the value from the declared source when cimiento owns that store. */
