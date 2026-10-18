@@ -200,8 +200,14 @@ environments:
 cimiento up --orphans destroy
 ```
 
-- In a project cimiento did not create, `cimiento doctor` without a `stack.yaml` lists the
-  providers the project already uses, read only, and creates nothing.
+- In a project cimiento did not create, `cimiento doctor` without a `stack.yaml` does provider
+  discovery and tool and session checks, not a full diagnosis. It reads `package.json`
+  dependencies, `.vercel/project.json`, `vercel.json`, `netlify.toml`, `.netlify/state.json`,
+  `supabase/config.toml` and the git remote, and lists each provider it finds with that evidence.
+  For each one with a command line tool it says whether the tool is installed, its version and
+  which account it is logged in as. It checks no resource, env var, key, deployment or database,
+  runs none of the checks `doctor` runs in a project, writes nothing and always exits 0. `cimiento init` writes the `stack.yaml` that
+  a full `doctor` needs.
 
 ## Commands
 
@@ -328,6 +334,32 @@ cimiento names the one record to add there (the CNAME Vercel recommends for the 
 0.3.0: all of the above. Templates `nextjs-app` and `designer-site`. Expert, guided (English and
 Spanish) and `--json` output. The installer script for macOS and Ubuntu, also under WSL, and the
 Claude Code plugin. `CHANGELOG.md` has the details.
+
+## Eject
+
+cimiento is not a runtime. To stop using it, delete two things in the project:
+
+```bash
+rm -rf stack.yaml .cimiento
+```
+
+What stays, and keeps working without cimiento:
+
+- A plain Next.js app. `package.json` has no cimiento dependency, so there is nothing to
+  uninstall in the app. A few messages and comments in the code mention `cimiento doctor`; edit
+  them when you like.
+- The env vars in the hosting provider, as native Vercel or Netlify environment variables, per
+  environment. `vercel env pull` or the Netlify dashboard reads them from then on.
+- The GitHub repository, its Actions secrets and, with Supabase, the migrations workflow, which
+  runs the Supabase CLI and needs no cimiento.
+- The databases: the Supabase or Neon project, and the preview project or the Neon preview
+  branches. Nothing removes a preview branch when its git branch goes any more; delete it in the
+  Neon console. Neon migrations in `db/migrations` are no longer applied for you.
+- The secret values in the macOS keychain under the service `cimiento`, and `~/.cimiento` with
+  the run logs. Both are on your machine only; delete them when you like.
+
+Nothing in any account is deleted by ejecting. To delete the resources instead, run
+`cimiento down` before removing the files.
 
 ## Contributing
 
