@@ -146,7 +146,7 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 | BUG-67 | After the Neon sign-up and login in that run, neon.project failed with NEON_TOKEN_MISSING: neonctl now keeps its login in ~/.config/neon, and cimiento only read ~/.config/neonctl | aea037f |
 | BUG-68 | In the attended up of cimiento-test-5b, gh repo create made the repository but failed to add the origin remote the folder kept after down, so nothing was pushed and the Netlify link and deploy were skipped | 509edf7, f9051ff |
 | BUG-69 | The same run opened the Stripe keys page twice, once per key, and asked about a Stripe account twice | 509edf7 |
-| BUG-70 | down released the cimiento-test-5b repository instead of deleting it: the run whose gh repo create failed after creating it recorded nothing, and the next run adopted it | see git log |
+| BUG-70 | down released the cimiento-test-5b repository instead of deleting it: the run whose gh repo create failed after creating it recorded nothing, and the next run adopted it | 590bbf8 |
 
 ## Left for a person
 
