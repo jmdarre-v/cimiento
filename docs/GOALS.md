@@ -154,9 +154,7 @@ The GOAL REPORT includes the bug table and timings inline.
 
 ## Goal 6: trustworthy state, teardown and health; version 0.3.0
 
-0.2.0 is already on npm and has these bugs; 0.3.0 replaces it. Continue BUG ids, each with a KB
-entry and a regression test that reproduces the failure first. (BUG-66 to 70 were used at the end
-of Goal 5, so Goal 6 starts at BUG-71.)
+0.2.0 is already on npm and has these bugs; 0.3.0 replaces it.
 
 1. Verification returns present, absent or unknown. `down` forgets a resource only on confirmed absent; auth errors, timeouts and provider errors keep it in state and exit non-zero.
 2. State records each managed resource's full spec. `down` and `plan` cover every resource in state, including ones whose slot was removed or changed in `stack.yaml`; a removed slot asks retain, release or destroy (flag for `--yes`).

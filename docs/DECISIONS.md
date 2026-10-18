@@ -427,3 +427,5 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 5: field test c is completed by the owner's decision without adding a live DNS
   record, because the only listed domain serves a production project. domain add and remove were
   proven on the real Vercel account; the step after DNS is covered by unit tests.
+- 2026-10-18 Goal 6: the goal says to continue BUG ids from BUG-66, but BUG-66 to 70 were used at
+  the end of Goal 5 (docs/FIELD-TEST-5.md), so Goal 6 starts at BUG-71 to keep every id unique.
