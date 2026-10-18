@@ -46,7 +46,7 @@ export interface FakeDeployment {
   createdAt?: number
   /** The env this deployment was built with, as Vercel bakes it in. */
   env?: Record<string, string>
-  meta?: { githubCommitSha?: string }
+  meta?: { githubCommitSha?: string; githubCommitRef?: string }
 }
 
 export interface FakeWidget {
@@ -128,6 +128,9 @@ export class FakeCloud implements Io {
   readonly httpCalls: string[] = []
 
   readonly repos = new Map<string, FakeRepo>()
+  /** GitHub Actions secrets by repository, and Supabase project secrets by project ref. */
+  readonly actionsSecrets = new Map<string, Map<string, string>>()
+  readonly supabaseSecrets = new Map<string, Map<string, string>>()
   readonly vercelProjects = new Map<string, FakeVercelProject>()
   readonly vercelEnv = new Map<string, FakeVercelEnv[]>()
   readonly deployments = new Map<string, FakeDeployment[]>()
@@ -156,8 +159,11 @@ export class FakeCloud implements Io {
   /** The working tree has changes git status would list. */
   gitDirty = false
   gitCommits = 0
+  /** The checked out branch, and every branch pushed to the repository with its head commit. */
+  gitBranch = 'main'
+  readonly pushedBranches = new Map<string, string>()
   /** What a push makes Vercel's build end as. */
-  pushBuild: 'READY' | 'ERROR' = 'READY'
+  pushBuild: 'READY' | 'ERROR' | 'BUILDING' = 'READY'
   /** Vercel projects whose Inngest app was registered with a PUT on /api/inngest. */
   readonly inngestSynced = new Set<string>()
   /** Marketplace resources, one per database the Marketplace created. */
@@ -304,7 +310,7 @@ export class FakeCloud implements Io {
       return ok('upgraded')
     }
     if (cmd === 'git') return this.git(args)
-    if (cmd === 'gh') return this.gh(args)
+    if (cmd === 'gh') return this.gh(args, _opts)
     if (cmd === 'vercel') return this.vercel(args)
     if (cmd === 'supabase') return this.supabase(args)
     if (cmd === 'brew' || cmd === 'npm' || cmd === 'pnpm') return ok('installed')
@@ -403,15 +409,29 @@ export class FakeCloud implements Io {
 
   private async git(args: string[]): Promise<ExecResult> {
     if (args[0] === 'init') return ok('Initialized empty Git repository')
-    if (args[0] === 'rev-parse' && args.includes('--abbrev-ref')) return ok('main\n')
+    if (args[0] === 'rev-parse' && args.includes('--abbrev-ref')) return ok(`${this.gitBranch}\n`)
+    if (args[0] === 'checkout') {
+      this.gitBranch = args[args.length - 1]
+      return ok(`Switched to branch '${this.gitBranch}'`)
+    }
     if (args[0] === 'rev-parse') return this.gitCommits > 0 ? ok(`${this.gitSha()}\n`) : fail('fatal: Needed a single revision')
     if (args[0] === 'status') return ok(this.gitDirty ? ' M app/page.tsx\n' : '')
     if (args[0] === 'push') {
       // Vercel's GitHub app starts a production build of the pushed commit by itself.
+      const branch = args[args.length - 1]
+      this.pushedBranches.set(branch, this.gitSha())
       const project = [...this.vercelProjects.values()][0]
       if (project) {
         const list = this.deployments.get(project.id) ?? []
-        list.unshift({ uid: this.id('dpl'), url: `${project.name}-${this.id('git')}.vercel.app`, readyState: 'BUILDING', target: 'production', createdAt: this.now(), meta: { githubCommitSha: this.gitSha() } })
+        list.unshift({
+          uid: this.id('dpl'),
+          url: `${project.name}-${this.id('git')}.vercel.app`,
+          readyState: 'BUILDING',
+          // Only the production branch deploys to production; any other branch gets a preview.
+          target: branch === 'main' ? 'production' : (null as unknown as string),
+          createdAt: this.now(),
+          meta: { githubCommitSha: this.gitSha(), githubCommitRef: branch },
+        })
         this.deployments.set(project.id, list)
       }
       return ok('To https://github.com/x/y.git')
@@ -431,11 +451,30 @@ export class FakeCloud implements Io {
     return ok('')
   }
 
-  private async gh(args: string[]): Promise<ExecResult> {
+  private async gh(args: string[], opts: ExecOptions = {}): Promise<ExecResult> {
     if (!this.githubLoggedIn && !(args[0] === 'auth' && args[1] === 'login')) {
       return fail('You are not logged into any GitHub hosts. To log in, run: gh auth login')
     }
     if (args[0] === 'api' && args[1] === 'user') return ok(`${this.login}\n`)
+    if (args[0] === 'secret') {
+      const repo = args[args.indexOf('-R') + 1]
+      const store = this.actionsSecrets.get(repo) ?? new Map<string, string>()
+      this.actionsSecrets.set(repo, store)
+      if (args[1] === 'list') return ok(JSON.stringify([...store.keys()].map((name) => ({ name }))))
+      if (args[1] === 'set') {
+        store.set(args[2], opts.input ?? '')
+        return ok('')
+      }
+      if (args[1] === 'delete') {
+        store.delete(args[2])
+        return ok('')
+      }
+    }
+    if (args[0] === 'api' && /^repos\/[^/]+\/[^/]+\/branches/.test(args[1] ?? '')) {
+      const branches = [{ name: 'main', sha: this.pushedBranches.get('main') ?? this.gitSha() }]
+      for (const [name, sha] of this.pushedBranches) if (name !== 'main') branches.push({ name, sha })
+      return ok(JSON.stringify(branches))
+    }
     if (args[0] === 'auth' && args[1] === 'status') return ok(`Logged in to github.com account ${this.login}`)
     if (args[0] === 'auth' && args[1] === 'login') {
       this.githubLoggedIn = true
@@ -938,6 +977,25 @@ export class FakeCloud implements Io {
           ]
         : [{ timestamp: '2026-09-19T00:00:00', total_rest_requests: 0, total_auth_requests: 0 }]
       return json(200, { result: rows })
+    }
+
+    const secretsMatch = /^\/v1\/projects\/([^/]+)\/secrets$/.exec(path)
+    if (secretsMatch) {
+      const ref = decodeURIComponent(secretsMatch[1])
+      const store = this.supabaseSecrets.get(ref) ?? new Map<string, string>()
+      this.supabaseSecrets.set(ref, store)
+      if (method === 'GET') return json(200, [...store.keys()].map((name) => ({ name, value: 'digest-not-the-value' })))
+      if (method === 'POST') {
+        for (const s of req.body as { name: string; value: string }[]) {
+          if (s.name.startsWith('SUPABASE_')) return json(400, { message: 'Env var name cannot start with SUPABASE_' })
+          store.set(s.name, s.value)
+        }
+        return json(201, {})
+      }
+      if (method === 'DELETE') {
+        for (const name of req.body as string[]) store.delete(name)
+        return json(200, {})
+      }
     }
 
     const orgMatch = /^\/v1\/organizations\/([^/]+)$/.exec(path)

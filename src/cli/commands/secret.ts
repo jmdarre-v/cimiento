@@ -14,8 +14,10 @@ import { OutputResolver } from '../../core/resolve'
 import { hashManifest, writeProjectState } from '../../core/state'
 import { manifestPath } from '../../manifest'
 import { parseManifest } from '../../manifest/schema'
-import { removeEnv, rotateEnv } from '../../providers/vercel'
+import { removeEnv } from '../../providers/vercel'
+import { removeCiSecret, removeDatabaseSecret } from '../../secrets/sinks'
 import { allSinkSpecs, assertSinkAvailable, sinkSpecsFor } from '../../secrets'
+import type { Ctx, ResourceSpec } from '../../core/types'
 import { openProject, type Session } from '../context'
 
 export async function secretSetCommand(session: Session): Promise<number> {
@@ -139,11 +141,13 @@ export async function secretRotateCommand(session: Session): Promise<number> {
   const errors: CimientoErrorFields[] = []
   for (const spec of resolved) {
     try {
-      const result = await rotateEnv(spec, project.ctx)
+      // Each sink writes over what it holds: the hosting env, Supabase secrets, Actions secrets.
+      const provider = byProvider.get(spec.provider)!
+      const result = await provider.ensure({ ...spec, inputs: { ...spec.inputs, rotate: 'true' } }, project.ctx)
       ;(result.action === 'created' ? created : updated).push(spec.id)
     } catch (err) {
       errors.push(
-        asCimientoError(err, { code: 'VERCEL_ENV_WRITE_FAILED', provider: 'vercel', resource: spec.id, hint: `Run cimiento secret rotate ${name} again.` }).toJSON(),
+        asCimientoError(err, { code: 'VERCEL_ENV_WRITE_FAILED', provider: spec.provider, resource: spec.id, hint: `Run cimiento secret rotate ${name} again.` }).toJSON(),
       )
     }
   }
@@ -210,7 +214,7 @@ export async function secretRemoveCommand(session: Session): Promise<number> {
     const attempt = await resolver.resolveWithHydration(spec, project.specs, byProvider, project.ctx)
     // No hosting project yet means nothing was ever written there.
     if (attempt.unresolved.length > 0) continue
-    if (await removeEnv(attempt.spec, project.ctx)) deleted.push(spec.id)
+    if (await removeSinkValue(attempt.spec, project.ctx)) deleted.push(spec.id)
   }
   const keychain = declaration.source === 'keychain' ? await project.secrets.removeStored(name) : false
 
@@ -277,4 +281,11 @@ function withDependencies<T extends { id: string; dependsOn: string[] }>(wanted:
   }
   for (const spec of wanted) visit(spec.id)
   return all.filter((s) => keep.has(s.id))
+}
+
+/** Deletes one sink's copy of a secret, whichever sink the spec belongs to. */
+async function removeSinkValue(spec: ResourceSpec, ctx: Ctx): Promise<boolean> {
+  if (spec.id.startsWith('supabase.secret.')) return removeDatabaseSecret(spec, ctx)
+  if (spec.id.startsWith('github.secret.')) return removeCiSecret(spec, ctx)
+  return removeEnv(spec, ctx)
 }

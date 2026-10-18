@@ -255,6 +255,7 @@ export function createVercelProvider(m?: Manifest): Provider {
       if (spec.id === 'vercel.deployment') return verifyDeployment(spec, ctx)
       if (spec.id === 'vercel.check.deployed') return verifyDeployed(spec, ctx)
       if (spec.id === 'vercel.check.secrets-present') return verifySecretsPresent(spec, ctx)
+      if (spec.id === 'vercel.check.preview') return verifyPreview(spec, ctx)
       throw unknownResource(spec)
     },
 
@@ -651,6 +652,8 @@ async function listEnv(ctx: Ctx, spec: ResourceSpec, projectId: string): Promise
 }
 
 async function ensureEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
+  // secret rotate asks every sink to write over the value it holds.
+  if (str(spec.inputs.rotate) === 'true' && !ctx.dryRun) return rotateEnv({ ...spec, inputs: { ...spec.inputs, rotate: '' } }, ctx)
   const projectId = str(spec.inputs.projectId)
   const key = str(spec.inputs.key)
   const environment = str(spec.inputs.environment)
@@ -1276,6 +1279,60 @@ async function verifyDeployed(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult
     }
   }
   return { ok: true, evidence: `200 from ${url}` }
+}
+
+/** The branches of a repository and their head commits, through gh. */
+export async function repoBranches(ctx: Ctx, repo: string): Promise<{ name: string; sha: string }[]> {
+  const result = await ctx.io.exec('gh', ['api', `repos/${repo}/branches?per_page=100`, '--jq', '[.[] | {name: .name, sha: .commit.sha}]'])
+  if (result.code !== 0) return []
+  try {
+    return JSON.parse(result.stdout || '[]') as { name: string; sha: string }[]
+  } catch {
+    return []
+  }
+}
+
+/**
+ * hosting.preview, spec section 12: every pushed branch besides production has a ready preview
+ * of its head commit. Vercel builds one per push by itself; this proves it happened.
+ */
+async function verifyPreview(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
+  const repo = str(spec.inputs.repo)
+  const production = str(spec.inputs.productionBranch) || 'main'
+  const branches = (await repoBranches(ctx, repo)).filter((b) => b.name !== production).slice(0, 10)
+  if (branches.length === 0) {
+    return { ok: true, evidence: `no branch besides ${production} yet; the first pushed branch gets a preview, and this check then proves it` }
+  }
+  const list = await vercelCall<{ deployments?: (VercelDeployment & { meta?: { githubCommitSha?: string; githubCommitRef?: string } })[] }>(
+    ctx,
+    spec.id,
+    'GET',
+    `/v6/deployments?projectId=${encodeURIComponent(str(spec.inputs.projectId))}&limit=100`,
+  )
+  const deployments = list.body?.deployments ?? []
+  const ready: string[] = []
+  const missing: string[] = []
+  for (const branch of branches) {
+    const d = deployments.find((x) => x.meta?.githubCommitSha === branch.sha && x.meta?.githubCommitRef === branch.name)
+    const state = (d?.readyState ?? d?.state ?? '').toUpperCase()
+    if (d && state === 'READY') ready.push(`${branch.name} at https://${d.url}`)
+    else missing.push(`${branch.name} (${d ? state.toLowerCase() || 'unknown' : 'no deployment of its head commit yet'})`)
+  }
+  if (missing.length > 0) {
+    return {
+      ok: false,
+      error: new CimientoError({
+        code: 'HOSTING_PREVIEW_NOT_READY',
+        provider: ID,
+        resource: spec.id,
+        message: `No ready preview for ${missing.join(', ')}.`,
+        hint: 'Vercel builds a preview for every pushed branch by itself, usually within two minutes. Run cimiento doctor again; if the state says error, open the build log in the Vercel project.',
+        retryable: true,
+        needsHuman: false,
+      }),
+    }
+  }
+  return { ok: true, evidence: `preview ready for ${ready.join(', ')}` }
 }
 
 async function verifySecretsPresent(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {

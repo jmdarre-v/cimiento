@@ -12,6 +12,7 @@ import { settleSupabasePath } from '../../wiring/supabase-configurations'
 import { sessionConfirm, type ProjectSession } from '../context'
 import { billableItems, steps, t } from '../i18n'
 import { stepTitleFor } from '../../core/person-steps'
+import { sinkSecretName } from '../../core/sink-ids'
 import { explainKey } from '../../registry'
 import { billableCreates, buildPlan } from '../../core/planner'
 import { hashManifest, writeProjectState } from '../../core/state'
@@ -228,8 +229,8 @@ export function estimateMinutes(ids: string[]): number {
 }
 
 function isSecretBinding(project: ProjectSession, spec: ResourceSpec): boolean {
-  if (!spec.id.startsWith('vercel.env.')) return false
-  return project.manifest.secrets.some((s) => spec.id.startsWith(`vercel.env.${s.name}.`))
+  const name = sinkSecretName(spec.id)
+  return name !== undefined && project.manifest.secrets.some((s) => s.name === name)
 }
 
 /** Runs the steps a filter picks, with everything they depend on, asking the person as it goes. */

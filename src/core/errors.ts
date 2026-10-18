@@ -152,6 +152,7 @@ export const ERROR_CODES = [
   'JOIN_NO_STATE',
   'SECRET_NOT_DECLARED',
   'SUPABASE_CONFIGURATION_CHOICE_NEEDED',
+  'HOSTING_PREVIEW_NOT_READY',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

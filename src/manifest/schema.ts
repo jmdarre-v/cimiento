@@ -186,8 +186,8 @@ function crossValidate(m: Manifest, source: string): void {
     if (secret.sinks.includes('hosting') && hosting === 'none') {
       problems.push(`secrets.${secret.name} targets the hosting sink but slots.hosting is none`)
     }
-    if (secret.sinks.includes('database') && database === 'none') {
-      problems.push(`secrets.${secret.name} targets the database sink but slots.database is none`)
+    if (secret.sinks.includes('database') && database !== 'supabase') {
+      problems.push(`secrets.${secret.name} targets the database sink, which is Supabase project secrets, but slots.database is ${database}`)
     }
     if (secret.sinks.includes('ci') && m.slots.repo === 'none') {
       problems.push(`secrets.${secret.name} targets the ci sink but slots.repo is none`)

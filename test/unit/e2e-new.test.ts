@@ -67,6 +67,7 @@ describe('cimiento new --preset fullstack --json', () => {
       'supabase.check.migrated',
       'turnstile.check.verify',
       'vercel.check.deployed',
+      'vercel.check.preview',
       'vercel.check.repo-linked',
       'vercel.check.secrets-present',
     ])

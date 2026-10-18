@@ -1,5 +1,6 @@
 // The scaffold. Writes the starter template plus every generated file spec section 11 lists.
 
+import { parseHostingEnvId } from '../core/sink-ids'
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { CimientoError } from '../core/errors'
@@ -257,8 +258,7 @@ export function readmeWithReceipts(existing: string, m: Manifest, receipts: Rece
 export function bindingEnvNames(specs: ResourceSpec[]): string[] {
   const names = new Set<string>()
   for (const spec of specs) {
-    if (!spec.id.startsWith('vercel.env.')) continue
-    const key = spec.id.split('.')[2]
+    const key = parseHostingEnvId(spec.id)?.key
     if (key) names.add(key)
   }
   return [...names].sort()

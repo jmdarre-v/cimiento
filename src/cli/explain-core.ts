@@ -114,4 +114,8 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'cimiento join connects this machine to a project that already exists, and this folder has no record of one. The record is .cimiento/state.json, which the repository carries once the project is set up.',
     es: 'cimiento join conecta esta computadora a un proyecto que ya existe, y esta carpeta no tiene registro de uno. El registro es .cimiento/state.json, que el repositorio trae una vez que el proyecto esta configurado.',
   },
+  HOSTING_PREVIEW_NOT_READY: {
+    en: 'A branch you pushed does not have a working preview yet. The hosting provider builds one for every branch by itself; this usually clears in a minute, unless the build failed.',
+    es: 'Una rama que subiste todavia no tiene una vista previa funcionando. El proveedor de hosting construye una por cada rama; normalmente se resuelve en un minuto, salvo que la construccion haya fallado.',
+  },
 }

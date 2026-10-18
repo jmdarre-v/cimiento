@@ -1,6 +1,7 @@
 // GitHub provider. Fills the repo slot. Everything goes through the gh CLI, which owns token
 // storage and gives structured output with --json.
 
+import { ciSinkSpecs, ensureCiSecret, verifyCiSecret } from '../../secrets/sinks'
 import { sameResource } from '../../core/state'
 import { githubLoginStep, githubSignupStep } from '../../core/person-steps'
 import { existsSync } from 'node:fs'
@@ -138,6 +139,7 @@ export const githubProvider: Provider = {
       dependsOn: ['github.repo'],
       inputs: { owner, name: m.slug, defaultBranch: m.options.github.defaultBranch },
     })
+    specs.push(...ciSinkSpecs(m))
     return specs
   },
 
@@ -149,6 +151,7 @@ export const githubProvider: Provider = {
     }
     if (spec.kind === 'session') return ensureSession(spec, ctx)
     if (spec.id === 'github.repo') return ensureRepo(spec, ctx)
+    if (spec.id.startsWith('github.secret.')) return ensureCiSecret(spec, ctx)
     if (spec.kind === 'check') return { action: 'noop' }
     throw unknownResource(spec)
   },
@@ -177,6 +180,7 @@ export const githubProvider: Provider = {
       }
       return sessionCheck(ID, spec, detection, ctx.manifest.accounts.github, LOGIN_HINT)
     }
+    if (spec.id.startsWith('github.secret.')) return verifyCiSecret(spec, ctx)
     if (spec.id === 'github.repo' || spec.id === 'github.check.repo') {
       const full = fullName(spec)
       const view = await viewRepo(ctx, full)
@@ -266,7 +270,13 @@ export const githubProvider: Provider = {
   },
 
   explain(key: string, lang: Lang): string {
-    const entry = GITHUB_EXPLAIN[key]
+    const name = /^github\.secret\.([A-Z0-9_]+)$/.exec(key)?.[1]
+    const entry = GITHUB_EXPLAIN[key] ?? (name
+      ? {
+          en: `The secret ${name} stored as a GitHub Actions secret of the repository, where workflows read it. cimiento writes the value, never prints it, and keeps no copy.`,
+          es: `El secreto ${name} guardado como secreto de GitHub Actions del repositorio, donde lo leen los workflows. cimiento escribe el valor, nunca lo imprime y no guarda copia.`,
+        }
+      : undefined)
     if (!entry) return `No explanation for ${key} yet.`
     return (lang === 'es' && entry.es) || entry.en
   },

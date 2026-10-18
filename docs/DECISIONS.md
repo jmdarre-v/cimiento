@@ -368,3 +368,12 @@ One line per decision the spec does not cover, with the reasoning.
   src/kb, grouped by provider, one section per code with what to do, why and what it looks like;
   a test fails when it is out of date. The npm package ships dist and CHANGELOG.md (plus README and
   package.json, which npm always includes); no tests and no docs beyond those.
+- 2026-10-18 Goal 5: the database sink writes Supabase project secrets (what Edge Functions read)
+  and is refused unless slots.database is supabase; the ci sink writes GitHub Actions secrets with
+  `gh secret set NAME -R repo`, the value on stdin so it never shows in a process list. Both are
+  bindings of their own provider, so down removes them with the project or repository they live in.
+- 2026-10-18 Goal 5: secret rotate is ensure with inputs.rotate set, so each sink writes over the
+  value it holds; secret remove deletes from every sink, including Supabase and Actions.
+- 2026-10-18 Goal 5: hosting.preview is a passive check. It never pushes a branch itself: with no
+  branch besides production it passes and says so, and otherwise every other branch (up to ten)
+  must have a ready preview of its head commit. A failed preview build is HOSTING_PREVIEW_NOT_READY.

@@ -146,3 +146,11 @@
     - "has no .cimiento/state.json"
   hint: Pull the latest commit of the repository, which carries .cimiento/state.json. If the project was never set up, run cimiento up instead.
   fix: join connects a new machine to resources that already exist, and state is the list of them. Without it there is nothing to verify; up is the command that creates them.
+
+- code: HOSTING_PREVIEW_NOT_READY
+  provider: core
+  title: a pushed branch has no ready preview yet
+  signatures:
+    - "No ready preview for"
+  hint: Wait a minute and run cimiento doctor again. If the state says error, open the build log of that preview in the hosting dashboard.
+  fix: The hosting provider builds a preview for every pushed branch by itself. hosting.preview checks that each branch other than production has a ready preview of its latest commit, so a branch whose preview failed to build shows up here instead of in production.

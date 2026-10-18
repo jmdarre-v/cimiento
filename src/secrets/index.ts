@@ -8,6 +8,7 @@ import type { Redactor } from '../core/redact'
 import type { ResourceSpec, SecretResolver } from '../core/types'
 import type { Manifest, SecretDecl, Sink } from '../manifest/schema'
 import { SOURCES, type SourceContext } from './sources'
+import { sinkSecretName } from '../core/sink-ids'
 
 export * from './sources'
 export * from './prompt'
@@ -117,8 +118,8 @@ export class SecretStore implements SecretResolver {
   }
 }
 
-/** The sinks this build can write to. Database and ci land in Goal 2. */
-export const AVAILABLE_SINKS: Sink[] = ['hosting']
+/** The sinks this build writes to, spec section 8. */
+export const AVAILABLE_SINKS: Sink[] = ['hosting', 'database', 'ci']
 
 export function assertSinkAvailable(sink: Sink, name: string): void {
   if (AVAILABLE_SINKS.includes(sink)) return
@@ -135,15 +136,14 @@ export function assertSinkAvailable(sink: Sink, name: string): void {
 
 /** The resource ids that carry a secret to its sinks, so secret set can apply just those. */
 export function sinkSpecsFor(name: string, specs: ResourceSpec[]): ResourceSpec[] {
-  return specs.filter((s) => s.id.startsWith(`vercel.env.${name}.`))
+  return specs.filter((s) => sinkSecretName(s.id) === name)
 }
 
 /** Every secret carrying resource, for secret check. */
 export function allSinkSpecs(manifest: Manifest, specs: ResourceSpec[]): ResourceSpec[] {
   const names = new Set(manifest.secrets.map((s) => s.name))
   return specs.filter((s) => {
-    if (!s.id.startsWith('vercel.env.')) return false
-    const key = s.id.split('.')[2]
+    const key = sinkSecretName(s.id)
     return key !== undefined && names.has(key)
   })
 }

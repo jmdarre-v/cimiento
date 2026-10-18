@@ -1,5 +1,15 @@
 // Plain language for every resource id and error code this module can produce.
 
+/** Plain language for a secret carried to the database sink. */
+export function databaseSecretExplain(key: string): { en: string; es: string } | undefined {
+  const name = /^supabase\.secret\.([A-Z0-9_]+)$/.exec(key)?.[1]
+  if (!name) return undefined
+  return {
+    en: `The secret ${name} stored in the Supabase project, where Edge Functions read it. cimiento writes the value, never prints it, and keeps no copy.`,
+    es: `El secreto ${name} guardado en el proyecto de Supabase, donde lo leen las Edge Functions. cimiento escribe el valor, nunca lo imprime y no guarda copia.`,
+  }
+}
+
 export const SUPABASE_EXPLAIN: Record<string, { en: string; es?: string }> = {
   'supabase.tool.supabase': {
     en: 'The Supabase command line tool. cimiento uses it to log in and to apply your database migrations.',

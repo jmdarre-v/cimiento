@@ -91,6 +91,16 @@ Down left something it created but cannot delete.
 
 **Looks like:** `cannot delete organizations`, `cannot delete or archive apps`
 
+### HOSTING_PREVIEW_NOT_READY
+
+A pushed branch has no ready preview yet.
+
+**What to do:** Wait a minute and run cimiento doctor again. If the state says error, open the build log of that preview in the hosting dashboard.
+
+**Why:** The hosting provider builds a preview for every pushed branch by itself. hosting.preview checks that each branch other than production has a ready preview of its latest commit, so a branch whose preview failed to build shows up here instead of in production.
+
+**Looks like:** `No ready preview for`
+
 ### JOIN_NO_STATE
 
 There is nothing in this folder to join.

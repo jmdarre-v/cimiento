@@ -42,8 +42,9 @@ import {
   supabaseOrg,
   supabaseOrgsWithPlans,
 } from '../../wiring/vercel-supabase-runtime'
-import { SUPABASE_EXPLAIN } from './explain'
+import { databaseSecretExplain, SUPABASE_EXPLAIN } from './explain'
 import { storeForDatabase } from '../../wiring/supabase-configurations'
+import { databaseSinkSpecs, ensureDatabaseSecret, verifyDatabaseSecret } from '../../secrets/sinks'
 import { supabaseFreeLimitStep, supabaseLoginStep, supabaseOrganizationStep } from '../../core/person-steps'
 
 const ID = 'supabase'
@@ -175,11 +176,13 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
         })
       }
 
+      specs.push(...databaseSinkSpecs(manifest))
       return specs
     },
 
     async ensure(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
       if (spec.kind === 'check') return { action: 'noop' }
+      if (spec.id.startsWith('supabase.secret.')) return ensureDatabaseSecret(spec, ctx)
       if (spec.kind === 'tool') {
         const tool = findTool({ tools: TOOLS }, spec)
         if (!tool) throw unknownResource(spec)
@@ -199,6 +202,7 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
         return verifyTool(ID, tool, spec, ctx)
       }
       if (spec.kind === 'session') return verifySession(provider, spec, ctx)
+      if (spec.id.startsWith('supabase.secret.')) return verifyDatabaseSecret(spec, ctx)
       if (spec.id === 'supabase.project') return verifyProject(spec, ctx)
       if (spec.id === 'supabase.migrations' || spec.id === 'supabase.check.migrated') {
         return verifyMigrations(spec, ctx)
@@ -276,7 +280,7 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
     },
 
     explain(key: string, lang: Lang): string {
-      const entry = SUPABASE_EXPLAIN[key]
+      const entry = SUPABASE_EXPLAIN[key] ?? databaseSecretExplain(key)
       if (!entry) return `No explanation for ${key} yet.`
       return (lang === 'es' && entry.es) || entry.en
     },
