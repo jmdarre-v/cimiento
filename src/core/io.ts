@@ -1,6 +1,7 @@
 // The only place the engine touches the outside world. Every provider call goes through this so
 // tests can record and replay exec and http traffic.
 
+import { CimientoError } from './errors'
 import { execFile, spawn } from 'node:child_process'
 
 export interface ExecOptions {
@@ -34,6 +35,8 @@ export interface HttpRequest {
   url: string
   headers?: Record<string, string>
   body?: unknown
+  /** Overrides the default bound, for a call known to be slow. */
+  timeoutMs?: number
 }
 
 export interface HttpResponse {
@@ -156,7 +159,27 @@ export class RealIo implements Io {
       body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
       if (!headers['content-type']) headers['content-type'] = 'application/json'
     }
-    const res = await fetch(req.url, { method: req.method, headers, body })
+    // Only a read can be sent again safely: a POST that timed out may have happened (BUG-71).
+    const idempotent = ['GET', 'HEAD'].includes(req.method.toUpperCase())
+    const attempts = idempotent ? httpPolicy.retries + 1 : 1
+    let res: Response | undefined
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        res = await fetch(req.url, { method: req.method, headers, body, signal: AbortSignal.timeout(req.timeoutMs ?? httpPolicy.timeoutMs) })
+      } catch (err) {
+        if (attempt < attempts) {
+          await sleep(httpPolicy.backoffMs * attempt)
+          continue
+        }
+        throw httpFailure(req, err)
+      }
+      if (attempt < attempts && RETRY_STATUS.has(res.status)) {
+        await res.text().catch(() => '')
+        await sleep(httpPolicy.backoffMs * attempt)
+        continue
+      }
+      break
+    }
     const text = await res.text()
     let json: unknown = undefined
     try {
@@ -170,6 +193,43 @@ export class RealIo implements Io {
     })
     return { status: res.status, ok: res.ok, text, json, headers: headersOut }
   }
+}
+
+const RETRY_STATUS = new Set([429, 502, 503, 504])
+
+const DEFAULT_HTTP_POLICY = { timeoutMs: 30_000, retries: 2, backoffMs: 500 }
+const httpPolicy = { ...DEFAULT_HTTP_POLICY }
+
+/** Tests shorten the timeout and the wait between retries; an empty object restores the defaults. */
+export function setHttpPolicy(next: Partial<typeof DEFAULT_HTTP_POLICY>): void {
+  Object.assign(httpPolicy, DEFAULT_HTTP_POLICY, next)
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** A request that never got an answer: timed out, or the host could not be reached. */
+function httpFailure(req: HttpRequest, err: unknown): CimientoError {
+  const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+  const host = (() => {
+    try {
+      return new URL(req.url).host
+    } catch {
+      return req.url
+    }
+  })()
+  return new CimientoError({
+    code: timedOut ? 'HTTP_TIMEOUT' : 'HTTP_UNREACHABLE',
+    provider: 'core',
+    resource: host,
+    message: timedOut
+      ? `${req.method.toUpperCase()} to ${host} got no answer within ${Math.round((req.timeoutMs ?? httpPolicy.timeoutMs) / 1000)} s.`
+      : `${req.method.toUpperCase()} to ${host} failed: ${err instanceof Error ? err.message : String(err)}`,
+    hint: `Check the network and the provider's status page, then run the command again. ${['GET', 'HEAD'].includes(req.method.toUpperCase()) ? 'Reads were already retried.' : 'A write is never sent twice, so cimiento reads the result again on the next run before changing anything.'}`,
+    retryable: true,
+    needsHuman: false,
+  })
 }
 
 export interface ScriptedExec {

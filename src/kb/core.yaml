@@ -181,3 +181,22 @@
     - "though its DNS points at"
   hint: Run cimiento doctor again in a few minutes; the https certificate is issued after DNS points at the hosting.
   fix: The check fetches https://<domain> and expects 200 with the cimiento scaffold marker.
+
+- code: HTTP_TIMEOUT
+  provider: core
+  title: a provider did not answer in time
+  signatures:
+    - "got no answer within"
+  hint: Check the network and the provider's status page, then run the command again. Reads were already retried; a write is never sent twice.
+  fix: Every request cimiento makes has a bounded timeout, 30 s by default. A GET or HEAD is retried twice on a timeout, 429, 502, 503 or 504; a POST, PUT, PATCH or DELETE is never sent again, because it may have happened, and the next run reads the result before changing anything.
+  seen: "Goal 6, 2026-10-18 (BUG-71). io.ts http had no timeout, so a provider that never answered left cimiento hanging forever; a request to a server that accepted the connection and never replied was still pending after 2 s with no end."
+
+- code: HTTP_UNREACHABLE
+  provider: core
+  title: a provider could not be reached
+  signatures:
+    - "fetch failed"
+    - "ENOTFOUND"
+    - "ECONNREFUSED"
+  hint: Check the network connection, a VPN or proxy, and the provider's status page, then run the command again.
+  fix: Reads are retried twice before this is reported; writes are not retried.

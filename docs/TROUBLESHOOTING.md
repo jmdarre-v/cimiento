@@ -136,6 +136,26 @@ A pushed branch has no ready preview yet.
 
 **Looks like:** `No ready preview for`
 
+### HTTP_TIMEOUT
+
+A provider did not answer in time.
+
+**What to do:** Check the network and the provider's status page, then run the command again. Reads were already retried; a write is never sent twice.
+
+**Why:** Every request cimiento makes has a bounded timeout, 30 s by default. A GET or HEAD is retried twice on a timeout, 429, 502, 503 or 504; a POST, PUT, PATCH or DELETE is never sent again, because it may have happened, and the next run reads the result before changing anything.
+
+**Looks like:** `got no answer within`
+
+### HTTP_UNREACHABLE
+
+A provider could not be reached.
+
+**What to do:** Check the network connection, a VPN or proxy, and the provider's status page, then run the command again.
+
+**Why:** Reads are retried twice before this is reported; writes are not retried.
+
+**Looks like:** `fetch failed`, `ENOTFOUND`, `ECONNREFUSED`
+
 ### JOIN_NO_STATE
 
 There is nothing in this folder to join.

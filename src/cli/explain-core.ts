@@ -154,4 +154,12 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'Your domain points at the hosting, but the site does not answer on it yet. The https certificate takes a few minutes; run cimiento doctor again.',
     es: 'Tu dominio apunta al hosting, pero el sitio aun no responde en el. El certificado https tarda unos minutos; ejecuta cimiento doctor de nuevo.',
   },
+  HTTP_TIMEOUT: {
+    en: 'A provider did not answer within the time cimiento waits. Reads were already tried again; a write is never sent twice. Check the network and run the command again.',
+    es: 'Un proveedor no respondio en el tiempo que cimiento espera. Las lecturas ya se reintentaron; una escritura nunca se envia dos veces. Revisa la red y ejecuta el comando de nuevo.',
+  },
+  HTTP_UNREACHABLE: {
+    en: 'cimiento could not reach a provider. Check the network connection, a VPN or proxy, and the provider status page.',
+    es: 'cimiento no pudo llegar a un proveedor. Revisa la conexion, una VPN o proxy, y la pagina de estado del proveedor.',
+  },
 }
