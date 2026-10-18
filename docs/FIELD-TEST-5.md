@@ -129,8 +129,8 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 | BUG-63 | secret set and rotate wrote the hosting env but did not deploy again, so the live app kept the old value and a fresh join failed vercel.deployment | 4d59548 |
 | BUG-64 | The DNS step named cname.vercel-dns.com while Vercel recommends a project specific CNAME first, and could not name a TXT challenge | 4c88d5c |
 | BUG-65 | The first CI run failed on ubuntu-latest: the installer tests used the machine's /usr/bin, where the GitHub runner has gh, so gh counted as already installed | e721e4d |
-| BUG-66 | In the attended up of cimiento-test-5b (Neon on Netlify), up asked where the Supabase database should go and offered a Supabase configuration serving another project, because stack.yaml still had accounts.supabase via-hosting | see git log |
-| BUG-67 | After the Neon sign-up and login in that run, neon.project failed with NEON_TOKEN_MISSING: neonctl now keeps its login in ~/.config/neon, and cimiento only read ~/.config/neonctl | see git log |
+| BUG-66 | In the attended up of cimiento-test-5b (Neon on Netlify), up asked where the Supabase database should go and offered a Supabase configuration serving another project, because stack.yaml still had accounts.supabase via-hosting | aea037f |
+| BUG-67 | After the Neon sign-up and login in that run, neon.project failed with NEON_TOKEN_MISSING: neonctl now keeps its login in ~/.config/neon, and cimiento only read ~/.config/neonctl | aea037f |
 
 ## Left for a person
 
