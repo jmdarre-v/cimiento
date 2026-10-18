@@ -112,7 +112,7 @@ export async function downCommand(session: Session): Promise<number> {
     others.push(...(await provider.leftovers({ ...ctx, state: ctx.state }, state).catch(() => [])))
   }
 
-  state = dropOrphanChecks(state, project.specs)
+  state = dropOrphanChecks(state, allSpecs)
 
   const manifestHash = hashManifest(readFileSync(join(ctx.cwd, 'stack.yaml'), 'utf8'))
   writeProjectState(ctx.cwd, { ...state, manifestHash })
@@ -171,12 +171,16 @@ export function forget(state: ProjectState, id: string, specs: ResourceSpec[]): 
  * check, has nothing left to describe and goes too. Tools, sessions and manual steps stay.
  */
 function dropOrphanChecks(state: ProjectState, specs: ResourceSpec[]): ProjectState {
-  const kinds = new Map(specs.map((s) => [s.id, s.kind]))
-  const anyResource = Object.keys(state.resources).some((id) => kinds.get(id) === 'resource')
+  const kinds = new Map<string, ResourceSpec['kind']>(specs.map((s) => [s.id, s.kind]))
+  // A provider stack.yaml no longer selects has no specs now; what state recorded says the kind,
+  // and an id with neither is a check by its name (BUG-81).
+  for (const [id, entry] of Object.entries(state.resources)) if (!kinds.has(id) && entry.spec) kinds.set(id, entry.spec.kind)
+  const kindOf = (id: string): ResourceSpec['kind'] | undefined => kinds.get(id) ?? (id.includes('.check.') ? 'check' : undefined)
+  const anyResource = Object.keys(state.resources).some((id) => kindOf(id) === 'resource')
   if (anyResource) return state
   const resources = { ...state.resources }
   for (const id of Object.keys(resources)) {
-    const kind = kinds.get(id)
+    const kind = kindOf(id)
     if (kind === 'check' || kind === 'binding') delete resources[id]
   }
   return { ...state, resources }

@@ -541,3 +541,19 @@ describe('new --scaffold-only', () => {
     expect(cloud.execCalls.filter((c) => c.startsWith('gh ') || c.startsWith('vercel '))).toEqual([])
   })
 })
+
+describe('BUG-81: down leaves no check of a swapped out provider in state', () => {
+  it('after hosting changed to netlify, down removes the old vercel checks along with the project', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+    const { parseDocument } = await import('yaml')
+    const { writeFileSync } = await import('node:fs')
+    const file = join(dir, 'stack.yaml')
+    const doc = parseDocument(readFileSync(file, 'utf8'))
+    doc.setIn(['slots', 'hosting'], 'netlify')
+    writeFileSync(file, doc.toString(), 'utf8')
+    expect((await cli(cloud, ['down', '--yes', '--json'])).code).toBe(ExitCode.ok)
+    expect(Object.keys(stateOf().resources).filter((id) => id.includes('.check.') || id.includes('.binding.') || id.includes('.env.'))).toEqual([])
+  })
+})
