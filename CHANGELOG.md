@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.3.0
+
+Trustworthy state, teardown and health. 0.1.0 and 0.2.0 can lose track of resources during
+teardown; upgrade.
+
+### State and teardown
+
+- `down` forgets a resource only when the provider confirms, by the id state recorded, that it is
+  gone. A timeout, an auth error or a provider error keeps it in state and exits non zero.
+- State, now version 2, records each resource's spec and the account it was made in. `plan` lists
+  resources `stack.yaml` no longer selects as orphans, `up` asks whether to retain, release or
+  destroy them (`--orphans`), and `down` deletes them in the account they were made in.
+- State is written after every completed step, atomically, under a project lock; a lock left by
+  a killed run is reported and taken over.
+
+### Health
+
+- `doctor` reports ok, failed or unknown, from the live check alone; a step confirmed once and
+  later revoked shows as failed again.
+- `plan` and `doctor` only read. The checks that act, the Resend test email, the PostHog event,
+  the Inngest roundtrip, Turnstile siteverify and the Supabase table query, run under `--smoke`,
+  which says what each will do first.
+- `doctor` in a project without `stack.yaml` lists the providers it already uses, read only.
+
+### Commands
+
+- `publish` resumes: it pushes a commit that did not reach the remote and waits for the deploy
+  when the live site is not built from HEAD, even with nothing new to commit.
+- `new --scaffold-only` writes the project and touches no account.
+
+### Providers and templates
+
+- Neon migrations go whole through a Postgres client, dollar quoted bodies included, and an
+  unreadable history table stops the run instead of reapplying everything.
+- Every request has a bounded timeout; only reads are retried.
+- Templates escape the project name in code, so any name builds.
+
+### Project
+
+- LICENSE (MIT), SECURITY.md and CONTRIBUTING.md.
+- `install.sh` accepts `CIMIENTO_VERSION` to pin a release.
+- A release workflow on version tags installs the packed tarball in a clean folder and builds a
+  scaffolded project; CI runs the Neon migration tests against PostgreSQL.
+
+### Fixed
+
+BUG-71 to BUG-81, listed in `docs/FIELD-TEST-6.md`.
+
 ## 0.2.0
 
 v2 of the spec: five more providers, the custom domain rule, the database and ci secret sinks,
