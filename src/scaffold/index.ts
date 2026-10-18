@@ -79,6 +79,8 @@ function gitignore(): string {
   return `node_modules/
 .next/
 dist/
+next-env.d.ts
+*.tsbuildinfo
 .env*
 !.env.example
 .cimiento/cache
