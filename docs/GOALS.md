@@ -27,6 +27,8 @@ Common rules for every goal:
 - TypeScript strict, pnpm, Node 22, Vitest. No framework for the CLI beyond a small prompt library.
 - Every command works with `--json`. Every error is a `CimientoError` with a `hint`.
 - Commit after every completed section with a conventional commit message. Do not push, except where a goal says so.
+- A goal contains only work Claude Code can finish and show in its own output. Steps that need a person (`npm publish`, `npm deprecate`, browser logins, typing keys, DNS records, revoking keys) never belong to a goal; they go only in the GOAL REPORT's Next line.
+- Every goal ends with a sentence starting "The goal is met when", naming checks Claude Code can show.
 
 GOAL REPORT format, last thing printed:
 
@@ -154,6 +156,8 @@ The GOAL REPORT includes the bug table and timings inline.
 
 ## Goal 6: trustworthy state, teardown and health; version 0.3.0
 
+Status: complete. 0.3.0 is on npm; 0.1.0 and 0.2.0 are deprecated.
+
 0.2.0 is already on npm and has these bugs; 0.3.0 replaces it.
 
 1. Verification returns present, absent or unknown. `down` forgets a resource only on confirmed absent; auth errors, timeouts and provider errors keep it in state and exit non-zero.
@@ -171,6 +175,22 @@ The GOAL REPORT includes the bug table and timings inline.
 13. Release workflow: on a `v*` tag, build, test, `npm pack`, install the tarball in a clean dir and run `cimiento --version` and `plan --json` in a scaffolded project that builds; `install.sh` accepts `CIMIENTO_VERSION`, README shows the pinned form.
 14. Tests at operational boundaries: interruption right after create, accepted delete plus 503 verify, revoked permission after a confirmed integration, provider swap in `stack.yaml`, failed push and deploy-wait retry, real PostgreSQL via a local postgres in CI.
 15. Field test on existing sessions, unattended, in `docs/FIELD-TEST-6.md` with run-log timings: `new cimiento-test-6 --preset designer`, interrupt `up` right after the Vercel project is created and resume, `publish` with a failed push then resume, change hosting to netlify and confirm `plan` and `down` handle the old Vercel project, `down`, confirm nothing remains.
-16. Bump to 0.3.0, CHANGELOG, TROUBLESHOOTING, push. Then end with `BLOCKED:` and as Next the exact attended commands for field tests 5b and 5c (accounts, keys, the CNAME with its exact value) then `npm publish` 0.3.0, then `npm deprecate` for `cimiento@0.1.0` and `cimiento@0.2.0` with the message: teardown can lose track of resources, upgrade to 0.3.0.
+16. Bump to 0.3.0, CHANGELOG, TROUBLESHOOTING, push.
 
 The GOAL REPORT includes the bug table and timings inline.
+
+## Goal 7: identity-safe teardown, honest publish, isolated preview data; version 0.4.0
+
+Continue BUG ids from BUG-82, each with a KB entry and a regression test that reproduces the
+failure first.
+
+1. `docs/GOALS.md` common rules: a goal contains only work Claude Code can finish and show in its own output; steps that need a person (`npm publish`, `npm deprecate`, browser logins, typing keys, DNS records, revoking keys) never belong to a goal and go only in the GOAL REPORT's Next line; every goal ends with a sentence starting "The goal is met when" naming checks Claude Code can show. Rewrite Goal 6 item 16 to end at the push and mark Goal 6 complete.
+2. Delete by immutable id, never by name: Vercel `DELETE /v9/projects/<recorded id>`. Before any delete by name (GitHub repos, any provider without ids), read the resource and compare its recorded id or node id; on mismatch refuse, keep state, explain. Audit every provider's destroy for the same pattern.
+3. Legacy state from 0.1.0 and 0.2.0 (entries without spec): on first run, rebuild each spec from the manifest and recorded ids where possible and write it back; anything not rebuildable is reported as unresolved legacy, and `down` exits non-zero until it is reconciled. CHANGELOG states the upgrade path.
+4. `publish`: a failed live-commit lookup (any non-2xx, timeout) is unknown, never filled from cached state; `publish` exits non-zero with an actionable hint. Same rule for every live read that has a cached fallback.
+5. Preview data isolation: preview deployments never share the production database by default. Neon: a branch per preview, created and removed with the preview. Supabase: a separate preview project, with the free project limit stated before creating it. Option `environments.preview.database: shared` to opt out, with a warning. `down` removes preview branches and projects. Field test both on existing sessions, unattended; if the Supabase free limit blocks it, record that and continue.
+6. README: an "Eject" section (delete `stack.yaml` and `.cimiento/`, what stays: a plain Next.js app, native env vars in the hosting provider, the repo, the databases; nothing to uninstall in the app). State precisely what `doctor` without `stack.yaml` does: provider discovery and tool and session checks, not full diagnosis.
+7. Demo: on a real project created for it, break a key (write a wrong value to one env var), run `doctor --smoke` and show the failure with its hint, fix it with `secret set`, doctor green. Record it with vhs into `docs/demo.gif`, embed it at the top of the README, then `down` and confirm nothing remains.
+8. Record field tests in `docs/FIELD-TEST-7.md` with run-log timings. Bump to 0.4.0, CHANGELOG, TROUBLESHOOTING, tag v0.4.0, push.
+
+The goal is met when the GOAL REPORT is printed showing every item committed, `pnpm test` and CI green on the last commit, the v0.4.0 tag pushed, git status clean, and every field-test resource confirmed gone with each provider's CLI or API. The report includes the bug table and timings inline; its Next line lists only person steps: `npm publish` of 0.4.0, and `npm deprecate` of 0.3.0 because its teardown deletes by name.
