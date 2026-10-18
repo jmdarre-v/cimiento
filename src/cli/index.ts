@@ -7,6 +7,7 @@ import { openSession, defaultWriter, reportStaleLock, type CliDeps } from './con
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { acquireProjectLock } from '../core/lock'
+import { resetRunCache } from '../core/detect-cache'
 import { accountsSetCommand } from './commands/accounts'
 import { domainAddCommand, domainRemoveCommand } from './commands/domain'
 import { doctorCommand } from './commands/doctor'
@@ -78,6 +79,8 @@ export async function run(argv: string[], deps: CliDeps = {}): Promise<number> {
     return ExitCode.ok
   }
 
+  // Every run starts from the machine cache, never from an earlier run's memory in this process.
+  resetRunCache()
   const session = openSession(args, deps)
   session.runLog.write({ type: 'start', command: [args.command, args.sub].filter(Boolean).join(' '), argv })
   const code = await dispatch(session, args)

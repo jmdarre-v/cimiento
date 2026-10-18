@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { CimientoError, ExitCode } from '../../core/errors'
 import { runUp, type Receipt, type UpEvent } from '../../core/executor'
 import { topoSort } from '../../core/graph'
-import { outdatedTools, upgradeTools } from '../../core/toolkit'
+import { outdatedTools, upgradeTools, warmDetection } from '../../core/toolkit'
 import { machineStatePath, writeMachineState } from '../../core/state'
 import { settleSupabasePath } from '../../wiring/supabase-configurations'
 import { sessionChooser, sessionConfirm, type ProjectSession } from '../context'
@@ -20,7 +20,7 @@ import { billableItems, steps, t } from '../i18n'
 import { stepTitleFor } from '../../core/person-steps'
 import { sinkSecretName } from '../../core/sink-ids'
 import { explainKey } from '../../registry'
-import { billableCreates, buildPlan } from '../../core/planner'
+import { billableCreates, buildPlan, type Plan } from '../../core/planner'
 import { hashManifest, writeProjectState } from '../../core/state'
 import type { Ctx, ResourceSpec } from '../../core/types'
 import { readmeWithReceipts } from '../../scaffold'
@@ -51,6 +51,7 @@ async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> 
   let project = openProject(session, { dryRun: false, cwd })
   if (await settleOrphans(session, project)) project = openProject(session, { dryRun: false, cwd })
   announceSmoke(session, project)
+  await warmDetection(project.ctx, project.providers)
   const shared = sharedPreviewWarning(project.manifest)
   if (shared) {
     if (session.json) session.printer.emit({ event: 'warning', code: 'PREVIEW_DATABASE_SHARED', message: shared })
@@ -83,15 +84,15 @@ async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> 
     }
     // Logins pin accounts and the path choice can change stack.yaml, so read it again.
     project = openProject(session, { dryRun: false, cwd })
-  } else if (session.json) {
-    const ahead = await personStepsAhead(project)
-    session.printer.emit({ event: 'person-steps', steps: ahead })
   }
   const plan = await buildPlan({ ...project.ctx, dryRun: true }, project.providers, project.specs, {
     only: session.only,
     skip: session.skip,
     billingApproved: session.allowBilling,
   })
+  // Nobody is asked anything in a run with no terminal, so the plan that lists the person steps is
+  // the plan that runs: built once, not twice (BUG-93).
+  if (!session.interactive && session.json) session.printer.emit({ event: 'person-steps', steps: personStepsIn(plan, project) })
 
   const billable = billableCreates(plan)
   if (billable.length > 0 && !session.allowBilling) {
@@ -294,7 +295,10 @@ async function runPersonPhase(session: Session, project: ProjectSession, pick: (
 
 /** The person steps a run will ask for, in order, from a plan that changes nothing. */
 export async function personStepsAhead(project: ProjectSession): Promise<string[]> {
-  const plan = await buildPlan({ ...project.ctx, dryRun: true }, project.providers, project.specs, { billingApproved: true })
+  return personStepsIn(await buildPlan({ ...project.ctx, dryRun: true }, project.providers, project.specs, { billingApproved: true }), project)
+}
+
+function personStepsIn(plan: Plan, project: ProjectSession): string[] {
   const labels: string[] = []
   for (const item of plan.items) {
     const person =

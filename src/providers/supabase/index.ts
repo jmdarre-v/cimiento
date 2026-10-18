@@ -16,8 +16,7 @@ import {
   ensureVendorSession,
   findTool,
   runVendorLogin,
-  verifyTool,
-} from '../../core/toolkit'
+  verifyTool, toolVersion } from '../../core/toolkit'
 import { pinInManifest, setInManifest } from '../../manifest/pin'
 import { BASELINE_FILE, BASELINE_SQL, BASELINE_TABLE } from '../../scaffold/templates/nextjs-app'
 import type {
@@ -102,10 +101,7 @@ export function createSupabaseProvider(_m?: Manifest): Provider {
     needsSession: true,
 
     async detect(ctx: Ctx): Promise<Detection> {
-      const version = await ctx.io
-        .exec('supabase', ['--version'])
-        .then((r) => (r.code === 0 ? /(\d+\.\d+\.\d+)/.exec(`${r.stdout} ${r.stderr}`)?.[1] : undefined))
-        .catch(() => undefined)
+      const version = await toolVersion(ctx, TOOLS.find((t) => t.bin === 'supabase')!)
       if (!version) return { installed: false }
       if (!(await findSupabaseToken(ctx))) return { installed: true, version }
       const orgs = await supabaseCall<{ id: string; name: string }[]>(ctx, 'supabase.session', 'GET', '/v1/organizations').catch(

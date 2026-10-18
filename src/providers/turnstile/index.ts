@@ -13,8 +13,7 @@ import {
   ensureTool,
   ensureVendorSession,
   findTool,
-  verifyTool,
-} from '../../core/toolkit'
+  verifyTool, toolVersion } from '../../core/toolkit'
 import type {
   CheckResult,
   Ctx,
@@ -86,10 +85,7 @@ export function createTurnstileProvider(_m?: Manifest): Provider {
     needsSession: true,
 
     async detect(ctx: Ctx): Promise<Detection> {
-      const version = await ctx.io
-        .exec('wrangler', ['--version'])
-        .then((r) => (r.code === 0 ? /(\d+\.\d+\.\d+)/.exec(`${r.stdout} ${r.stderr}`)?.[1] : undefined))
-        .catch(() => undefined)
+      const version = await toolVersion(ctx, TOOLS.find((t) => t.bin === 'wrangler')!)
       if (!version) return { installed: false }
       const who = await wranglerWhoami(ctx)
       if (!who) return { installed: true, version }

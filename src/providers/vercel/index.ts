@@ -17,8 +17,7 @@ import {
   ensureVendorSession,
   findTool,
   runVendorLogin,
-  verifyTool,
-} from '../../core/toolkit'
+  verifyTool, toolVersion } from '../../core/toolkit'
 import { chooseAndPin, setInManifest } from '../../manifest/pin'
 import { marketplaceInstructions, marketplacePersonStep, vercelTeamPlan } from '../../wiring/vercel-supabase-runtime'
 import { settleSupabasePath } from '../../wiring/supabase-configurations'
@@ -114,10 +113,7 @@ export function createVercelProvider(m?: Manifest): Provider {
       : {}),
 
     async detect(ctx: Ctx): Promise<Detection> {
-      const version = await ctx.io
-        .exec('vercel', ['--version'])
-        .then((r) => (r.code === 0 ? /(\d+\.\d+\.\d+)/.exec(`${r.stdout} ${r.stderr}`)?.[1] : undefined))
-        .catch(() => undefined)
+      const version = await toolVersion(ctx, TOOLS.find((t) => t.bin === 'vercel')!)
       if (!version) return { installed: false }
       const who = await ctx.io.exec('vercel', ['whoami']).catch(() => undefined)
       if (!who || who.code !== 0) return { installed: true, version }

@@ -520,3 +520,10 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 7: completed. Field test 7 in docs/FIELD-TEST-7.md, BUG-82 to 92, v0.4.0 tagged
   and pushed. npm publish of 0.4.0 and npm deprecate of 0.3.0 are person steps.
 - 2026-10-18 Goal 7: 0.4.0 is published on npm and 0.3.0 is deprecated.
+- 2026-10-18 Goal 8: detection is cached per machine in detect-cache.json beside machine.json, not
+  in machine.json itself, so the cache can be deleted at any time without losing tool skips or the
+  projects folder. Tool versions and identities live 10 minutes, latest versions an hour; only a
+  logged in identity is kept, never a missing tool or login. The io every command uses clears the
+  identities on a 401 or 403 and on CLI output saying the login is gone; a login, a command run in
+  the person's terminal and an account mismatch clear them too. Tests run with the machine cache
+  off (CIMIENTO_DETECT_CACHE=off) and a fresh run cache per test.

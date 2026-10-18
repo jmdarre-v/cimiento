@@ -17,6 +17,7 @@ import { createTurnstileProvider } from './providers/turnstile'
 import { createVercelProvider } from './providers/vercel'
 import { applyWiring, wiringExplain } from './wiring'
 import { CORE_EXPLAIN } from './cli/explain-core'
+import { cached, DETECT_TTL_MS, invalidate } from './core/detect-cache'
 
 type ProviderFactory = (m?: Manifest) => Provider
 
@@ -45,9 +46,37 @@ export function buildProviders(m: Manifest, extraIds: string[] = []): Provider[]
   for (const id of [...new Set([...selectedProviderIds(m), ...extraIds])]) {
     const factory = FACTORIES[id]
     if (!factory) continue
-    providers.push(factory(m))
+    providers.push(withCachedDetect(factory(m)))
   }
   return providers
+}
+
+const WRAPPED = Symbol('cachedDetect')
+
+/**
+ * Who a vendor CLI is logged in as is asked once per run and kept per machine for a short time
+ * (BUG-93). Only a logged in result is kept; a login clears it. The provider object is changed in
+ * place, so the provider's own calls to detect go through the cache too.
+ */
+function withCachedDetect(provider: Provider): Provider {
+  const marked = provider as Provider & { [WRAPPED]?: boolean }
+  if (marked[WRAPPED]) return provider
+  const detect = provider.detect.bind(provider)
+  const login = provider.login.bind(provider)
+  provider.detect = (ctx) => {
+    const key = `session:${provider.id}:${JSON.stringify(ctx.manifest.accounts)}:${ctx.manifest.options.supabase.organization_id ?? ''}`
+    return cached(key, DETECT_TTL_MS, () => detect(ctx), (d) => d.installed && Boolean(d.session))
+  }
+  provider.login = async (ctx) => {
+    invalidate(`session:${provider.id}:`)
+    try {
+      return await login(ctx)
+    } finally {
+      invalidate(`session:${provider.id}:`)
+    }
+  }
+  marked[WRAPPED] = true
+  return provider
 }
 
 /** Every provider module this build ships, regardless of the manifest. Used by explain. */

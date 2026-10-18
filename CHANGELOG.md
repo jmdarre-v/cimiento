@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Speed
+
+- A noop `up` asks each tool for its version and each vendor CLI who is logged in once per run,
+  all at once, and keeps both per machine for 10 minutes (`detect-cache.json` next to
+  `machine.json`; the latest tool versions for an hour). A 401 or 403 from any vendor API, a CLI
+  saying it is not logged in, an account mismatch or a login clears the identities. A run with no
+  terminal builds the plan once instead of twice.
+
 ## 0.4.0
 
 Identity-safe teardown, honest publish and isolated preview data. 0.3.0 and older delete some

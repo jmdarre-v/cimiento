@@ -31,8 +31,7 @@ import {
   findTool,
   runVendorLogin,
   sessionCheck,
-  verifyTool,
-} from '../../core/toolkit'
+  verifyTool, toolVersion } from '../../core/toolkit'
 import { pinInManifest } from '../../manifest/pin'
 import type { Manifest } from '../../manifest/schema'
 import type { ProjectState } from '../../core/state'
@@ -80,10 +79,7 @@ export const githubProvider: Provider = {
   needsSession: true,
 
   async detect(ctx: Ctx): Promise<Detection> {
-    const version = await ctx.io
-      .exec('gh', ['--version'])
-      .then((r) => (r.code === 0 ? /(\d+\.\d+\.\d+)/.exec(r.stdout)?.[1] : undefined))
-      .catch(() => undefined)
+    const version = await toolVersion(ctx, TOOLS.find((t) => t.bin === 'gh')!)
     if (!version) return { installed: false }
     const login = await ctx.io.exec('gh', ['api', 'user', '--jq', '.login']).catch(() => undefined)
     if (!login || login.code !== 0) return { installed: true, version }

@@ -13,7 +13,7 @@ import type { LiveCommit } from '../../core/types'
 import { netlifyLoginStep, netlifySignupStep, netlifyTeamStep } from '../../core/person-steps-v2'
 import { hostingEnvId } from '../../core/sink-ids'
 import { sameResource, type ProjectState } from '../../core/state'
-import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool } from '../../core/toolkit'
+import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool, toolVersion } from '../../core/toolkit'
 import { presenceFromStatus, type Presence } from '../../core/types'
 import type { CheckResult, Ctx, Detection, EnsureResult, Lang, Output, Provider, ResourceSpec, Session, Slot, ToolSpec, Value } from '../../core/types'
 import { chooseAndPin } from '../../manifest/pin'
@@ -89,10 +89,7 @@ export function createNetlifyProvider(_m?: Manifest): Provider {
     needsSession: true,
 
     async detect(ctx: Ctx): Promise<Detection> {
-      const version = await ctx.io
-        .exec('netlify', ['--version'])
-        .then((r) => (r.code === 0 ? /(\d+\.\d+\.\d+)/.exec(`${r.stdout} ${r.stderr}`)?.[1] : undefined))
-        .catch(() => undefined)
+      const version = await toolVersion(ctx, TOOLS.find((t) => t.bin === 'netlify')!)
       if (!version) return { installed: false }
       if (!findNetlifyToken()) return { installed: true, version }
       const me = await netlifyCall<{ email?: string; full_name?: string }>(ctx, 'netlify.session', 'GET', '/user').catch(() => undefined)

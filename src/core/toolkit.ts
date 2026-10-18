@@ -4,6 +4,7 @@
 import { CimientoError } from './errors'
 import type { PersonStep } from './person'
 import type { CheckResult, Ctx, Detection, EnsureResult, Provider, ResourceSpec, ToolSpec } from './types'
+import { cached, DETECT_TTL_MS, invalidate, UPDATE_TTL_MS } from './detect-cache'
 import { compareVersions, parseVersion, satisfies } from './version'
 
 export function toolResourceId(providerId: string, bin: string): string {
@@ -44,7 +45,12 @@ export async function toolVersion(ctx: Ctx, tool: ToolSpec): Promise<string | un
   return (await toolVersionOutput(ctx, tool))?.version
 }
 
-export async function toolVersionOutput(ctx: Ctx, tool: ToolSpec): Promise<{ version: string; raw: string } | undefined> {
+/** Asked once per run and kept per machine for a short time; a missing tool is never kept (BUG-93). */
+export function toolVersionOutput(ctx: Ctx, tool: ToolSpec): Promise<{ version: string; raw: string } | undefined> {
+  return cached(`tool:${tool.versionCmd}`, DETECT_TTL_MS, () => readToolVersion(ctx, tool), (v) => v !== undefined)
+}
+
+async function readToolVersion(ctx: Ctx, tool: ToolSpec): Promise<{ version: string; raw: string } | undefined> {
   const [cmd, ...args] = tool.versionCmd.split(' ')
   try {
     const result = await ctx.io.exec(cmd, args)
@@ -63,11 +69,10 @@ export interface ToolUpdate {
   upgrade?: { cmd: string; args: string[] }
 }
 
-const updateCache = new Map<string, ToolUpdate | null>()
-
-/** Drops cached lookups. Tests use it; a real run looks each tool up once. */
+/** Drops cached lookups. Tests use it; a real run looks each tool up once per hour. */
 export function clearToolUpdateCache(): void {
-  updateCache.clear()
+  invalidate('update:')
+  invalidate('tool:')
 }
 
 /**
@@ -77,8 +82,10 @@ export function clearToolUpdateCache(): void {
  * is reported but never offered an upgrade cimiento cannot perform.
  */
 export async function toolUpdate(ctx: Ctx, tool: ToolSpec, installed: string, raw = ''): Promise<ToolUpdate | undefined> {
-  const key = `${tool.bin}@${installed}`
-  if (updateCache.has(key)) return updateCache.get(key) ?? undefined
+  return (await cached(`update:${tool.bin}@${installed}`, UPDATE_TTL_MS, async () => (await lookUpUpdate(ctx, tool, installed, raw)) ?? null)) ?? undefined
+}
+
+async function lookUpUpdate(ctx: Ctx, tool: ToolSpec, installed: string, raw: string): Promise<ToolUpdate | undefined> {
   const candidates: string[] = []
   const notice = raw.split('\n').find((line) => /new (version|release)/i.test(line))
   if (notice) candidates.push(...(notice.match(/\d+\.\d+\.\d+/g) ?? []))
@@ -108,9 +115,7 @@ export async function toolUpdate(ctx: Ctx, tool: ToolSpec, installed: string, ra
     if (!parsed || !current || compareVersions(parsed, current) <= 0) continue
     if (!best || compareVersions(parsed, parseVersion(best)!) > 0) best = `${parsed.major}.${parsed.minor}.${parsed.patch}`
   }
-  const result = best ? { latest: best, ...(upgrade ? { upgrade } : {}) } : undefined
-  updateCache.set(key, result ?? null)
-  return result
+  return best ? { latest: best, ...(upgrade ? { upgrade } : {}) } : undefined
 }
 
 async function isHomebrewBinary(ctx: Ctx, bin: string): Promise<boolean> {
@@ -190,6 +195,7 @@ export async function ensureTool(providerId: string, tool: ToolSpec, spec: Resou
     })
   }
   const result = await ctx.io.exec(install.cmd, install.args)
+  invalidate(`tool:${tool.versionCmd}`)
   if (result.code !== 0) {
     throw new CimientoError({
       code: 'TOOL_INSTALL_FAILED',
@@ -267,6 +273,8 @@ export function sessionCheck(
     }
   }
   if (expectedAccount && !accountMatches(detection.session.account, expectedAccount)) {
+    // A cached identity may be the stale one; the next run asks the vendor again.
+    invalidate(`session:${providerId}:`)
     return {
       ok: false,
       error: new CimientoError({
@@ -429,7 +437,24 @@ export async function upgradeTools(ctx: Ctx, tools: OutdatedTool[]): Promise<{ u
     const result = await ctx.io.interactive(tool.upgrade.cmd, tool.upgrade.args).catch(() => ({ code: 1, stdout: '', stderr: '' }))
     if (result.code === 0) upgraded.push(tool.bin)
     else failed.push(tool.bin)
-    updateCache.delete(`${tool.bin}@${tool.installed}`)
+    invalidate(`update:${tool.bin}@`)
+    invalidate('tool:')
   }
   return { upgraded, failed }
+}
+
+/**
+ * Asks every tool for its version and newer release, and every vendor CLI who it is logged in as,
+ * all at once, before the plan reads them one by one (BUG-93). Each answer lands in the run cache,
+ * so the plan, the apply and the checks reuse it. A failure here is only a cache miss.
+ */
+export async function warmDetection(ctx: Ctx, providers: Pick<Provider, 'id' | 'tools' | 'needsSession' | 'detect'>[]): Promise<void> {
+  const tools = providers.flatMap((p) => p.tools)
+  await Promise.all([
+    ...tools.map(async (tool) => {
+      const out = await toolVersionOutput(ctx, tool)
+      if (out) await toolUpdate(ctx, tool, out.version, out.raw)
+    }),
+    ...providers.filter((p) => p.needsSession).map((p) => p.detect(ctx)),
+  ].map((p) => p.catch(() => undefined)))
 }

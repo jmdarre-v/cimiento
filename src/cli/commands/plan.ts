@@ -2,12 +2,14 @@
 
 import { ExitCode } from '../../core/errors'
 import { buildPlan } from '../../core/planner'
+import { warmDetection } from '../../core/toolkit'
 import { sharedPreviewWarning } from '../../core/hosting'
 import { previewProjectNotice } from '../../providers/supabase'
 import { openProject, type Session } from '../context'
 
 export async function planCommand(session: Session): Promise<number> {
   const project = openProject(session, { dryRun: true })
+  await warmDetection(project.ctx, project.providers)
   const plan = await buildPlan(project.ctx, project.providers, project.specs, {
     only: session.only,
     skip: session.skip,

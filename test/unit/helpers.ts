@@ -148,7 +148,7 @@ export class CaptureWriter implements Writer {
  * doing it is a different test, and verify has to catch it.
  */
 export async function personDoesIt(spec: ResourceSpec, ctx: Ctx): Promise<boolean> {
-  const io = ctx.io as Partial<FakeCloud>
+  const io = ((ctx.io as { inner?: unknown }).inner ?? ctx.io) as Partial<FakeCloud>
   if (spec.id === 'inngest.vercel-integration') io.installInngest?.()
   else io.acceptMarketplace?.()
   return true

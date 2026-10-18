@@ -3,6 +3,7 @@
 import type { StaleLock } from '../core/lock'
 import { ExitCode } from '../core/errors'
 import { RealIo, type Io } from '../core/io'
+import { watchingAuth } from '../core/detect-cache'
 import { ConsoleLogger } from '../core/logger'
 import { Redactor } from '../core/redact'
 import {
@@ -82,7 +83,8 @@ export function openSession(args: ParsedArgs, deps: CliDeps): Session {
     runLog,
     args,
     cwd: deps.cwd ?? process.cwd(),
-    io: deps.io ?? new RealIo(),
+    // Auth errors clear the cached identities (BUG-93).
+    io: watchingAuth(deps.io ?? new RealIo()),
     lang,
     json,
     guided: flagBool(args.flags, 'guided'),

@@ -2,6 +2,8 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { beforeEach } from 'vitest'
+import { resetRunCache } from '../src/core/detect-cache'
 
 // Run logs go to a temporary folder, never to ~/.cimiento/runs.
 process.env.CIMIENTO_RUNS_DIR = mkdtempSync(join(tmpdir(), 'cimiento-runs-'))
@@ -21,3 +23,9 @@ process.env.CIMIENTO_KEYCHAIN = 'macos'
 
 // Project locks in a folder of this test file's own, never in the real ~/.cimiento.
 process.env.CIMIENTO_LOCK_DIR = mkdtempSync(join(tmpdir(), 'cimiento-locks-'))
+
+// The machine cache of tool versions and identities is off, so each test sees the fake cloud as it
+// is now; the tests of the cache turn it on (src/core/detect-cache.ts).
+process.env.CIMIENTO_DETECT_CACHE = 'off'
+// Tests that call providers directly never go through run(), so each test starts with no memory.
+beforeEach(() => resetRunCache())

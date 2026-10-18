@@ -9,7 +9,7 @@ import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
 import { neonLoginStep, neonOrganizationStep, neonSignupStep } from '../../core/person-steps-v2'
 import { sameResource, type ProjectState } from '../../core/state'
-import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool } from '../../core/toolkit'
+import { baseResources, ensureTool, ensureVendorSession, findTool, runVendorLogin, sessionCheck, verifyTool, toolVersion } from '../../core/toolkit'
 import { presenceFromStatus, type Presence } from '../../core/types'
 import type { CheckResult, Ctx, Detection, EnsureResult, Lang, Output, Provider, ResourceSpec, Session, Slot, ToolSpec, Value } from '../../core/types'
 import { chooseAndPin } from '../../manifest/pin'
@@ -87,10 +87,7 @@ export function createNeonProvider(_m?: Manifest): Provider {
     needsSession: true,
 
     async detect(ctx: Ctx): Promise<Detection> {
-      const version = await ctx.io
-        .exec('neonctl', ['--version'])
-        .then((r) => (r.code === 0 ? /(\d+\.\d+\.\d+)/.exec(`${r.stdout} ${r.stderr}`)?.[1] : undefined))
-        .catch(() => undefined)
+      const version = await toolVersion(ctx, TOOLS.find((t) => t.bin === 'neonctl')!)
       if (!version) return { installed: false }
       // neonctl me refreshes an expired token on the way, so a session from last week still counts.
       const me = await ctx.io.exec('neonctl', ['me', '--output', 'json']).catch(() => undefined)

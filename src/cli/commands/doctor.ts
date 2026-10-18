@@ -7,7 +7,7 @@ import { ExitCode } from '../../core/errors'
 import { detectWithoutManifest } from './detect'
 import { runVerifyAll } from '../../core/executor'
 import { isStale, writeMachineState, machineStatePath } from '../../core/state'
-import { outdatedTools, toolVersion } from '../../core/toolkit'
+import { outdatedTools, toolVersion, warmDetection } from '../../core/toolkit'
 import type { Detection } from '../../core/types'
 import { announceSmoke, openProject, type Session } from '../context'
 
@@ -15,6 +15,7 @@ export async function doctorCommand(session: Session): Promise<number> {
   // An existing project without stack.yaml: detect, read only, create nothing (BUG-80).
   if (!existsSync(join(session.cwd, 'stack.yaml'))) return detectWithoutManifest(session)
   const project = openProject(session, { dryRun: true })
+  await warmDetection(project.ctx, project.providers)
 
   // Refresh the machine level picture first: tools and sessions, per spec section 7.
   const machine = { ...project.ctx.machine, tools: { ...project.ctx.machine.tools }, sessions: { ...project.ctx.machine.sessions } }

@@ -16,8 +16,8 @@ import { CaptureWriter, manifestForShared as manifestFor, removeDir, tempDir, te
 
 /** The person at the Marketplace page lets Vercel create a database, named after another project as in the real run. */
 async function personInstallsWithDatabase(spec: ResourceSpec, ctx: Ctx): Promise<boolean> {
-  if (spec.id === 'inngest.vercel-integration') (ctx.io as FakeCloud).installInngest()
-  else (ctx.io as FakeCloud).acceptMarketplace({ createDatabase: 'older-project' })
+  if (spec.id === 'inngest.vercel-integration') fakeOf(ctx).installInngest()
+  else fakeOf(ctx).acceptMarketplace({ createDatabase: 'older-project' })
   return true
 }
 
@@ -358,7 +358,7 @@ describe('Part B findings', () => {
     it('a database the install step created for this project is recorded as created, not adopted', async () => {
       const cloud = new FakeCloud()
       const t = testContext(manifestFor({ name: 'cimiento-test-1' }, 'fullstack'), { cloud })
-      const result = await runUp(t.ctx, t.providers, t.specs, { onManual: async (_s, ctx) => ((ctx.io as FakeCloud).acceptMarketplace(), true) })
+      const result = await runUp(t.ctx, t.providers, t.specs, { onManual: async (_s, ctx) => (fakeOf(ctx).acceptMarketplace(), true) })
       expect(result.errors).toEqual([])
       expect(result.state.resources['supabase.project'].origin).toBe('created')
     })
@@ -476,3 +476,8 @@ describe('BUG-19 and BUG-20, found in step 4: two person steps reported as failu
     expect(manual.message).toContain('https://vercel.com/account/authentication')
   })
 })
+
+/** The fake cloud behind ctx.io, which a command wraps to watch for auth errors. */
+function fakeOf(ctx: { io: unknown }): FakeCloud {
+  return ((ctx.io as { inner?: unknown }).inner ?? ctx.io) as FakeCloud
+}
