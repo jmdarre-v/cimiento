@@ -14,6 +14,7 @@
     - "No stack.yaml in"
   hint: Run cimiento init here, or cimiento new <name> to create a project folder.
   fix: cimiento only manages folders that declare what they need. init writes the declaration without touching your code.
+  seen: "Goal 6, 2026-10-18 (BUG-80). cimiento doctor stopped with MANIFEST_NOT_FOUND in an existing project with no stack.yaml, so it could not tell a person with a running app what that app already uses. doctor there now reads package.json, the hosting link files, the Supabase folder and the git remote, checks each provider's tool and login, and writes nothing."
 
 - code: MANIFEST_UNKNOWN_PROVIDER
   provider: core

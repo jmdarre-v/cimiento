@@ -489,3 +489,22 @@ describe("BUG-79: templates escape the project name in string literals and JSX t
     }
   })
 })
+
+describe('BUG-80: doctor in an existing project without stack.yaml detects providers and creates nothing', () => {
+  it('reads package.json, the hosting link files and the git remote, checks tools and logins, and writes nothing', async () => {
+    const { mkdirSync, writeFileSync, readdirSync } = await import('node:fs')
+    mkdirSync(join(dir, '.vercel'), { recursive: true })
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'existing-app', dependencies: { next: '15.0.0', '@supabase/supabase-js': '2.45.0', inngest: '3.0.0', resend: '4.0.0' } }))
+    writeFileSync(join(dir, '.vercel', 'project.json'), JSON.stringify({ projectId: 'prj_fake_existing', orgId: 'team_fake' }))
+    const cloud = new FakeCloud()
+    cloud.gitOrigin = 'https://github.com/test-handle/existing-app.git'
+    const before = readdirSync(dir).sort()
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    expect(doctor.code, doctor.writer.outText).toBe(ExitCode.ok)
+    const report = doctor.writer.jsonObjects().pop() as { manifest: boolean; detected: { provider: string; slot: string; evidence: string[] }[] }
+    expect(report.manifest).toBe(false)
+    expect(report.detected.map((d) => d.provider).sort()).toEqual(['github', 'inngest', 'resend', 'supabase', 'vercel'])
+    expect(readdirSync(dir).sort()).toEqual(before)
+    expect(cloud.httpCalls.filter((c) => /^(POST|PUT|PATCH|DELETE) /.test(c))).toEqual([])
+  })
+})

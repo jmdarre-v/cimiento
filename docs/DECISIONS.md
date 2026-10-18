@@ -468,4 +468,8 @@ One line per decision the spec does not cover, with the reasoning.
   did not finish. Push when git ls-remote shows the remote branch is not at HEAD; wait when the
   live production deployment is not built from HEAD. The live commit comes from the provider
   when its deployment records it, or else from the commit output publish and up write to state.
+- 2026-10-18 Goal 6: doctor without stack.yaml detects providers read only from package.json
+  dependencies, .vercel/project.json, vercel.json, netlify.toml, .netlify/state.json,
+  supabase/config.toml and the github remote, then runs each provider's own detect (tool version,
+  login) against a manifest built in memory. It writes no file and exits 0; init is what writes.
 
