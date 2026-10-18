@@ -7,8 +7,8 @@ import { CimientoError } from '../core/errors'
 import { HOSTING_NAMES, hostingOf, type HostingId } from '../core/hosting'
 import type { Ctx, ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
-import { netlifyDevEnv, removeNetlifyEnv, waitForNetlifyCommit } from './netlify'
-import { ensureLocalLink, removeEnv, waitForCommitDeployment } from './vercel'
+import { netlifyDevEnv, netlifyLiveCommit, removeNetlifyEnv, waitForNetlifyCommit } from './netlify'
+import { ensureLocalLink, removeEnv, vercelLiveCommit, waitForCommitDeployment } from './vercel'
 
 export interface CommitDeploy {
   url: string
@@ -92,3 +92,14 @@ function readEnvNames(path: string): string[] {
 export async function removeHostingEnv(spec: ResourceSpec, ctx: Ctx): Promise<boolean> {
   return spec.provider === 'netlify' ? removeNetlifyEnv(spec, ctx) : removeEnv(spec, ctx)
 }
+
+/**
+ * The commit the live production site is built from: what the hosting says, when its deployment
+ * records the commit, or else what the last publish or up recorded in state.
+ */
+export async function liveCommit(ctx: Ctx, hosting: HostingId, projectId: string): Promise<string | undefined> {
+  const spec: ResourceSpec = { id: 'publish', kind: 'resource', provider: hosting, dependsOn: [], inputs: {} }
+  const fromHost = hosting === 'netlify' ? await netlifyLiveCommit(ctx, spec, projectId) : await vercelLiveCommit(ctx, spec, projectId)
+  return fromHost ?? ctx.state.resources[`${hosting}.deployment`]?.outputs?.commit
+}
+

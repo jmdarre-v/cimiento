@@ -41,6 +41,7 @@
   hint: Only an owner or admin of the repository can do this. cimiento doctor shows which account gh is logged in as.
   fix: A missing scope is GITHUB_SCOPE_MISSING, which cimiento fixes itself. This code means the account itself lacks the right.
   docsUrl: https://cli.github.com/manual/gh_auth_refresh
+  seen: "Goal 6, 2026-10-18 (BUG-78). cimiento publish only looked at the working tree, so after a failed push or a deploy wait that timed out the next publish found a clean tree, said there was nothing to publish, and the commit never went live. publish now runs commit, push and deploy-wait as stages: it pushes when git ls-remote shows the remote is not at HEAD, and waits when the live deployment is not built from HEAD."
 
 - code: GITHUB_SCOPE_MISSING
   provider: github

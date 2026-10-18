@@ -416,3 +416,54 @@ $$ language plpgsql;
     expect(cloud.v2.sqlLog.slice(before).some((q) => /create table|insert into public\.cimiento_migrations/i.test(q))).toBe(false)
   })
 })
+
+describe('BUG-78: publish resumes the stage that did not finish', () => {
+  async function designer(cloud: FakeCloud): Promise<void> {
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+  }
+  const last = (w: CaptureWriter) => w.jsonObjects().filter((o) => (o as { command?: string }).command === 'publish').pop() as Record<string, unknown>
+
+  it('a failed push leaves a commit behind; the next publish, with a clean tree, pushes it and waits for its deploy', async () => {
+    const { setDeployWait } = await import('../../src/providers/vercel')
+    setDeployWait({ intervalMs: 1, timeoutMs: 50 })
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    cloud.gitDirty = true
+    cloud.pushFails = true
+    const failed = await cli(cloud, ['publish', '--message', 'new title', '--json'])
+    expect(failed.code).not.toBe(ExitCode.ok)
+    const committed = cloud.gitSha()
+    cloud.pushFails = false
+    const resumed = await cli(cloud, ['publish', '--json'])
+    expect(resumed.code, resumed.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(last(resumed.writer)).toMatchObject({ published: true, commit: committed, stages: { commit: 'skipped', push: 'done', deploy: 'done' } })
+    expect(cloud.pushedBranches.get('main')).toBe(committed)
+  })
+
+  it('a deploy wait that timed out is resumed by the next publish, with nothing to commit or push', async () => {
+    const { setDeployWait } = await import('../../src/providers/vercel')
+    setDeployWait({ intervalMs: 1, timeoutMs: 20 })
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    cloud.gitDirty = true
+    cloud.pushBuild = 'BUILDING'
+    const timedOut = await cli(cloud, ['publish', '--message', 'new title', '--json'])
+    expect(timedOut.code).not.toBe(ExitCode.ok)
+    cloud.pushBuild = 'READY'
+    const resumed = await cli(cloud, ['publish', '--json'])
+    expect(resumed.code, resumed.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(last(resumed.writer)).toMatchObject({ published: true, stages: { commit: 'skipped', push: 'skipped', deploy: 'done' } })
+    setDeployWait({ intervalMs: 5000, timeoutMs: 15 * 60 * 1000 })
+  })
+
+  it('with everything live, publish says so and changes nothing', async () => {
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    const calls = cloud.execCalls.length
+    const quiet = await cli(cloud, ['publish', '--json'])
+    expect(quiet.code).toBe(ExitCode.ok)
+    expect(last(quiet.writer)).toMatchObject({ published: false, stages: { commit: 'skipped', push: 'skipped', deploy: 'skipped' } })
+    expect(cloud.execCalls.slice(calls).some((c) => c.startsWith('git push') || c.includes('commit'))).toBe(false)
+  })
+})

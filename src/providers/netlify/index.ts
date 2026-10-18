@@ -890,3 +890,10 @@ export function netlifyDnsRecord(siteName: string, domain: string): DnsRecord {
 }
 
 export default createNetlifyProvider()
+
+/** The commit of the newest ready production deploy. */
+export async function netlifyLiveCommit(ctx: Ctx, spec: ResourceSpec, siteId: string): Promise<string | undefined> {
+  const deploys = await listDeploys(ctx, spec, siteId, '&production=true')
+  return deploys.find((d) => d.state === 'ready' && d.context === 'production')?.commit_ref ?? undefined
+}
+

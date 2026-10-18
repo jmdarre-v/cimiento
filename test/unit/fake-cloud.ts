@@ -166,6 +166,8 @@ export class FakeCloud implements Io {
   gitCommits = 0
   /** The checked out branch, and every branch pushed to the repository with its head commit. */
   gitBranch = 'main'
+  /** git push fails, as with no network. */
+  pushFails = false
   /** The URL of the local origin remote, as git remote get-url prints it. */
   gitOrigin: string | undefined
   readonly pushedBranches = new Map<string, string>()
@@ -427,6 +429,12 @@ export class FakeCloud implements Io {
     }
     if (args[0] === 'rev-parse') return this.gitCommits > 0 ? ok(`${this.gitSha()}\n`) : fail('fatal: Needed a single revision')
     if (args[0] === 'status') return ok(this.gitDirty ? ' M app/page.tsx\n' : '')
+    if (args[0] === 'ls-remote') {
+      const branch = (args[args.length - 1] ?? '').replace('refs/heads/', '')
+      const sha = this.pushedBranches.get(branch)
+      return ok(sha ? `${sha}\trefs/heads/${branch}\n` : '')
+    }
+    if (args[0] === 'push' && this.pushFails) return fail('fatal: unable to access the remote: Could not resolve host: github.com')
     if (args[0] === 'push') {
       // Vercel's GitHub app starts a production build of the pushed commit by itself.
       const branch = args[args.length - 1].replace(/^HEAD:/, '')
@@ -542,6 +550,7 @@ export class FakeCloud implements Io {
       })
       if (remoteClash) return fail(`X Unable to add remote "origin"\n\nhttps://github.com/${full}`)
       if (args.includes('--remote=origin')) this.gitOrigin = `https://github.com/${full}.git`
+      if (args.includes('--push') && this.gitCommits > 0) this.pushedBranches.set('main', this.gitSha())
       return ok(`https://github.com/${full}`)
     }
     if (args[0] === 'repo' && args[1] === 'delete') {

@@ -464,4 +464,8 @@ One line per decision the spec does not cover, with the reasoning.
   check), Inngest sends a roundtrip event (inspect reads both keys), Turnstile calls siteverify
   (inspect reads the widget), Supabase runs a read only query (inspect reads the migration
   history; the query endpoint is a POST). plan ignores --smoke.
+- 2026-10-18 Goal 6: publish runs commit, push and deploy-wait as stages and resumes the one that
+  did not finish. Push when git ls-remote shows the remote branch is not at HEAD; wait when the
+  live production deployment is not built from HEAD. The live commit comes from the provider
+  when its deployment records it, or else from the commit output publish and up write to state.
 

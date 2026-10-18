@@ -1128,6 +1128,9 @@ async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureRes
   }
   const project = await getProject(ctx, spec, projectId)
   const outputs = deploymentOutputs(deployed, project, result.stdout)
+  // The commit this deploy was built from, so publish knows the live site is at HEAD (BUG-78).
+  const head = await ctx.io.exec('git', ['rev-parse', 'HEAD'], { cwd: ctx.cwd }).catch(() => undefined)
+  if (head?.code === 0 && head.stdout.trim()) outputs.commit = { value: head.stdout.trim(), secret: false }
   return { action: existing ? 'updated' : 'created', externalId: deployed.uid, url: outputs.productionUrl?.value, outputs }
 }
 
@@ -1529,5 +1532,17 @@ async function verifyVercelDomainServes(spec: ResourceSpec, ctx: Ctx): Promise<C
     requireMarker: str(spec.inputs.requireMarker) === 'true',
     ...(dns.ready !== undefined ? { dnsReady: dns.ready } : {}),
   })
+}
+
+/** The commit of the newest ready production deployment, when Vercel recorded one. */
+export async function vercelLiveCommit(ctx: Ctx, spec: ResourceSpec, projectId: string): Promise<string | undefined> {
+  const list = await vercelCall<{ deployments?: (VercelDeployment & { meta?: { githubCommitSha?: string } })[] }>(
+    ctx,
+    spec.id,
+    'GET',
+    `/v6/deployments?projectId=${encodeURIComponent(projectId)}&target=production&limit=20`,
+  )
+  const ready = (list.body?.deployments ?? []).find((d) => (d.readyState ?? d.state ?? '').toUpperCase() === 'READY')
+  return ready?.meta?.githubCommitSha
 }
 
