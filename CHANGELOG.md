@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.2.0
+
+v2 of the spec: five more providers, the custom domain rule, the database and ci secret sinks,
+and Windows through Ubuntu under WSL.
+
+### Providers and wiring
+
+- Netlify fills hosting. cimiento creates the site, links it to the GitHub repository with a read
+  only deploy key and a webhook (no GitHub app install), sets the Next.js runtime, writes env per
+  deploy context, builds, and waits for the deploy of each published commit.
+- Neon fills database. neonctl logs in, the API creates the project, migrations in `db/migrations`
+  run through Neon's HTTP query endpoint, and `DATABASE_URL` and `DATABASE_URL_UNPOOLED` go to the
+  hosting env.
+- Resend fills email; its check sends one email to Resend's test inbox.
+- Stripe fills payments, in test mode only: a live key is refused the moment it is read.
+- PostHog fills analytics; its check sends one event, and the ingestion host goes to the hosting
+  env.
+- The "any hosting" rules (Supabase Auth URLs, the Supabase direct keys, Turnstile, Neon, PostHog)
+  work on Vercel and Netlify alike. Supabase on Netlify takes the direct path.
+- Every new provider has its sign-up, login and key pages as person steps in English and Spanish.
+
+### Commands
+
+- `cimiento domain add <domain>` and `cimiento domain remove`: the domain on the hosting project,
+  Supabase Auth URLs and Turnstile domains follow it, and a check proves it serves. A missing DNS
+  record is a person step naming the exact record Vercel or Netlify asks for.
+- `cimiento accounts set netlify` and `accounts set neon`.
+- `cimiento publish`, `env pull`, `join` and `secret remove` work on Netlify.
+
+### Secrets
+
+- Sinks `database` (Supabase project secrets) and `ci` (GitHub Actions secrets, the value on
+  stdin), covered by `secret set`, `rotate`, `check` and `remove`.
+- `secret set` and `secret rotate` deploy again after they change a hosting env value, so the live
+  app uses it at once.
+- On Linux the keychain source uses `secret-tool` from libsecret.
+
+### Checks
+
+- `hosting.preview` on Vercel and Netlify: every pushed branch besides production has a ready
+  preview of its head commit.
+- A check that fails after its resource was applied, with a step only a person can do, now waits
+  on the person (exit code 2) instead of failing.
+
+### Install and CI
+
+- `install.sh` supports Ubuntu, also under WSL on Windows: the apt packages Homebrew needs first,
+  then the same Homebrew path as macOS.
+- GitHub Actions runs typecheck, build, the tests and `install.sh --dry-run` on ubuntu-latest and
+  macos-latest.
+
+### Fixed
+
+- BUG-58, 59: `install.sh --dry-run` fetched the Homebrew installer and said installed.
+- BUG-60: `next-env.d.ts` was committed by the first publish after `cimiento dev`.
+- BUG-61: a Next.js site on Netlify answered 404 without the Next.js runtime.
+- BUG-62: `secret rotate` on Netlify talked about Vercel.
+- BUG-63: `secret set` and `rotate` left the live app on the old value until the next deploy.
+- BUG-64: the DNS step named the generic Vercel CNAME instead of the one Vercel recommends.
+
 ## 0.1.0
 
 The first public release.

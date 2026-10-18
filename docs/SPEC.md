@@ -25,17 +25,17 @@ Three audiences, one engine:
 
 **Slot.** A capability the project needs. Each slot is filled by exactly one provider or by `none`.
 
-| Slot | v0 | Later |
+| Slot | Built (v0 to v2) | Later |
 |---|---|---|
 | repo | github | gitlab |
-| hosting | vercel | netlify |
-| database | supabase | neon |
+| hosting | vercel, netlify | |
+| database | supabase, neon | |
 | auth | supabase | clerk |
 | jobs | inngest | trigger.dev |
 | bot_protection | turnstile | none |
-| email | none | resend |
-| payments | none | stripe |
-| analytics | none | posthog |
+| email | resend | |
+| payments | stripe, test mode only | |
+| analytics | posthog | |
 | ai | anthropic | openai |
 
 **Provider.** A module that fills one or more slots. Vercel fills hosting and is also the env store and the marketplace path to a database. Supabase fills database, auth and storage.
@@ -231,6 +231,8 @@ Rules live in `src/wiring/`, one file per pair, each exporting a list of binding
 | any hosting + turnstile | Widget domains follow production and preview domains; site key public, secret key to hosting env |
 | github + any hosting | Hosting project linked to repo; production branch `main`; preview on PRs |
 | any hosting + custom domain | Domain added to hosting; Supabase Auth URLs and Turnstile domains updated |
+| any hosting + neon | Pooled and direct connection strings to the hosting env as DATABASE_URL and DATABASE_URL_UNPOOLED, per environment |
+| any hosting + resend, stripe, posthog | Each key is a declared secret with sink hosting; posthog also gets its ingestion host. Stripe keys are test mode only |
 
 ## 7. State
 
@@ -304,6 +306,7 @@ Rules:
 | `cimiento publish` | Commits every change with a message, pushes, waits for the hosting deploy of that commit and prints the URL |
 | `cimiento join` | On a cloned repo: tools, logins, access verification against every resource in state, env pull, checks |
 | `cimiento down` | Destroys everything in state across providers, in reverse dependency order, after typed confirmation of the project name |
+| `cimiento domain add <domain>` / `domain remove` | Sets or clears `domain` in `stack.yaml` and applies only what follows from it: the domain on the hosting project, Supabase Auth URLs, Turnstile widget domains, and a check that the domain serves; a missing DNS record is a person step naming it (v2) |
 | `cimiento explain <resource|error>` | Plain-language explanation, `--lang es` |
 
 Global flags: `--guided`, `--json`, `--lang en|es`, `--yes` (skip confirmation, refused when billable items exist unless `--allow-billing`), `--only <provider>`, `--skip <provider>`.
@@ -349,7 +352,7 @@ Every check returns evidence (a URL, an id, a timestamp) that goes into the rece
 
 ## 14. Installer script
 
-`scripts/install.sh`, macOS only in v0. Installs Homebrew if missing, then git, node, pnpm, gh, vercel, supabase and Claude Code. Idempotent. Ends with a table. Installs cimiento itself last. Windows via WSL is v2.
+`scripts/install.sh`, for macOS and, since v2, Ubuntu, including Ubuntu under WSL on Windows. Installs Homebrew if missing (on Ubuntu after the apt packages Homebrew needs), then git, node, pnpm, gh, vercel, supabase and Claude Code. Idempotent. Ends with a table. Installs cimiento itself last.
 
 ## 15. Claude Code plugin
 
@@ -369,7 +372,7 @@ cimiento/
   src/
     core/         engine, planner, state, deferred values, errors
     manifest/     schema, defaults, presets
-    providers/    github/ vercel/ supabase/ inngest/ turnstile/ anthropic/
+    providers/    github/ vercel/ netlify/ supabase/ neon/ inngest/ turnstile/ resend/ stripe/ posthog/ anthropic/
     wiring/       one file per provider pair
     secrets/      sources and sinks
     scaffold/     templates
@@ -393,8 +396,8 @@ cimiento/
 
 ## 18. Priority
 
-| Stage | Scope |
-|---|---|
-| v0 | Engine, manifest, state, plan/up/doctor, providers github, vercel, supabase (via-hosting and direct), scaffold nextjs-app, checks, expert mode, JSON mode |
-| v1 | inngest, turnstile, anthropic; secrets sources keychain and 1password; `join`, `dev`, `down`; guided mode in English and Spanish; install.sh; Claude Code plugin; designer template |
-| v2 | netlify, neon, resend, stripe, posthog; custom domain rule; Windows via WSL |
+| Stage | Scope | Status |
+|---|---|---|
+| v0 | Engine, manifest, state, plan/up/doctor, providers github, vercel, supabase (via-hosting and direct), scaffold nextjs-app, checks, expert mode, JSON mode | Done, Goal 1 |
+| v1 | inngest, turnstile, anthropic; secrets sources keychain and 1password; `join`, `dev`, `down`; guided mode in English and Spanish; install.sh; Claude Code plugin; designer template | Done, Goals 2 to 4; released as 0.1.0 |
+| v2 | netlify, neon, resend, stripe, posthog; custom domain rule; Windows via WSL | Done, Goal 5; 0.2.0. Field tested on real accounts: netlify, the custom domain up to the DNS record, Ubuntu install. Neon, Resend, Stripe and PostHog: unit tested, field test waiting on an attended run (docs/FIELD-TEST-5.md) |

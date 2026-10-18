@@ -8,8 +8,8 @@ Everything runs on your machine with your own accounts. There is no hosted servi
 
 ## Install
 
-On a Mac, one line installs Homebrew if it is missing, then git, node, pnpm, gh, vercel,
-supabase, Claude Code and cimiento, and logs you in to Claude Code at the end:
+On a Mac, or on Ubuntu, one line installs Homebrew if it is missing, then git, node, pnpm, gh,
+vercel, supabase, Claude Code and cimiento, and logs you in to Claude Code at the end:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/install.sh | bash
@@ -17,7 +17,18 @@ curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/ins
 
 It skips whatever is already installed and ends with a table of every tool. Claude Code needs a
 Claude Pro or Max plan. If you already have Node 22, `npm install -g cimiento` installs cimiento
-alone.
+alone. The CLIs of the other providers (Netlify, Neon, wrangler for Turnstile) are installed by
+cimiento the first time a project needs them.
+
+On Windows, install Ubuntu under WSL first, in PowerShell:
+
+```bash
+wsl --install
+```
+
+Then open the Ubuntu window and run the same one line there. On Ubuntu the installer first adds,
+with apt, what Homebrew needs and `libsecret-tools` for keychain secrets, asking for the sudo
+password once.
 
 ## Guided path, for a first project
 
@@ -39,7 +50,8 @@ Design exports. When you change the site:
 cimiento publish
 ```
 
-It commits your changes, pushes them, waits for Vercel to deploy them and prints the address.
+It commits your changes, pushes them, waits for the hosting (Vercel, or Netlify with
+`--hosting netlify`) to deploy them and prints the address.
 
 ## Expert path
 
@@ -98,7 +110,9 @@ works, and `cimiento doctor` will tell you about it the next time you run it.
 | `cimiento secret rotate NAME` | A new value, written over every destination |
 | `cimiento secret remove NAME` | Take a secret out of the project and every destination |
 | `cimiento down` | Delete everything in state, after you type the project name back |
-| `cimiento accounts set <provider>` | Pick the GitHub account, Vercel team, Supabase organization or Cloudflare account again |
+| `cimiento accounts set <provider>` | Pick the GitHub account, Vercel or Netlify team, Supabase or Neon organization, or Cloudflare account again |
+| `cimiento domain add <domain>` | Put your own domain on the site; Supabase Auth URLs and Turnstile follow |
+| `cimiento domain remove` | Take it off again; the default address keeps working |
 | `cimiento explain <id>` | Plain language for a resource or an error, `--lang es` |
 
 Every command takes `--json`. Exit codes are 0 ok, 1 failed, 2 needs human, 3 blocked.
@@ -115,6 +129,15 @@ cimiento secret set ANTHROPIC_API_KEY
 cimiento prompts with hidden input, pushes the value to every sink the manifest declares, and
 keeps no copy. `.env*` is gitignored from the scaffold, and the generated `.claude/settings.json`
 denies Claude Code any read of it.
+
+| Sink | Where the value goes |
+|---|---|
+| `hosting` | The Vercel or Netlify env, per environment. Set and rotate deploy again so the live app uses it |
+| `database` | Supabase project secrets, which Edge Functions read |
+| `ci` | GitHub Actions secrets, through `gh secret set` with the value on stdin |
+
+Sources: a hidden `prompt`, the `env`, the `keychain` (macOS keychain, or libsecret's
+`secret-tool` on Linux) and `1password`.
 
 ## stack.yaml
 
@@ -149,13 +172,46 @@ scaffold:
 `accounts` pins which account each provider must be logged in as. A session for a different
 account stops the run instead of deploying your project somewhere you did not mean.
 
+## Providers
+
+Each slot in `stack.yaml` is filled by one provider or `none`. Pick them with `--preset`, with a
+flag per slot (`--hosting netlify --database neon`), or in `cimiento new --guided`.
+
+| Slot | Provider | What cimiento does | What a person does, once |
+|---|---|---|---|
+| repo | GitHub | Creates the repository and pushes the scaffold | Logs in with `gh` |
+| hosting | Vercel | Creates the project, links it to the repository, writes env, deploys | Logs in; on a private repository, lets the Vercel GitHub app see it |
+| hosting | Netlify | Creates the site, links it with a deploy key and a webhook, sets the Next.js runtime, writes env per deploy context, builds | Logs in with `netlify login`; picks the team when there are several |
+| database, auth | Supabase | Creates the database through the Vercel Marketplace (`via-hosting`) or the Supabase API (`direct`), runs migrations, sets Auth URLs | Logs in; accepts the Marketplace terms once per team |
+| database | Neon | Creates the project, runs `db/migrations`, writes `DATABASE_URL` and `DATABASE_URL_UNPOOLED` to the hosting env | Logs in with `neonctl auth`; picks the organization when there are several |
+| jobs | Inngest | Checks the Vercel integration, keeps its keys in the env, proves a real event runs | Approves the Inngest Vercel integration once |
+| bot_protection | Turnstile | Creates the widget, writes its keys, keeps its domains on the production host | Logs in with `wrangler login` |
+| email | Resend | Sends one email to Resend's test inbox to prove the key | Makes an API key; cimiento asks for it at a hidden prompt |
+| payments | Stripe, test mode only | Reads the test balance to prove the key; refuses any live key | Copies the sandbox or test mode keys |
+| analytics | PostHog | Writes the ingestion host, sends one event | Copies the project token (phc_) |
+| ai | Anthropic | Proves the key with a free read only call | Makes an API key |
+
+Every person step says the full link, the clicks in order, each field and value, the button and
+what success looks like, in English and Spanish, and starts with a free sign-up when there is no
+account yet. Netlify needs `repo: github`. Supabase on Netlify uses the `direct` path. Jobs with
+Inngest need Vercel.
+
+## Your own domain
+
+```bash
+cimiento domain add app.example.com
+```
+
+The domain goes on the Vercel project or Netlify site, Supabase Auth URLs and Turnstile widget
+domains follow it, and a check fetches `https://app.example.com`. When your DNS lives elsewhere,
+cimiento names the one record to add there (the CNAME Vercel recommends for the project, or
+`<site>.netlify.app`) and checks it again on the next `cimiento doctor`.
+
 ## What is in this release
 
-Providers: GitHub, Vercel, Supabase (both `via-hosting` and `direct`), Inngest, Turnstile and
-Anthropic. Secret sources `prompt`, `env`, `keychain` and `1password`, secret sink `hosting`.
-Templates `nextjs-app` and `designer-site`. Commands `join`, `dev`, `down`, `secret rotate` and
-`secret remove`. Expert, guided (English and Spanish) and `--json` output. The installer script
-and the Claude Code plugin.
+0.2.0: all of the above. Templates `nextjs-app` and `designer-site`. Expert, guided (English and
+Spanish) and `--json` output. The installer script for macOS and Ubuntu, also under WSL, and the
+Claude Code plugin. `CHANGELOG.md` has the details.
 
 ## Contributing
 
