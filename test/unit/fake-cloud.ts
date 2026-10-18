@@ -596,7 +596,15 @@ export class FakeCloud implements Io {
       const env = Object.fromEntries(
         (this.vercelEnv.get(project.id) ?? []).filter((e) => e.target.includes('production')).map((e) => [e.key, e.value]),
       )
-      list.unshift({ uid: this.id('dpl'), url, readyState: 'READY', target: 'production', createdAt: this.now(), env })
+      // As the CLI does: each --meta KEY=value lands in the deployment's meta.
+      const meta: Record<string, string> = {}
+      args.forEach((a, i) => {
+        if ((a === '--meta' || a === '-m') && args[i + 1]) {
+          const [key, ...rest] = args[i + 1].split('=')
+          meta[key] = rest.join('=')
+        }
+      })
+      list.unshift({ uid: this.id('dpl'), url, readyState: 'READY', target: 'production', createdAt: this.now(), env, ...(Object.keys(meta).length ? { meta } : {}) })
       this.deployments.set(project.id, list)
       this.pages.set(`https://${alias}`, {
         status: 200,

@@ -494,3 +494,10 @@ One line per decision the spec does not cover, with the reasoning.
   then from stack.yaml with each provider this build ships put back in the slots it fills, the
   id's own provider first. Only up, down and the other writing commands save it; plan and doctor
   only report. Tool, session and check entries never had a spec and are not legacy.
+- 2026-10-18 Goal 7: publish reads the live commit from the hosting only (BUG-87). Vercel CLI
+  deploys from a clean tree carry it as the deployment meta key cimientoCommit; state no longer
+  records a commit. Audit of the other live reads with a fallback: the Vercel DNS record for a
+  custom domain falls back to Vercel's documented generic record, a default and not a cache, and
+  is only printed as a step; Netlify listDeploys reads a failed call as no deploys and feeds
+  outputs, where the executor keeps the outputs state already has, which name things and decide
+  no status. Neither reports a live status from cached state, so both stay.

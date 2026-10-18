@@ -5,7 +5,6 @@
 
 import { CimientoError, ExitCode } from '../../core/errors'
 import { HOSTING_NAMES } from '../../core/hosting'
-import { writeProjectState } from '../../core/state'
 import { gitIdentityArgs } from '../../providers/github'
 import { hostingProductionUrl, liveCommit, requireHostingProject, waitForHostingCommit } from '../../providers/hosting'
 import { flagString } from '../args'
@@ -84,8 +83,32 @@ export async function publishCommand(session: Session): Promise<number> {
   // 3. Wait for the deploy, when the live site is not built from HEAD, such as after a wait that
   // timed out.
   const live = await liveCommit(ctx, hosting, projectId)
+  if (!live.known) {
+    throw new CimientoError({
+      code: 'PUBLISH_LIVE_COMMIT_UNKNOWN',
+      provider: hosting,
+      resource: 'publish',
+      message: `cimiento could not ask ${vendor} which commit is live (${live.reason}), so it cannot say whether ${sha.slice(0, 7)} is deployed. It does not guess from what an earlier run recorded.`,
+      hint: `${stages.push === 'done' || stages.commit === 'done' ? `${sha.slice(0, 7)} is committed and pushed. ` : ''}Run cimiento doctor to check the ${vendor} session, then cimiento publish again; it only waits for the deploy.`,
+      retryable: true,
+      needsHuman: false,
+    })
+  }
+  // A live deployment that records no commit, such as one made by cimiento 0.3.0 or older, cannot
+  // say whether HEAD is live. Only a push this run brings a deploy that will carry it.
+  if (live.commit === undefined && stages.push !== 'done') {
+    throw new CimientoError({
+      code: 'PUBLISH_LIVE_COMMIT_UNKNOWN',
+      provider: hosting,
+      resource: 'publish',
+      message: `The live ${vendor} deployment records no commit, so cimiento cannot say whether ${sha.slice(0, 7)} is deployed.`,
+      hint: `Make a change and run cimiento publish --message "your message"; the deploy that push brings records its commit.`,
+      retryable: true,
+      needsHuman: false,
+    })
+  }
   let deployed: { url: string; productionUrl?: string } | undefined
-  if (live !== sha) {
+  if (live.commit !== sha) {
     if (!session.json) {
       session.printer.line(
         es ? `${sha.slice(0, 7)} esta en ${branch}. Esperando el despliegue de ${vendor}...` : `${sha.slice(0, 7)} is on ${branch}. Waiting for ${vendor} to deploy it...`,
@@ -93,14 +116,6 @@ export async function publishCommand(session: Session): Promise<number> {
     }
     deployed = await waitForHostingCommit(ctx, hosting, projectId, sha)
     stages.deploy = 'done'
-    // Recorded, so the next publish knows the live site is built from this commit.
-    const id = `${hosting}.deployment`
-    const entry = ctx.state.resources[id] ?? {}
-    writeProjectState(session.cwd, {
-      ...ctx.state,
-      resources: { ...ctx.state.resources, [id]: { ...entry, outputs: { ...(entry.outputs ?? {}), commit: sha } } },
-      manifestHash: ctx.state.manifestHash,
-    })
   }
 
   const published = stages.commit === 'done' || stages.push === 'done' || stages.deploy === 'done'

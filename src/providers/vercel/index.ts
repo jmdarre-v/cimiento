@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
+import type { LiveCommit } from '../../core/types'
 import type { ProjectState } from '../../core/state'
 import {
   attendedUpHint,
@@ -1073,6 +1074,9 @@ function isReady(deployment: VercelDeployment): boolean {
   return state === 'READY'
 }
 
+/** The deployment meta key a CLI deploy from a clean tree carries its commit in. */
+const COMMIT_META = 'cimientoCommit'
+
 async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const projectId = str(spec.inputs.projectId)
   const name = str(spec.inputs.name)
@@ -1103,6 +1107,12 @@ async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureRes
   const args = ['deploy', '--prod', '--yes']
   const account = ctx.manifest.accounts.vercel
   if (account) args.push('--scope', account)
+  // An upload from the CLI records no commit on Vercel. With a clean tree the upload is exactly
+  // HEAD, so the deployment carries it, and publish reads it from Vercel, not from state (BUG-87).
+  const head = await ctx.io.exec('git', ['rev-parse', 'HEAD'], { cwd: ctx.cwd }).catch(() => undefined)
+  const dirty = await ctx.io.exec('git', ['status', '--porcelain'], { cwd: ctx.cwd }).catch(() => undefined)
+  const sha = head?.code === 0 ? head.stdout.trim() : ''
+  if (sha && dirty?.code === 0 && dirty.stdout.trim() === '') args.push('--meta', `${COMMIT_META}=${sha}`)
   // deploy waits for the build to finish. A first Next.js build takes minutes, far past the
   // default exec timeout that killed the Vercel login in Goal 1 Part A.
   const result = await ctx.io.exec('vercel', args, { cwd: ctx.cwd, timeoutMs: DEPLOY_TIMEOUT_MS })
@@ -1131,9 +1141,6 @@ async function ensureDeployment(spec: ResourceSpec, ctx: Ctx): Promise<EnsureRes
   }
   const project = await getProject(ctx, spec, projectId)
   const outputs = deploymentOutputs(deployed, project, result.stdout)
-  // The commit this deploy was built from, so publish knows the live site is at HEAD (BUG-78).
-  const head = await ctx.io.exec('git', ['rev-parse', 'HEAD'], { cwd: ctx.cwd }).catch(() => undefined)
-  if (head?.code === 0 && head.stdout.trim()) outputs.commit = { value: head.stdout.trim(), secret: false }
   return { action: existing ? 'updated' : 'created', externalId: deployed.uid, url: outputs.productionUrl?.value, outputs }
 }
 
@@ -1169,7 +1176,7 @@ export async function waitForCommitDeployment(
   const deadline = Date.now() + deployWait.timeoutMs
   let state = 'not started'
   for (;;) {
-    const list = await vercelCall<{ deployments?: (VercelDeployment & { meta?: { githubCommitSha?: string } })[] }>(
+    const list = await vercelCall<{ deployments?: (VercelDeployment & { meta?: Record<string, string | undefined> })[] }>(
       ctx,
       spec.id,
       'GET',
@@ -1538,14 +1545,15 @@ async function verifyVercelDomainServes(spec: ResourceSpec, ctx: Ctx): Promise<C
 }
 
 /** The commit of the newest ready production deployment, when Vercel recorded one. */
-export async function vercelLiveCommit(ctx: Ctx, spec: ResourceSpec, projectId: string): Promise<string | undefined> {
-  const list = await vercelCall<{ deployments?: (VercelDeployment & { meta?: { githubCommitSha?: string } })[] }>(
+export async function vercelLiveCommit(ctx: Ctx, spec: ResourceSpec, projectId: string): Promise<LiveCommit> {
+  const list = await vercelCall<{ deployments?: (VercelDeployment & { meta?: Record<string, string | undefined> })[] }>(
     ctx,
     spec.id,
     'GET',
     `/v6/deployments?projectId=${encodeURIComponent(projectId)}&target=production&limit=20`,
   )
+  if (!list.ok) return { known: false, reason: `Vercel answered ${list.status} to the deployments lookup` }
   const ready = (list.body?.deployments ?? []).find((d) => (d.readyState ?? d.state ?? '').toUpperCase() === 'READY')
-  return ready?.meta?.githubCommitSha
+  return { known: true, commit: ready?.meta?.githubCommitSha ?? ready?.meta?.[COMMIT_META] }
 }
 

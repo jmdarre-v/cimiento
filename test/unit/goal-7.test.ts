@@ -207,3 +207,53 @@ describe('BUG-86: a legacy record that cannot be rebuilt keeps down non-zero unt
     expect(stateOf().resources['oldhost.project']).toBeUndefined()
   })
 })
+
+describe('BUG-87: publish never fills a failed live-commit lookup from cached state', () => {
+  for (const [label, status] of [['a 503', 503], ['a timeout', 0], ['a 401', 401]] as const) {
+    it(`Vercel answering ${label} to the deployments lookup is unknown: publish exits non-zero with a hint`, async () => {
+      const cloud = new FakeCloud({ ghDeleteScope: true })
+      await made(cloud, ['--preset', 'designer'])
+      cloud.httpFaults.push({ method: 'GET', match: /api\.vercel\.com\/v6\/deployments/, status })
+      const publish = await cli(cloud, ['publish', '--json'])
+      expect(publish.code).not.toBe(ExitCode.ok)
+      expect(publish.writer.outText).toContain('PUBLISH_LIVE_COMMIT_UNKNOWN')
+      expect(publish.writer.outText).not.toContain('"published":false')
+    })
+  }
+
+  it('Netlify answering 503 to the deploys lookup is unknown too', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, keychain: V2_KEYS })
+    await made(cloud, V2_ARGS)
+    cloud.httpFaults.push({ method: 'GET', match: /api\.netlify\.com\/api\/v1\/sites\/[^/]+\/deploys/, status: 503 })
+    const publish = await cli(cloud, ['publish', '--json'])
+    expect(publish.code).not.toBe(ExitCode.ok)
+    expect(publish.writer.outText).toContain('PUBLISH_LIVE_COMMIT_UNKNOWN')
+  })
+
+  it('Netlify with the lookup healthy: a clean tree that is live says nothing to publish, without waiting', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, keychain: V2_KEYS })
+    await made(cloud, V2_ARGS)
+    const started = Date.now()
+    const publish = await cli(cloud, ['publish', '--json'])
+    expect(publish.code, publish.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(publish.writer.outText).toContain('"published":false')
+    expect(Date.now() - started).toBeLessThan(5000)
+  })
+
+  it('a live deployment that records no commit, as 0.3.0 made them, is unknown, not a wait', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'designer'])
+    for (const list of cloud.deployments.values()) for (const d of list) delete d.meta
+    const publish = await cli(cloud, ['publish', '--json'])
+    expect(publish.code).not.toBe(ExitCode.ok)
+    expect(publish.writer.outText).toContain('records no commit')
+  })
+
+  it('with the lookup healthy, a clean tree that is live still says nothing to publish', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, ['--preset', 'designer'])
+    const publish = await cli(cloud, ['publish', '--json'])
+    expect(publish.code, publish.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(publish.writer.outText).toContain('"published":false')
+  })
+})

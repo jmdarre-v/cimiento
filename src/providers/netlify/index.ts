@@ -7,6 +7,7 @@
 
 import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
+import type { LiveCommit } from '../../core/types'
 import { netlifyLoginStep, netlifySignupStep, netlifyTeamStep } from '../../core/person-steps-v2'
 import { hostingEnvId } from '../../core/sink-ids'
 import { sameResource, type ProjectState } from '../../core/state'
@@ -892,8 +893,10 @@ export function netlifyDnsRecord(siteName: string, domain: string): DnsRecord {
 export default createNetlifyProvider()
 
 /** The commit of the newest ready production deploy. */
-export async function netlifyLiveCommit(ctx: Ctx, spec: ResourceSpec, siteId: string): Promise<string | undefined> {
-  const deploys = await listDeploys(ctx, spec, siteId, '&production=true')
-  return deploys.find((d) => d.state === 'ready' && d.context === 'production')?.commit_ref ?? undefined
+export async function netlifyLiveCommit(ctx: Ctx, spec: ResourceSpec, siteId: string): Promise<LiveCommit> {
+  // Not listDeploys, which reads a failed lookup as no deploys.
+  const result = await netlifyCall<NetlifyDeploy[]>(ctx, spec.id, 'GET', `/sites/${encodeURIComponent(siteId)}/deploys?per_page=50&production=true`)
+  if (!result.ok) return { known: false, reason: `Netlify answered ${result.status} to the deploys lookup` }
+  return { known: true, commit: (result.body ?? []).find((d) => d.state === 'ready' && d.context === 'production')?.commit_ref ?? undefined }
 }
 

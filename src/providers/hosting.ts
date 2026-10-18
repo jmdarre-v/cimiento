@@ -5,7 +5,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../core/errors'
 import { HOSTING_NAMES, hostingOf, type HostingId } from '../core/hosting'
-import type { Ctx, ResourceSpec } from '../core/types'
+import type { Ctx, LiveCommit, ResourceSpec } from '../core/types'
 import type { Manifest } from '../manifest/schema'
 import { netlifyDevEnv, netlifyLiveCommit, removeNetlifyEnv, waitForNetlifyCommit } from './netlify'
 import { ensureLocalLink, removeEnv, vercelLiveCommit, waitForCommitDeployment } from './vercel'
@@ -94,12 +94,15 @@ export async function removeHostingEnv(spec: ResourceSpec, ctx: Ctx): Promise<bo
 }
 
 /**
- * The commit the live production site is built from: what the hosting says, when its deployment
- * records the commit, or else what the last publish or up recorded in state.
+ * The commit the live production site is built from, as the hosting says. A lookup that fails, by
+ * status or by timeout, is unknown: what an earlier run recorded in state is no evidence (BUG-87).
  */
-export async function liveCommit(ctx: Ctx, hosting: HostingId, projectId: string): Promise<string | undefined> {
+export async function liveCommit(ctx: Ctx, hosting: HostingId, projectId: string): Promise<LiveCommit> {
   const spec: ResourceSpec = { id: 'publish', kind: 'resource', provider: hosting, dependsOn: [], inputs: {} }
-  const fromHost = hosting === 'netlify' ? await netlifyLiveCommit(ctx, spec, projectId) : await vercelLiveCommit(ctx, spec, projectId)
-  return fromHost ?? ctx.state.resources[`${hosting}.deployment`]?.outputs?.commit
+  try {
+    return hosting === 'netlify' ? await netlifyLiveCommit(ctx, spec, projectId) : await vercelLiveCommit(ctx, spec, projectId)
+  } catch (err) {
+    return { known: false, reason: err instanceof Error ? err.message : String(err) }
+  }
 }
 

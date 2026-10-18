@@ -286,6 +286,16 @@ Another cimiento run is working on this project.
 
 **Looks like:** `is working on this project`
 
+### PUBLISH_LIVE_COMMIT_UNKNOWN
+
+Publish could not learn which commit is live.
+
+**What to do:** Run cimiento doctor to check the hosting session, then cimiento publish again; it resumes and only waits for the deploy.
+
+**Why:** publish asks the hosting which commit the live production deployment is built from. A failed lookup, any non 2xx or a timeout, is unknown and is never filled from what an earlier run recorded in state, so publish exits non zero instead of saying there is nothing to publish. A Vercel deploy from the CLI with a clean tree carries the commit in its meta; a live deployment from 0.3.0 or older records none, and the next publish with a change brings one that does.
+
+**Looks like:** `which commit is live`, `records no commit`
+
 ### STATE_UNREADABLE
 
 The state file is damaged.

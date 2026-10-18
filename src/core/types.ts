@@ -215,3 +215,9 @@ export interface Provider {
 export function isDeferred(v: Value | undefined): v is { deferred: string } {
   return typeof v === 'object' && v !== null && typeof (v as { deferred?: unknown }).deferred === 'string'
 }
+
+/**
+ * The commit a live site is built from, as the hosting answered. A failed lookup is unknown and is
+ * never filled from what state recorded earlier (BUG-87).
+ */
+export type LiveCommit = { known: true; commit?: string } | { known: false; reason: string }

@@ -12,6 +12,9 @@
   `down` exits non zero with LEGACY_STATE_UNRESOLVED until it is reconciled: delete the resource
   in its provider if it still exists, then run `cimiento down --release ID`.
 - Run `cimiento plan` once after upgrading to see both lists before anything changes.
+- A live Vercel deployment made by 0.3.0 or older records no commit. The first `publish` with
+  nothing new stops with PUBLISH_LIVE_COMMIT_UNKNOWN; the next `publish` with a change brings a
+  deploy that records it.
 
 ### Teardown
 
@@ -19,6 +22,13 @@
   GitHub, whose delete takes a name, is read first and refused on a node id mismatch
   (DOWN_IDENTITY_MISMATCH). A record without an id is never looked up by name (DOWN_ID_MISSING).
 - `down --release ID[,ID]` stops tracking resources and deletes nothing.
+
+### Publish
+
+- `publish` reads the live commit from the hosting only. A failed lookup, any non 2xx or a
+  timeout, is unknown: publish exits non zero with PUBLISH_LIVE_COMMIT_UNKNOWN instead of saying
+  there is nothing to publish from what an earlier run recorded.
+- A Vercel deploy from the CLI with a clean tree carries its commit in the deployment meta.
 
 ## 0.3.0
 

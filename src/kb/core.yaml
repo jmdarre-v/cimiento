@@ -257,3 +257,13 @@
   hint: If the resource still exists, delete it in its provider's dashboard, then run cimiento down --release ID and cimiento down again.
   fix: State written by 0.1.0 and 0.2.0 has no spec on any entry. On the first run cimiento rebuilds each spec from stack.yaml, or from stack.yaml with the old provider put back in its slot, and the first command that writes state saves them. A record neither describes is reported by plan and every writing command, and down exits non zero until it is released.
   seen: "Goal 7, 2026-10-18 (BUG-85, BUG-86). With state from 0.2.0, after hosting changed from vercel to netlify, down saw no spec for vercel.project, skipped it and exited 0 with the project still running; a record no provider describes was skipped the same way."
+
+- code: PUBLISH_LIVE_COMMIT_UNKNOWN
+  provider: core
+  title: publish could not learn which commit is live
+  signatures:
+    - "which commit is live"
+    - "records no commit"
+  hint: Run cimiento doctor to check the hosting session, then cimiento publish again; it resumes and only waits for the deploy.
+  fix: publish asks the hosting which commit the live production deployment is built from. A failed lookup, any non 2xx or a timeout, is unknown and is never filled from what an earlier run recorded in state, so publish exits non zero instead of saying there is nothing to publish. A Vercel deploy from the CLI with a clean tree carries the commit in its meta; a live deployment from 0.3.0 or older records none, and the next publish with a change brings one that does.
+  seen: "Goal 7, 2026-10-18 (BUG-87). liveCommit returned the commit state recorded whenever Vercel or Netlify answered the deployments lookup with an error, so a 503, a 401 or a timeout made publish report the site as live at HEAD and exit 0; on Netlify the error was read as no deploys and publish waited out its whole deploy timeout."

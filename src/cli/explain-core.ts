@@ -182,6 +182,10 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'State written by an older cimiento tracks something this version cannot describe, so it cannot delete it safely. Delete it yourself if it still exists, then run cimiento down --release with its id.',
     es: 'El estado que escribio un cimiento anterior registra algo que esta version no sabe describir, asi que no puede borrarlo con seguridad. Borralo tu si aun existe y luego ejecuta cimiento down --release con su id.',
   },
+  PUBLISH_LIVE_COMMIT_UNKNOWN: {
+    en: 'publish could not learn from the hosting which commit the live site is built from, so it does not claim your change is live. Check the hosting login with cimiento doctor, then run cimiento publish again.',
+    es: 'publish no pudo saber por el hosting de que commit esta hecho el sitio en linea, asi que no afirma que tu cambio este publicado. Revisa la sesion del hosting con cimiento doctor y vuelve a ejecutar cimiento publish.',
+  },
   ORPHANS_DECISION_NEEDED: {
     en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
     es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',

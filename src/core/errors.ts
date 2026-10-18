@@ -184,6 +184,7 @@ export const ERROR_CODES = [
   'DOWN_ID_MISSING',
   'DOWN_IDENTITY_MISMATCH',
   'LEGACY_STATE_UNRESOLVED',
+  'PUBLISH_LIVE_COMMIT_UNKNOWN',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
