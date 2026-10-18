@@ -200,3 +200,13 @@
     - "ECONNREFUSED"
   hint: Check the network connection, a VPN or proxy, and the provider's status page, then run the command again.
   fix: Reads are retried twice before this is reported; writes are not retried.
+
+- code: PROJECT_LOCKED
+  provider: core
+  title: another cimiento run is working on this project
+  signatures:
+    - "is working on this project"
+  hint: Wait for the other run to finish, then run the command again.
+  fix: One run per project at a time, so two runs never create the same thing or write state over each other. The lock is a file under ~/.cimiento/locks named after the project path, outside the project so git never sees it. A lock whose process is gone, left by a killed run, is reported as stale and taken over.
+  seen: "Goal 6, 2026-10-18 (BUG-72). State was written only at the end of a run, so an up killed right after creating the Vercel project left no record; the next run adopted the project by name and down would never have deleted it. State is now written after every completed operation, to a temporary file renamed over the old one, under a project lock."
+

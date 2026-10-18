@@ -5,7 +5,7 @@ import type { PersonStep } from './person'
 import { asCimientoError, CimientoError, ExitCode, needsPerson, type CimientoErrorFields } from './errors'
 import { dependenciesOf, deferredRefs, topoSort } from './graph'
 import { OutputResolver } from './resolve'
-import { applyEnsureToState, markVerified, type ProjectState } from './state'
+import { applyEnsureToState, markVerified, writeProjectState, type ProjectState } from './state'
 import type { Ctx, EnsureResult, Provider, ResourceSpec } from './types'
 
 export interface Receipt {
@@ -59,6 +59,11 @@ export async function runUp(
   const byProvider = new Map(providers.map((p) => [p.id, p]))
   const kept = filterSpecs(allSpecs, options)
   const specs = topoSort(kept, { allowExternal: kept.length !== allSpecs.length })
+  // Written after every completed operation, before anything is reported, so a run killed at any
+  // moment leaves a state file that knows what cimiento created (BUG-72). A dry run writes nothing.
+  const checkpoint = (next: ProjectState): void => {
+    if (!ctx.dryRun) writeProjectState(ctx.cwd, next)
+  }
   const emit = (event: UpEvent): void => {
     options.onEvent?.(event)
     ctx.logger.log({
@@ -129,6 +134,7 @@ export async function runUp(
           const done = await safeVerify(provider, spec, runCtx)
           if (done.ok) {
             state = markVerified(state, spec.id)
+            checkpoint(state)
             completed.add(spec.id)
             progressed = true
             emit({ event: 'verified', id: spec.id, provider: spec.provider, message: done.evidence })
@@ -146,6 +152,7 @@ export async function runUp(
           if (!already.ok && already.error?.personStep) step = already.error.personStep
           if (already.ok) {
             state = markVerified(applyEnsureToState(state, spec, { action: 'updated' }), spec.id)
+            checkpoint(state)
             completed.add(spec.id)
             progressed = true
             emit({ event: 'verified', id: spec.id, provider: spec.provider, message: already.evidence })
@@ -220,6 +227,7 @@ export async function runUp(
           continue
         }
         state = markVerified(afterManual, spec.id)
+        checkpoint(state)
         completed.add(spec.id)
         progressed = true
         receipts.push({
@@ -258,6 +266,7 @@ export async function runUp(
       }
 
       state = applyEnsureToState(state, spec, result)
+      checkpoint(state)
       resolver.useState(state)
       resolver.record(spec.id, result.outputs, ctx)
 
@@ -296,6 +305,7 @@ export async function runUp(
       }
 
       state = markVerified(state, spec.id)
+      checkpoint(state)
       completed.add(spec.id)
       pendingManual.delete(spec.id)
       progressed = true

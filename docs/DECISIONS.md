@@ -429,3 +429,12 @@ One line per decision the spec does not cover, with the reasoning.
   proven on the real Vercel account; the step after DNS is covered by unit tests.
 - 2026-10-18 Goal 6: the goal says to continue BUG ids from BUG-66, but BUG-66 to 70 were used at
   the end of Goal 5 (docs/FIELD-TEST-5.md), so Goal 6 starts at BUG-71 to keep every id unique.
+- 2026-10-18 Goal 6: http has a 30 s bound per request; GET and HEAD are retried twice on a
+  timeout, network error, 429, 502, 503 or 504, and a write is never sent twice, because it may
+  have happened.
+- 2026-10-18 Goal 6: the executor checkpoints state after every completed operation, before it
+  reports it, unless dryRun; writes go to a temporary file renamed over state.json, the temporary
+  file inside .git when there is one. The project lock lives in ~/.cimiento/locks keyed by the
+  project's real path, so publish's git add -A can never commit it; a dead process's lock is
+  reported as stale and taken over, a live one stops the run with PROJECT_LOCKED.
+

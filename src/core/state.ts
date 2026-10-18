@@ -1,7 +1,7 @@
 // Machine state and project state from spec section 7. No secret value is ever written here.
 
 import { createHash } from 'node:crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { CimientoError } from './errors'
@@ -103,12 +103,14 @@ export function readProjectState(cwd: string): ProjectState {
 }
 
 export function writeProjectState(cwd: string, state: ProjectState): void {
+  const git = join(cwd, '.git')
+  const tempDir = existsSync(git) && statSync(git).isDirectory() ? git : dirname(projectStatePath(cwd))
   writeJson(projectStatePath(cwd), {
     version: STATE_VERSION,
     manifestHash: state.manifestHash,
     resources: sortKeys(state.resources),
     manualDone: [...state.manualDone].sort(),
-  })
+  }, tempDir)
 }
 
 /** Records the result of an ensure call. Secret outputs are dropped, never stored. */
@@ -206,9 +208,16 @@ function readJson<T>(path: string, what: string): T | undefined {
   }
 }
 
-function writeJson(path: string, value: unknown): void {
+/**
+ * Written to a temporary file, then renamed over the old one, so a run killed mid write never
+ * leaves a half written state file. The temporary file of a project state lives in .git when the
+ * project has one, where git add never picks it up.
+ */
+function writeJson(path: string, value: unknown, tempDir = dirname(path)): void {
   mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  const temp = join(tempDir, `.${basenameOf(path)}.${process.pid}.tmp`)
+  writeFileSync(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8')
+  renameSync(temp, path)
 }
 
 function assertVersion(version: number | undefined, path: string): void {

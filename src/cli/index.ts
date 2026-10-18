@@ -3,7 +3,10 @@
 
 import { asCimientoError, ExitCode } from '../core/errors'
 import { parseArgs, flagBool } from './args'
-import { openSession, defaultWriter, type CliDeps } from './context'
+import { openSession, defaultWriter, reportStaleLock, type CliDeps } from './context'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import { acquireProjectLock } from '../core/lock'
 import { accountsSetCommand } from './commands/accounts'
 import { domainAddCommand, domainRemoveCommand } from './commands/domain'
 import { doctorCommand } from './commands/doctor'
@@ -78,8 +81,16 @@ export async function run(argv: string[], deps: CliDeps = {}): Promise<number> {
   return code
 }
 
+/** Commands that change a project's resources or state, and so take its lock (BUG-72). */
+const LOCKING = new Set(['up', 'down', 'publish', 'join', 'secret set', 'secret rotate', 'secret remove', 'domain add', 'domain remove', 'accounts set'])
+
 async function dispatch(session: ReturnType<typeof openSession>, args: ReturnType<typeof parseArgs>): Promise<number> {
+  let release = (): void => undefined
   try {
+    const label = [args.command, args.sub].filter(Boolean).join(' ')
+    if (LOCKING.has(label) && existsSync(join(session.cwd, 'stack.yaml'))) {
+      release = acquireProjectLock(session.cwd, label, (stale) => reportStaleLock(session, stale))
+    }
     switch (args.command) {
       case 'new':
         return await newCommand(session)
@@ -131,6 +142,8 @@ async function dispatch(session: ReturnType<typeof openSession>, args: ReturnTyp
     session.printer.error(error.toJSON())
     if (error.needsHuman) return ExitCode.needsHuman
     return ExitCode.failed
+  } finally {
+    release()
   }
 }
 

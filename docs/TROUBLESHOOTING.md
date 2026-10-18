@@ -226,6 +226,16 @@ A step waits on something nothing produces.
 
 **Looks like:** `which no provider or wiring rule produces`
 
+### PROJECT_LOCKED
+
+Another cimiento run is working on this project.
+
+**What to do:** Wait for the other run to finish, then run the command again.
+
+**Why:** One run per project at a time, so two runs never create the same thing or write state over each other. The lock is a file under ~/.cimiento/locks named after the project path, outside the project so git never sees it. A lock whose process is gone, left by a killed run, is reported as stale and taken over.
+
+**Looks like:** `is working on this project`
+
 ### STATE_UNREADABLE
 
 The state file is damaged.

@@ -177,6 +177,7 @@ export const ERROR_CODES = [
   'HOSTING_DOMAIN_NOT_SERVING',
   'HTTP_TIMEOUT',
   'HTTP_UNREACHABLE',
+  'PROJECT_LOCKED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

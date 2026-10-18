@@ -1,6 +1,7 @@
 // cimiento up. Applies the plan, stops at manual steps, verifies after every ensure, and ends
 // with checks and receipts.
 
+import { acquireProjectLock } from '../../core/lock'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError, ExitCode } from '../../core/errors'
@@ -19,7 +20,7 @@ import { hashManifest, writeProjectState } from '../../core/state'
 import type { Ctx, ResourceSpec } from '../../core/types'
 import { readmeWithReceipts } from '../../scaffold'
 import { pressEnter } from '../../secrets/prompt'
-import { openProject, type Session } from '../context'
+import { openProject, reportStaleLock, type Session } from '../context'
 
 export interface UpOutcome {
   exitCode: number
@@ -32,6 +33,16 @@ export async function upCommand(session: Session, cwd?: string): Promise<number>
 }
 
 export async function runUpIn(session: Session, cwd: string): Promise<UpOutcome> {
+  // new reaches here without the dispatcher's lock, because the folder did not exist yet.
+  const release = acquireProjectLock(cwd, 'up', (stale) => reportStaleLock(session, stale))
+  try {
+    return await runUpInLocked(session, cwd)
+  } finally {
+    release()
+  }
+}
+
+async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> {
   let project = openProject(session, { dryRun: false, cwd })
   let personPhase: { pending: string[] } = { pending: [] }
   if (session.interactive) {

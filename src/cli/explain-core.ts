@@ -162,4 +162,8 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'cimiento could not reach a provider. Check the network connection, a VPN or proxy, and the provider status page.',
     es: 'cimiento no pudo llegar a un proveedor. Revisa la conexion, una VPN o proxy, y la pagina de estado del proveedor.',
   },
+  PROJECT_LOCKED: {
+    en: 'Another cimiento run is working on this project right now. Wait for it to finish, then run the command again.',
+    es: 'Otra ejecucion de cimiento esta trabajando en este proyecto ahora mismo. Espera a que termine y vuelve a ejecutar el comando.',
+  },
 }

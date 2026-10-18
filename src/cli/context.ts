@@ -1,5 +1,6 @@
 // Builds the Ctx every provider receives, and the surrounding session the commands share.
 
+import type { StaleLock } from '../core/lock'
 import { ExitCode } from '../core/errors'
 import { RealIo, type Io } from '../core/io'
 import { ConsoleLogger } from '../core/logger'
@@ -267,4 +268,11 @@ export function walker(session: Session): (step: PersonStep, open?: () => Promis
 async function openUrlWith(io: Io, url: string): Promise<void> {
   const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open'
   await io.exec(opener, [url]).catch(() => undefined)
+}
+
+/** A lock left by a run that no longer runs, said out loud before it is taken over (BUG-72). */
+export function reportStaleLock(session: Session, stale: StaleLock): void {
+  const message = `A lock left by cimiento ${stale.command} (process ${stale.pid}, started ${stale.startedAt}) was stale: that run is gone. Taking it over. Run cimiento doctor if that run was interrupted.`
+  if (session.json) session.printer.emit({ event: 'stale-lock', pid: stale.pid, command: stale.command, startedAt: stale.startedAt, message })
+  else session.printer.line(message)
 }

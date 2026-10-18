@@ -63,3 +63,123 @@ describe('http retries only idempotent reads', () => {
     expect(calls()).toBe(3)
   })
 })
+
+// Commands on the fake cloud, in a temporary folder.
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { beforeEach } from 'vitest'
+import { run } from '../../src/cli/index'
+import { ExitCode } from '../../src/core/errors'
+import { clearToolUpdateCache } from '../../src/core/toolkit'
+import { FakeCloud } from './fake-cloud'
+import { CaptureWriter, personDoesIt, removeDir, tempDir, useFakeTokens } from './helpers'
+
+let root = ''
+let dir = ''
+let configDir = ''
+
+beforeEach(() => {
+  useFakeTokens()
+  clearToolUpdateCache()
+  root = tempDir('cimiento-goal6-')
+  dir = join(root, 'my-app')
+  configDir = tempDir('cimiento-config-')
+  process.env.CIMIENTO_CONFIG_DIR = configDir
+})
+
+afterEach(() => {
+  removeDir(root)
+  removeDir(configDir)
+  delete process.env.CIMIENTO_CONFIG_DIR
+})
+
+async function cli(cloud: FakeCloud, args: string[], cwd = dir, writer = new CaptureWriter()): Promise<{ code: number; writer: CaptureWriter }> {
+  const code = await run(args, { io: cloud, cwd, writer, interactive: false, onManual: personDoesIt })
+  return { code, writer }
+}
+
+/** A writer that dies when a given event goes by, as a run killed at that moment would. */
+class DyingWriter extends CaptureWriter {
+  constructor(private readonly when: (line: string) => boolean) {
+    super()
+  }
+  override out(text: string): void {
+    super.out(text)
+    if (this.when(text)) throw new Error('simulated kill')
+  }
+}
+
+function stateOf(folder = dir): { resources: Record<string, { origin?: string; externalId?: string }> } {
+  return JSON.parse(readFileSync(join(folder, '.cimiento', 'state.json'), 'utf8'))
+}
+
+describe('BUG-72: state is checkpointed after every completed operation', () => {
+  it('up killed right after the Vercel project is created still records it as created, so the next up resumes and down deletes it', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const dying = new DyingWriter((line) => line.includes('"event":"ensured"') && line.includes('"vercel.project"'))
+    const killed = await run(['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], { io: cloud, cwd: root, writer: dying, interactive: false, onManual: personDoesIt })
+    expect(killed).not.toBe(ExitCode.ok)
+    expect(cloud.vercelProjects.size).toBe(1)
+    expect(existsSync(join(dir, '.cimiento', 'state.json'))).toBe(true)
+    expect(stateOf().resources['vercel.project']?.origin).toBe('created')
+
+    const resumed = await cli(cloud, ['up', '--json', '--yes'])
+    expect(resumed.code, resumed.writer.outText).toBe(ExitCode.ok)
+    expect(cloud.vercelProjects.size).toBe(1)
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code).toBe(ExitCode.ok)
+    expect(cloud.vercelProjects.size).toBe(0)
+  })
+})
+
+describe('BUG-72: one run per project at a time', () => {
+  async function designer(cloud: FakeCloud): Promise<void> {
+    const made = await cli(cloud, ['new', 'my-app', '--preset', 'designer', '--json', '--yes', '--dir', dir], root)
+    expect(made.code).toBe(ExitCode.ok)
+  }
+
+  it('a second run while another live process holds the lock stops with PROJECT_LOCKED and changes nothing', async () => {
+    const { lockPath } = await import('../../src/core/lock')
+    const { writeFileSync, mkdirSync } = await import('node:fs')
+    const { dirname } = await import('node:path')
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    const path = lockPath(dir)
+    mkdirSync(dirname(path), { recursive: true })
+    // The parent of this test process is alive, like another cimiento running in a second terminal.
+    writeFileSync(path, JSON.stringify({ pid: process.ppid, host: (await import('node:os')).hostname(), command: 'up', startedAt: new Date().toISOString() }))
+    const calls = cloud.httpCalls.length
+    const second = await cli(cloud, ['up', '--json', '--yes'])
+    expect(second.code).not.toBe(ExitCode.ok)
+    expect(second.writer.outText).toContain('PROJECT_LOCKED')
+    expect(cloud.httpCalls.length).toBe(calls)
+  })
+
+  it('a lock left by a process that no longer runs is reported as stale and taken over, then released', async () => {
+    const { lockPath } = await import('../../src/core/lock')
+    const { writeFileSync, mkdirSync } = await import('node:fs')
+    const { dirname } = await import('node:path')
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    const path = lockPath(dir)
+    mkdirSync(dirname(path), { recursive: true })
+    writeFileSync(path, JSON.stringify({ pid: 2147483646, host: (await import('node:os')).hostname(), command: 'up', startedAt: '2026-10-18T00:00:00.000Z' }))
+    const next = await cli(cloud, ['up', '--json', '--yes'])
+    expect(next.code, next.writer.outText).toBe(ExitCode.ok)
+    expect(next.writer.outText).toContain('"event":"stale-lock"')
+    expect(existsSync(path)).toBe(false)
+  })
+
+  it('the lock and the temporary state file never land in a commit that publish makes', async () => {
+    const cloud = new FakeCloud()
+    await designer(cloud)
+    cloud.gitDirty = true
+    await cli(cloud, ['publish', '--message', 'change', '--json'])
+    const { lockPath } = await import('../../src/core/lock')
+    expect(lockPath(dir).startsWith(dir)).toBe(false)
+    const { readdirSync } = await import('node:fs')
+    const walk = (folder: string): string[] =>
+      readdirSync(folder, { withFileTypes: true }).flatMap((e) => (e.name === '.git' || e.name === 'node_modules' ? [] : e.isDirectory() ? walk(join(folder, e.name)) : [join(folder, e.name)]))
+    expect(walk(dir).filter((f) => f.endsWith('.tmp') || f.endsWith('.lock'))).toEqual([])
+  })
+})

@@ -18,3 +18,6 @@ for (const name of ['CLOUDFLARE_API_TOKEN', 'VERCEL_TOKEN', 'SUPABASE_ACCESS_TOK
 
 // The macOS keychain, so keychain tests run the same on Linux CI (src/secrets/sources.ts).
 process.env.CIMIENTO_KEYCHAIN = 'macos'
+
+// Project locks in a folder of this test file's own, never in the real ~/.cimiento.
+process.env.CIMIENTO_LOCK_DIR = mkdtempSync(join(tmpdir(), 'cimiento-locks-'))
