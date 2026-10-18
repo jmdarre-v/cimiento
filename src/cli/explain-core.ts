@@ -194,6 +194,10 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'stack.yaml says previews share the production database, so a preview of unfinished work can change real data. Remove that setting to give previews their own database.',
     es: 'stack.yaml dice que las vistas previas comparten la base de datos de produccion, asi que una vista previa de trabajo sin terminar puede cambiar datos reales. Quita esa opcion para darles su propia base de datos.',
   },
+  SECRET_VALUE_MISMATCH: {
+    en: 'The value your hosting provider holds for this name is not the one cimiento holds, for example after someone edited it in the dashboard. Your app reads the hosting one. Run cimiento secret set with the name to write the right value back.',
+    es: 'El valor que tu proveedor de hosting tiene para este nombre no es el que tiene cimiento, por ejemplo despues de que alguien lo editara en el panel. Tu app lee el del hosting. Ejecuta cimiento secret set con el nombre para volver a escribir el valor correcto.',
+  },
   ORPHANS_DECISION_NEEDED: {
     en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
     es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',

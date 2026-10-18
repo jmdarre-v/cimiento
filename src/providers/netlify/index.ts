@@ -7,6 +7,8 @@
 
 import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
+import { knownEnvValue } from '../../secrets/known'
+import { valueMismatch } from '../../core/hosting'
 import type { LiveCommit } from '../../core/types'
 import { netlifyLoginStep, netlifySignupStep, netlifyTeamStep } from '../../core/person-steps-v2'
 import { hostingEnvId } from '../../core/sink-ids'
@@ -559,9 +561,12 @@ async function ensureEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const existing = (await listEnv(ctx, spec, siteId, accountId)).find((e) => e.key === key)
   const have = new Set((existing?.values ?? []).map((v) => v.context))
   const externalId = `${siteId}/${key}/${environment}`
-  if (!rotate && contexts.every((c) => have.has(c) || have.has('all'))) return { action: 'noop', externalId }
+  // Present is not enough: a value someone changed by hand is written over (BUG-91).
+  const known = await knownEnvValue(spec, ctx)
+  const differs = known !== undefined && (existing?.values ?? []).some((v) => v.context && contexts.includes(v.context) && v.value !== undefined && v.value !== known)
+  if (!rotate && !differs && contexts.every((c) => have.has(c) || have.has('all'))) return { action: 'noop', externalId }
   if (ctx.dryRun) return { action: 'noop' }
-  const value = await resolveEnvValue(spec, ctx, key)
+  const value = known ?? (await resolveEnvValue(spec, ctx, key))
   const base = `/accounts/${encodeURIComponent(accountId)}/env`
   if (!existing) {
     const created = await netlifyCall(ctx, spec.id, 'POST', `${base}?site_id=${encodeURIComponent(siteId)}`, [
@@ -622,6 +627,11 @@ async function verifyEnv(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const existing = (await listEnv(ctx, spec, siteId, accountId)).find((e) => e.key === key)
   const have = new Set((existing?.values ?? []).map((v) => v.context))
   const missing = netlifyContexts(environment).filter((c) => !have.has(c) && !have.has('all'))
+  const known = missing.length === 0 ? await knownEnvValue(spec, ctx) : undefined
+  for (const v of existing?.values ?? []) if (v.value) ctx.redactor.addValue(v.value)
+  if (known !== undefined && (existing?.values ?? []).some((v) => v.context && netlifyContexts(environment).includes(v.context) && v.value !== undefined && v.value !== known)) {
+    return { ok: false, error: valueMismatch(spec, key, `the ${environment} contexts of the Netlify site`) }
+  }
   if (missing.length > 0) {
     return {
       ok: false,

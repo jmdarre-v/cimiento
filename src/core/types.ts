@@ -120,6 +120,8 @@ export interface Logger {
 export interface SecretResolver {
   /** Returns the value for a declared secret name, or undefined when it is not available. */
   get(name: string): Promise<string | undefined>
+  /** Whether this run already holds the value, without reading any source. */
+  has?(name: string): boolean
 }
 
 export interface Ctx {

@@ -188,6 +188,7 @@ export const ERROR_CODES = [
   'PREVIEW_DATABASE_FAILED',
   'PREVIEW_DATABASE_SHARED',
   'SUPABASE_PREVIEW_SHARES_PRODUCTION',
+  'SECRET_VALUE_MISMATCH',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]

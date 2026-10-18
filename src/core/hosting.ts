@@ -4,6 +4,7 @@
 // <id>.project with output projectId, <id>.deployment with output productionUrl, and env bindings
 // <id>.env.<NAME>.<environment>.
 
+import { CimientoError } from './errors'
 import type { ResourceSpec, Value } from './types'
 import { hostingEnvId } from './sink-ids'
 import type { Manifest } from '../manifest/schema'
@@ -104,4 +105,18 @@ export function sharedPreviewWarning(m: Manifest): string | undefined {
   if (!hostingOf(m) || !m.environments.includes('preview') || m.previewDatabase !== 'shared') return undefined
   if (m.slots.database === 'none') return undefined
   return 'environments.preview.database is shared: every preview deployment reads and writes the production database. Remove it from stack.yaml to give previews their own.'
+}
+
+/** A hosting env value that is not the one cimiento holds for it, without printing either (BUG-90). */
+export function valueMismatch(spec: ResourceSpec, key: string, where: string): CimientoError {
+  const secret = spec.inputs.source !== 'literal'
+  return new CimientoError({
+    code: 'SECRET_VALUE_MISMATCH',
+    provider: spec.provider,
+    resource: spec.id,
+    message: `${key}=**** in ${where} is not the value cimiento holds for it, so the app reads a different ${secret ? 'key' : 'value'} than the one cimiento checks.`,
+    hint: secret ? `Run cimiento secret set ${key}. It writes the value cimiento holds over the one there and deploys again.` : 'Run cimiento up. It writes the value over the one there and deploys again.',
+    retryable: true,
+    needsHuman: false,
+  })
 }

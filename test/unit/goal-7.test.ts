@@ -412,3 +412,59 @@ describe('BUG-89: previews never read the production Supabase database by defaul
     expect(cloud.stores.map((s) => s.name)).toEqual(['my-app'])
   })
 })
+
+describe('BUG-90 and BUG-91: a wrong value in the hosting env is seen by doctor and fixed by secret set', () => {
+  const RIGHT = 'demo-right-value-not-a-real-key'
+  const WRONG = 'demo-wrong-value-not-a-real-key'
+
+  afterEach(() => {
+    delete process.env.DEMO_TOKEN
+  })
+
+  async function withDemoToken(cloud: FakeCloud, args: string[]): Promise<void> {
+    await made(cloud, args)
+    const file = join(dir, 'stack.yaml')
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/^secrets:( \[\])?\n/m, 'secrets:\n  - name: DEMO_TOKEN\n    sinks: [hosting]\n    environments: [production]\n    source: env\n'))
+    process.env.DEMO_TOKEN = RIGHT
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+  }
+
+  it('Vercel: doctor --smoke fails with the secret set hint, secret set writes the right value, doctor is green', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await withDemoToken(cloud, ['--preset', 'designer'])
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    const entry = () => cloud.vercelEnv.get(projectId)!.find((e) => e.key === 'DEMO_TOKEN')!
+    expect(entry().value).toBe(RIGHT)
+    entry().value = WRONG
+
+    const broken = await cli(cloud, ['doctor', '--smoke', '--json'])
+    expect(broken.code).not.toBe(ExitCode.ok)
+    expect(broken.writer.outText).toContain('SECRET_VALUE_MISMATCH')
+    expect(broken.writer.outText).toContain('cimiento secret set DEMO_TOKEN')
+    expect(broken.writer.outText).not.toContain(WRONG)
+    expect(broken.writer.outText).not.toContain(RIGHT)
+
+    const set = await cli(cloud, ['secret', 'set', 'DEMO_TOKEN', '--json'])
+    expect(set.code, set.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(entry().value).toBe(RIGHT)
+    const green = await cli(cloud, ['doctor', '--smoke', '--json'])
+    expect(green.code, green.writer.outText.slice(-800)).toBe(ExitCode.ok)
+  })
+
+  it('Netlify: the same', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, keychain: V2_KEYS })
+    await withDemoToken(cloud, V2_ARGS)
+    const site = [...cloud.v2.netlifySites.values()][0]
+    const value = () => cloud.v2.netlifyValue(site.id, 'DEMO_TOKEN', 'production')
+    expect(value()).toBe(RIGHT)
+    cloud.v2.netlifyEnv.get(site.id)!.find((e) => e.key === 'DEMO_TOKEN')!.values.find((v) => v.context === 'production')!.value = WRONG
+
+    const broken = await cli(cloud, ['doctor', '--json'])
+    expect(broken.code).not.toBe(ExitCode.ok)
+    expect(broken.writer.outText).toContain('SECRET_VALUE_MISMATCH')
+    const set = await cli(cloud, ['secret', 'set', 'DEMO_TOKEN', '--json'])
+    expect(set.code, set.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(value()).toBe(RIGHT)
+  })
+})

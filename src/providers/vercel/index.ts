@@ -6,6 +6,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
+import { knownEnvValue } from '../../secrets/known'
+import { valueMismatch } from '../../core/hosting'
 import type { LiveCommit } from '../../core/types'
 import type { ProjectState } from '../../core/state'
 import {
@@ -680,8 +682,23 @@ async function ensureEnv(spec: ResourceSpec, ctx: Ctx): Promise<EnsureResult> {
   const target = toVercelTarget(environment)
 
   const existing = await listEnv(ctx, spec, projectId)
-  if (existing.some((e) => e.key === key && e.target.includes(target))) {
-    return { action: 'noop', externalId: `${projectId}/${key}/${target}` }
+  const entry = existing.find((e) => e.key === key && e.target.includes(target) && !e.gitBranch)
+  if (entry) {
+    // Present is not enough: a value someone changed by hand is written over (BUG-91).
+    const known = await knownEnvValue(spec, ctx)
+    const held = known === undefined ? undefined : await envValue(ctx, spec, projectId, entry.id)
+    if (known === undefined || held === undefined || held === known) return { action: 'noop', externalId: `${projectId}/${key}/${target}` }
+    if (ctx.dryRun) return { action: 'noop' }
+    if (str(spec.inputs.public) !== 'true') ctx.redactor.addName(key)
+    const patched = await vercelCall<unknown>(ctx, spec.id, 'PATCH', `/v9/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(entry.id)}`, { value: known })
+    if (!patched.ok) {
+      throw vercelError(spec.id, patched, {
+        code: 'VERCEL_ENV_WRITE_FAILED',
+        message: `Writing ${key} over the value in the ${target} environment of the Vercel project failed.`,
+        hint: `Run cimiento secret set ${key} again.`,
+      })
+    }
+    return { action: 'updated', externalId: `${projectId}/${key}/${target}` }
   }
   if (ctx.dryRun) return { action: 'noop' }
 
@@ -801,6 +818,14 @@ export async function vercelBranchEnvBranches(ctx: Ctx, spec: ResourceSpec, proj
   return (await listEnv(ctx, spec, projectId)).filter((e) => e.key === key && e.gitBranch).map((e) => e.gitBranch!)
 }
 
+/** The value Vercel holds for one env entry, read only to compare and never printed. */
+async function envValue(ctx: Ctx, spec: ResourceSpec, projectId: string, envId: string): Promise<string | undefined> {
+  const result = await vercelCall<{ value?: string }>(ctx, spec.id, 'GET', `/v1/projects/${encodeURIComponent(projectId)}/env/${encodeURIComponent(envId)}`)
+  const value = result.ok ? result.body?.value : undefined
+  if (value) ctx.redactor.addValue(value)
+  return value
+}
+
 async function resolveEnvValue(spec: ResourceSpec, ctx: Ctx, key: string): Promise<string> {
   if (str(spec.inputs.source) === 'literal') {
     const value = str(spec.inputs.value)
@@ -827,6 +852,13 @@ async function verifyEnv(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const key = str(spec.inputs.key)
   const target = toVercelTarget(str(spec.inputs.environment))
   const existing = await listEnv(ctx, spec, projectId)
+  const entry = existing.find((e) => e.key === key && e.target.includes(target) && !e.gitBranch)
+  if (entry) {
+    const known = await knownEnvValue(spec, ctx)
+    const held = known === undefined ? undefined : await envValue(ctx, spec, projectId, entry.id)
+    if (known !== undefined && held !== undefined && held !== known) return { ok: false, error: valueMismatch(spec, key, `the ${target} environment of the Vercel project`) }
+    return { ok: true, evidence: `${key}=**** present in vercel ${target}${known !== undefined && held !== undefined ? ', the value cimiento holds' : ''}` }
+  }
   if (!existing.some((e) => e.key === key && e.target.includes(target))) {
     return {
       ok: false,

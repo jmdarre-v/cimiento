@@ -37,6 +37,13 @@
   connected to production and development; direct, cimiento creates it. The free limit of 2
   active projects is stated by `plan` and `up` before it is made. `down` removes it.
 
+### Secrets
+
+- `doctor` and `up` compare each hosting env value with the one cimiento holds, when it has it
+  without asking: a different value fails with SECRET_VALUE_MISMATCH, and `secret set` writes
+  the right value over it and deploys again. Before, a key changed by hand passed `doctor` and
+  `secret set` left it in place.
+
 ### Publish
 
 - `publish` reads the live commit from the hosting only. A failed lookup, any non 2xx or a
