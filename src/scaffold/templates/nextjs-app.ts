@@ -10,6 +10,18 @@ export const MARKER_NAME = 'cimiento-project'
  * applies it and queries its table, which proves migrations really reach the database. Row level
  * security is on with no policy, so the table is invisible to the public API.
  */
+/**
+ * A value as a TypeScript string literal, and as JSX text. A project name is the person's own
+ * words, quotes and ampersands included, so it is never pasted into code raw (BUG-79).
+ */
+export function tsString(value: string): string {
+  return JSON.stringify(value)
+}
+
+export function jsxText(value: string): string {
+  return `{${JSON.stringify(value)}}`
+}
+
 export const BASELINE_TABLE = 'cimiento_baseline'
 export const BASELINE_FILE = `20250101000000_${BASELINE_TABLE}.sql`
 export const BASELINE_SQL = `-- cimiento baseline. cimiento doctor queries this table to prove migrations reach the database.
@@ -97,10 +109,10 @@ export default nextConfig
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '${m.name}',
+  title: ${tsString(m.name)},
   description: 'Created with cimiento.',
   other: {
-    '${MARKER_NAME}': '${m.slug}',
+    '${MARKER_NAME}': ${tsString(m.slug)},
   },
 }
 
@@ -116,7 +128,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     'app/page.tsx': `export default function Home() {
   return (
     <main>
-      <h1>${m.name}</h1>
+      <h1>${jsxText(m.name)}</h1>
       <p>This project was set up by cimiento. Replace this page with your own.</p>
       <p>
         Run <code>cimiento doctor</code> at any time to check that the environment is still healthy.
@@ -194,7 +206,7 @@ function inngestFiles(m: Manifest): Record<string, string> {
   return {
     'inngest/client.ts': `import { Inngest } from 'inngest'
 
-export const inngest = new Inngest({ id: '${m.slug}' })
+export const inngest = new Inngest({ id: ${tsString(m.slug)} })
 `,
     'inngest/functions.ts': `import { inngest } from './client'
 

@@ -467,3 +467,25 @@ describe('BUG-78: publish resumes the stage that did not finish', () => {
     expect(cloud.execCalls.slice(calls).some((c) => c.startsWith('git push') || c.includes('commit'))).toBe(false)
   })
 })
+
+describe("BUG-79: templates escape the project name in string literals and JSX text", () => {
+  const NAME = `Jane's "app" & co`
+
+  it('every generated .ts and .tsx file still parses, and the page shows the name as written', async () => {
+    const ts = await import('typescript')
+    const { scaffoldFiles } = await import('../../src/scaffold')
+    const { manifestFor } = await import('./helpers')
+    for (const preset of ['designer', 'fullstack'] as const) {
+      const files = scaffoldFiles(manifestFor({ name: NAME }, preset))
+      for (const [path, content] of Object.entries(files)) {
+        if (!/\.(ts|tsx|mjs)$/.test(path)) continue
+        const out = ts.transpileModule(content, { fileName: path, reportDiagnostics: true, compilerOptions: { jsx: ts.JsxEmit.Preserve } })
+        expect(out.diagnostics?.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')) ?? [], `${preset} ${path}`).toEqual([])
+      }
+      const page = files['app/page.tsx']
+      const evaluated = page.match(/\{("(?:[^"\\]|\\.)*")\}/g)?.map((m) => JSON.parse(m.slice(1, -1))) ?? []
+      expect(evaluated, preset).toContain(NAME)
+      expect(JSON.parse(files['package.json']).name).toBe('jane-s-app-co')
+    }
+  })
+})

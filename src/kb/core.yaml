@@ -79,6 +79,7 @@
     - "No template named"
   hint: Use scaffold.template nextjs-app, designer-site, or none.
   fix: nextjs-app is the full app starter, designer-site is a site with a design/ folder for Claude Design exports, and none leaves your own code untouched.
+  seen: "Goal 6, 2026-10-18 (BUG-79). The templates pasted the project name raw into TypeScript and JSX, so a name like Jane's \"app\" & co produced an app/layout.tsx that did not parse and a site that could not build. The name now goes in as a JSON string literal, and as a JSX expression in page text."
 
 - code: CHECK_FAILED
   provider: core

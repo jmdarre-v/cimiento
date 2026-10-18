@@ -3,7 +3,7 @@
 // hosting.deployed check looks for.
 
 import type { Manifest } from '../../manifest/schema'
-import { nextjsAppFiles } from './nextjs-app'
+import { jsxText, nextjsAppFiles } from './nextjs-app'
 
 export function designerSiteFiles(m: Manifest): Record<string, string> {
   const host = m.slots.hosting === 'netlify' ? 'Netlify' : 'Vercel'
@@ -12,7 +12,7 @@ export function designerSiteFiles(m: Manifest): Record<string, string> {
     'app/page.tsx': `export default function Home() {
   return (
     <main>
-      <h1>${m.name}</h1>
+      <h1>${jsxText(m.name)}</h1>
       <p>This site was set up by cimiento and is live. The design goes here next.</p>
       <ol>
         <li>Export your design from Claude Design and put the zip in design/exports.</li>

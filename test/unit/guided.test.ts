@@ -95,7 +95,7 @@ describe('cimiento new --guided --lang es --preset designer, the fresh-machine c
     expect(existsSync(join(dir, 'design', 'exports', '.gitkeep'))).toBe(true)
     expect(existsSync(join(dir, 'design', 'current', '.gitkeep'))).toBe(true)
     expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('design/exports/*.zip')
-    expect(readFileSync(join(dir, 'app', 'layout.tsx'), 'utf8')).toContain("'cimiento-project': 'mi-sitio'")
+    expect(readFileSync(join(dir, 'app', 'layout.tsx'), 'utf8')).toContain("'cimiento-project': \"mi-sitio\"")
     expect(readFileSync(join(dir, 'CLAUDE.md'), 'utf8')).toContain('## Design')
   })
 
