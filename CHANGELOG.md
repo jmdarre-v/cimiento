@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+Identity-safe teardown, honest publish and isolated preview data. 0.3.0 and older delete some
+resources by name; upgrade.
 
 ### Upgrading from 0.1.0 or 0.2.0
 

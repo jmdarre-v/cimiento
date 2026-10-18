@@ -25,7 +25,7 @@ It skips whatever is already installed and ends with a table of every tool. Clau
 Claude Pro or Max plan. To install one release in particular, pin it:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/install.sh | CIMIENTO_VERSION=0.3.0 bash
+curl -fsSL https://raw.githubusercontent.com/jmdarre-v/cimiento/main/scripts/install.sh | CIMIENTO_VERSION=0.4.0 bash
 ```
  If you already have Node 22, `npm install -g cimiento` installs cimiento
 alone. The CLIs of the other providers (Netlify, Neon, wrangler for Turnstile) are installed by
@@ -136,10 +136,10 @@ this table is about real accounts.
 | Provider | Proven | Partially proven | Unproven |
 |---|---|---|---|
 | GitHub | Repository, push, delete, Actions secrets | | |
-| Vercel | Project, repository link, env, deploy, publish, branch previews | Custom domain: added, its DNS record named, removed; serving it was not run | |
+| Vercel | Project, repository link, env, deploy, publish, branch previews, preview values per git branch, a key changed by hand found by `doctor` and fixed by `secret set` (field test 7) | Custom domain: added, its DNS record named, removed; serving it was not run | |
 | Netlify | Site, repository link, env per context, deploy, publish, pull request previews, secret set to remove | | |
-| Supabase | Direct and Marketplace paths, migrations, Auth URLs, project secrets | | |
-| Neon | Project, connection strings in the hosting env | Migrations: proven over HTTP in field test 5; the 0.3.0 Postgres client path is proven on a local PostgreSQL only | |
+| Supabase | Direct and Marketplace paths, migrations, Auth URLs, project secrets | Preview project: the free limit stated first and the run stopped at it on an account with two active free projects (field test 7) | The preview-only Marketplace database and a created preview project, covered by unit tests only |
+| Neon | Project, connection strings in the hosting env, migrations through the Postgres client, a Neon branch per preview branch made, kept and removed by `up` and `down` (field test 7) | | |
 | Inngest | Integration, keys, roundtrip event | | |
 | Turnstile | Widget, keys, domains, siteverify | | |
 | Resend | Key, test email to the test inbox | The 0.3.0 read only key check | |
@@ -333,7 +333,7 @@ cimiento names the one record to add there (the CNAME Vercel recommends for the 
 
 ## What is in this release
 
-0.3.0: all of the above. Templates `nextjs-app` and `designer-site`. Expert, guided (English and
+0.4.0: all of the above. Templates `nextjs-app` and `designer-site`. Expert, guided (English and
 Spanish) and `--json` output. The installer script for macOS and Ubuntu, also under WSL, and the
 Claude Code plugin. `CHANGELOG.md` has the details.
 

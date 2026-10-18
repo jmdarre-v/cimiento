@@ -10,7 +10,7 @@
 # Spanish LANG).
 #
 # Usage: bash install.sh [--lang en|es] [--dry-run]
-# CIMIENTO_VERSION=0.3.0 pins the cimiento release; without it the latest is installed.
+# CIMIENTO_VERSION=0.4.0 pins the cimiento release; without it the latest is installed.
 
 set -euo pipefail
 
@@ -193,7 +193,7 @@ brew_tool supabase supabase/tap/supabase supabase
 npm_tool claude @anthropic-ai/claude-code "Claude Code"
 
 # cimiento itself, last.
-# CIMIENTO_VERSION pins a release, such as 0.3.0; without it the latest one is installed.
+# CIMIENTO_VERSION pins a release, such as 0.4.0; without it the latest one is installed.
 WANT="${CIMIENTO_VERSION:-latest}"
 HAVE="$(first_version cimiento --version)"
 if have cimiento && [ "$HAVE" != "0.0.0" ] && { [ "$WANT" = "latest" ] || [ "$HAVE" = "$WANT" ]; }; then

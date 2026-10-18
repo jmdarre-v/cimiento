@@ -517,3 +517,5 @@ One line per decision the spec does not cover, with the reasoning.
   connected to every environment is reported with the reconnect commands, never reconnected by
   cimiento, because that touches production. The finding tests written before Goal 7 run with
   preview.database shared, so they keep testing what they were written for.
+- 2026-10-18 Goal 7: completed. Field test 7 in docs/FIELD-TEST-7.md, BUG-82 to 92, v0.4.0 tagged
+  and pushed. npm publish of 0.4.0 and npm deprecate of 0.3.0 are person steps.

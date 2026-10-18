@@ -35,5 +35,6 @@ A leak of a value through any of those paths is a vulnerability; please report i
 
 ## Supported versions
 
-Only the latest release gets fixes. 0.1.0 and 0.2.0 can lose track of resources during teardown;
-upgrade to 0.3.0 or later.
+Only the latest release gets fixes. 0.1.0 and 0.2.0 can lose track of resources during teardown,
+and 0.3.0 and older delete some resources by name, so a resource made later with the same name can
+be deleted in place of the one cimiento made; upgrade to 0.4.0 or later.
