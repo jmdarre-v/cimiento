@@ -424,3 +424,6 @@ One line per decision the spec does not cover, with the reasoning.
   written to disk. CIMIENTO_KEYCHAIN pins the kind, which the tests set to macos.
 - 2026-10-18 Goal 5: CI (.github/workflows/ci.yml) runs typecheck, build, the unit tests and
   install.sh --dry-run on ubuntu-latest and macos-latest. Field tests never run in CI.
+- 2026-10-18 Goal 5: field test c is completed by the owner's decision without adding a live DNS
+  record, because the only listed domain serves a production project. domain add and remove were
+  proven on the real Vercel account; the step after DNS is covered by unit tests.

@@ -5,8 +5,8 @@ Goal 5 in `docs/GOALS.md`, item 4, on the profile cimiento already runs on, with
 run log in `~/.cimiento/runs/`; all times are UTC on 2026-10-18. Identifiers that belong to the
 accounts (team, project, deployment and site ids, the domain) are written as placeholders.
 
-Status: a passed; b passed after an attended run for the Neon login and the four keys; c blocked on
-one DNS record.
+Status: complete. a passed; b passed after an attended run for the Neon login and the four keys; c
+completed, closed by the owner's decision (below).
 Every project was taken down and confirmed gone with each provider.
 
 ## a) cimiento-test-5, designer preset, on Vercel
@@ -56,7 +56,9 @@ Vercel.
 | `cimiento domain add cimiento-test.<domain> --json` | Exit 2: the subdomain was added to the Vercel project (verified, no TXT challenge), and HOSTING_DOMAIN_DNS_NEEDED named the record. The first run named cname.vercel-dns.com; Vercel's domain config recommends a project specific CNAME first (BUG-64). After the fix: CNAME cimiento-test <project-specific>.vercel-dns-016.com |
 | `cimiento domain remove --json` | Exit 0: the domain is off the project (the project domains API lists only cimiento-test-5.vercel.app) and stack.yaml says domain: null |
 
-Serving the domain needs that one CNAME at the outside DNS provider, which is a person step.
+c is completed. On 2026-10-18 the owner decided not to add a DNS record to a domain that serves a
+production project for this test: domain add and remove were proven on the real account, and the
+step after DNS (Vercel's certificate and the check fetching the domain) is covered by unit tests.
 
 ## Windows via WSL
 
@@ -154,12 +156,5 @@ Until 0.2.0 is on npm, the attended commands run the built CLI from the reposito
 (`node ~/Code.nosync/cimiento/dist/cli.js`, written `cim5` below); after the release,
 `npm install -g cimiento@latest` and plain `cimiento` do the same.
 
-- c: `cd ~/Code.nosync/cimiento-test-5`, then `up --yes` with `CIMIENTO_TEST_SECRET` set to any
-  fake value (stack.yaml still declares it with source env), which recreates the repository,
-  project and deployment. Then `cim5 domain add cimiento-test.<domain>`, which prints the CNAME
-  Vercel recommends for the new project (it is project specific, so it differs from the one above).
-  Add that CNAME where the domain's DNS is managed, run `cim5 domain add cimiento-test.<domain>`
-  again until the check passes and the domain serves, then `cim5 domain remove` and
-  `cim5 down --yes`.
 - The keys typed in b stay in the macOS keychain (service cimiento, accounts cimiento-test-5b/NAME)
   and with each vendor; revoke them there when they are no longer wanted.

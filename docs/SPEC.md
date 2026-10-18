@@ -400,4 +400,4 @@ cimiento/
 |---|---|---|
 | v0 | Engine, manifest, state, plan/up/doctor, providers github, vercel, supabase (via-hosting and direct), scaffold nextjs-app, checks, expert mode, JSON mode | Done, Goal 1 |
 | v1 | inngest, turnstile, anthropic; secrets sources keychain and 1password; `join`, `dev`, `down`; guided mode in English and Spanish; install.sh; Claude Code plugin; designer template | Done, Goals 2 to 4; released as 0.1.0 |
-| v2 | netlify, neon, resend, stripe, posthog; custom domain rule; Windows via WSL | Done, Goal 5; 0.2.0. Field tested on real accounts: netlify, neon, resend, stripe and posthog in one project, the custom domain up to the DNS record, Ubuntu install (docs/FIELD-TEST-5.md) |
+| v2 | netlify, neon, resend, stripe, posthog; custom domain rule; Windows via WSL | Done, Goal 5; 0.2.0. Field tested on real accounts: netlify, neon, resend, stripe and posthog in one project, the custom domain add and remove (completed without a live DNS record, by the owner's decision), Ubuntu install (docs/FIELD-TEST-5.md) |
