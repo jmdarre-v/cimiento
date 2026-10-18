@@ -18,7 +18,7 @@ Vercel hosting, Neon database, GitHub repository.
 |---|---|
 | `new cimiento-test-7 --repo github --hosting vercel --database neon --template nextjs-app --json --yes` | Exit 0. `DATABASE_URL` and `DATABASE_URL_UNPOOLED` written for production and development only, none for preview. `neon.preview-branches` noop: no branch besides main. Migrations applied through the Postgres client on real Neon |
 | `publish --json` | Exit 0: committed and pushed what `new` leaves uncommitted (the account pins in `stack.yaml`, the README receipts, state) and waited for the deploy |
-| `publish --json` again, clean tree | Exit 0, `published: false`: the live commit read from Vercel's deployment, not from state (item 4) |
+| `publish --json` again, clean tree | Exit 0, `published: false`: the live commit read from Vercel's deployment, not from state (item 4). It came from the git deploy the push made; the commit stamp on CLI deploys (`--meta cimientoCommit`) was never exercised on real Vercel, because every CLI deploy in this test ran with `.cimiento/state.json` modified, a dirty tree, so no stamp. Unit tests cover the stamp |
 | `feature/login` pushed with plain git; its preview built, with no database address | Preview ready on Vercel |
 | `up --json --yes` | Exit 0. `neon.preview-branches` created: Neon branch `preview/feature-login` with its own compute endpoint; `DATABASE_URL` and `DATABASE_URL_UNPOOLED` written as Vercel preview values for the git branch `feature/login` only |
 | Confirmation | `vercel env ls`: the two keys for Production, Development and `Preview (feature/login)`, no plain Preview value. Neon API: two branches, `main` and `preview/feature-login`, each on its own endpoint host |
