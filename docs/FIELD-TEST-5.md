@@ -132,10 +132,18 @@ and a regression test: BUG-58 and 59 in `test/unit/install-script.test.ts`, BUG-
 
 ## Left for a person
 
-- b: `cd ~/Code.nosync/cimiento-test-5b && cimiento up` in a terminal. It walks the Neon sign-up and
-  login, then the page of each key with a hidden prompt (Resend, Stripe in a sandbox or test mode,
-  PostHog), creates the repository, site and database again, and deploys. Then `cimiento doctor`
-  twice and `cimiento down --yes`.
-- c: a CNAME for a cimiento-test subdomain at the domain's DNS provider, pointing at the value
-  `cimiento domain add` names, then `cimiento domain add`, a check that it serves, and
-  `cimiento domain remove`.
+Until 0.2.0 is on npm, the attended commands run the built CLI from the repository
+(`node ~/Code.nosync/cimiento/dist/cli.js`, written `cim5` below); after the release,
+`npm install -g cimiento@latest` and plain `cimiento` do the same.
+
+- b, in a terminal: `cd ~/Code.nosync/cimiento-test-5b`, then `cim5 up`. It walks the Neon sign-up
+  and login, then the page of each key with a hidden prompt (Resend, Stripe in a sandbox or test
+  mode, PostHog), creates the repository, site and database again, and deploys. Then `cim5 doctor`
+  twice and `cim5 down --yes`.
+- c: `cd ~/Code.nosync/cimiento-test-5`, then `up --yes` with `CIMIENTO_TEST_SECRET` set to any
+  fake value (stack.yaml still declares it with source env), which recreates the repository,
+  project and deployment. Then `cim5 domain add cimiento-test.<domain>`, which prints the CNAME
+  Vercel recommends for the new project (it is project specific, so it differs from the one above).
+  Add that CNAME where the domain's DNS is managed, run `cim5 domain add cimiento-test.<domain>`
+  again until the check passes and the domain serves, then `cim5 domain remove` and
+  `cim5 down --yes`.
