@@ -608,3 +608,7 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-19 Goal 9: completed. Field test 9 in docs/FIELD-TEST-9.md, BUG-105 to 113, v0.4.2 tagged
   and pushed. 0.4.1 is the only published version whose previews hold a key that can read
   production: 0.4.0 declares no NEON_API_KEY, and 0.4.1 declares it with sinks ci and hosting.
+- 2026-10-19 Goal 9: to prove the workflow writes the address on real hosts unattended, field test 9
+  set each test repository's VERCEL_TOKEN or NETLIFY_AUTH_TOKEN Actions secret from the existing
+  CLI login, on stdin, never printed, in repositories down deleted with their secrets. This is a
+  field test step only; cimiento itself never copies a CLI login into GitHub.

@@ -5,14 +5,31 @@ Goal 9 in `docs/GOALS.md`, items 1 to 3, unattended, on the existing sessions, w
 each run log in `~/.cimiento/runs/`; all times are UTC on 2026-10-19. Account identifiers are
 left out.
 
-Status: items 2 and 3 passed. Item 1's guarantees passed on real Vercel and real Netlify: a
-preview reads its own branch, no preview env holds a Neon key, and deleting the git branch removes
-both the Neon branch and the address. The workflow writing the address itself needs a hosting
-token only a person can make (BUG-112), so that part is proven by unit tests and stays blocked on
-a real host; without the token `cimiento up` writes the address. The field test found BUG-112 and
-BUG-113, both fixed and proven. Every resource is confirmed gone.
+Status: complete. Items 1 to 3 passed on real accounts. On real Vercel and real Netlify the
+preview database workflow made the Neon branch, wrote only its address for that git branch,
+deployed it again, and on delete removed both, with no cimiento command in between; each preview
+read its own branch and held no Neon key. It also works without a hosting token, with `cimiento
+up` writing the address. The field test found BUG-112 and BUG-113, both fixed and proven. Every
+resource is confirmed gone.
 
-## Item 1 on Vercel, cimiento-test-9
+## Item 1 with the workflow writing the address, cimiento-test-9v and cimiento-test-9m
+
+Neither host lets cimiento make a token (BUG-112), so for this test only, each test repository's
+`VERCEL_TOKEN` or `NETLIFY_AUTH_TOKEN` Actions secret was set from the existing CLI login, piped to
+`gh secret set` on stdin and never printed. The repositories, and the secrets with them, were
+deleted by `down`. In a person's project the token is one they make.
+
+| Step | Outcome |
+|---|---|
+| `new --scaffold-only` and `up` for both (Vercel with `deployment_protection: none`), `publish` | Exit 0 each. Actions secrets: `NEON_API_KEY`, `NEON_PROJECT_ID`, and `VERCEL_PROJECT_ID` and `VERCEL_TEAM_ID` or `NETLIFY_SITE_ID`; no Neon value in either host's env |
+| Vercel: `feature/ten` pushed with plain git, no cimiento command after | The workflow run: `Created the Neon branch preview/feature-ten.` and `Wrote the database address for feature/ten only, and deployed it again.` `vercel env ls`: `DATABASE_URL` and `DATABASE_URL_UNPOOLED` for `Preview (feature/ten)`, no `NEON_*` entry |
+| Vercel: the two deployments of that commit | The push build answered HTTP 503 with the preview sentence; the workflow's deploy answered `ok: true, branch: feature/ten, rows: 1, neonKeyInEnv: false`, and the Neon API puts its endpoint on `preview/feature-ten` |
+| Vercel: `git push origin --delete feature/ten`, no cimiento command after | The delete run: `Removed the database address of feature/ten. Deleted the Neon branch preview/feature-ten.` No `feature/ten` entry in `vercel env ls`; the Neon API lists only main |
+| Netlify: `feature/ten` pushed with plain git | The same two lines from the workflow; the site env holds `DATABASE_URL` and `DATABASE_URL_UNPOOLED` for dev, production and `branch:feature/ten`; the branch deploy the workflow started answered `ok: true, rows: 1, neonKeyInEnv: false` on `preview/feature-ten` |
+| Netlify: the branch deleted | The delete run removed the branch values and the Neon branch; the site env lists dev and production only; the Neon API lists only main |
+| `down` of both | Exit 0 each, `local: { keychain: [NEON_API_KEY] }`, and for the Vercel project `files: [.env.local]`, the file `vercel link` wrote (BUG-113, now removed by `down` itself) |
+
+## Item 1 on Vercel without a hosting token, cimiento-test-9
 
 Vercel hosting, Neon database, GitHub repository, `deployment_protection: none`.
 
@@ -62,12 +79,12 @@ sentence; it still never reaches production.
 
 ## Confirmation
 
-- `gh repo view` for cimiento-test-9 and cimiento-test-9n: Could not resolve to a Repository.
-- `vercel project ls`: no project named cimiento-test-9*; https://cimiento-test-9.vercel.app
-  answers 404.
-- Netlify API: no site named cimiento-test-9n; https://cimiento-test-9n.netlify.app answers 404.
+- `gh repo view` for cimiento-test-9, 9n, 9v and 9m: Could not resolve to a Repository.
+- `vercel project ls`: no project named cimiento-test-9*; https://cimiento-test-9.vercel.app and
+  https://cimiento-test-9v.vercel.app answer 404.
+- Netlify API: no site named cimiento-test-9n or 9m; both sites answer 404.
 - Neon API, in the organization the keys were made in: no project named cimiento-test-9*, and
-  neither project scoped key is listed (both revoked by `down`).
+  none of the four project scoped keys is listed (all revoked by `down`).
 - `security dump-keychain`: no account starting `cimiento-test-` under service `cimiento`.
 - No `.env.local` in any cimiento-test folder; `~/.cimiento/locks` empty.
 
@@ -89,8 +106,11 @@ From the first and last line of each run log.
 | `up` writing the branch context values | 01:43:13 to 01:44:50 | 97.6 s, exit 1 for the preview check before the pull request | 2026-10-19T01-43-13-243Z-up.jsonl |
 | `up` after the branch was deleted | 01:46:25 to 01:47:14 | 49.2 s | 2026-10-19T01-46-25-746Z-up.jsonl |
 | `down` cimiento-test-9, then cimiento-test-9n | 01:47:28 to 01:47:39 | 5.5 s, 5.3 s | 2026-10-19T01-47-28-357Z-down.jsonl, 01-47-34-025Z-down |
+| `new --scaffold-only` cimiento-test-9v and 9m, then `up` 9v | 01:57:18 to 01:58:59 | under 0.1 s, under 0.1 s, 101.0 s | 2026-10-19T01-57-18-724Z-new.jsonl, 01-57-18-833Z-new, 01-57-18-953Z-up |
+| `publish` 9v, `up` 9m, `publish` 9m | 01:59:00 to 02:02:24 | 33.7 s, 119.2 s, 50.6 s | 2026-10-19T01-59-00-138Z-publish.jsonl, 01-59-33-961Z-up, 02-01-33-371Z-publish |
+| `down` 9v, then 9m | 02:06:00 to 02:06:11 | 5.4 s, 5.1 s | 2026-10-19T02-06-00-780Z-down.jsonl, 02-06-06-376Z-down |
 | Scaffolds in a temporary folder to build and to hash 0.4.1's files | 01:07 to 01:14 | under 0.1 s each | 2026-10-19T01-07-07-898Z-new.jsonl, 01-14-36-549Z-new |
-| The preview database workflow runs in GitHub Actions | 01:33 to 01:47 | not measured by a run log; each finished within about 15 s of its push or delete, per `gh run watch` | not a cimiento command |
+| The preview database workflow runs in GitHub Actions | 01:33 to 02:05 | not measured by a run log; each finished within about 15 s of its push or delete, per `gh run watch` | not a cimiento command |
 | Implementation and unit tests | | not measured | no run log |
 | Confirmation with gh, vercel, the Neon and Netlify APIs and security | | not measured | not a cimiento command |
 
