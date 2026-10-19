@@ -585,3 +585,9 @@ One line per decision the spec does not cover, with the reasoning.
   NETLIFY_AUTH_TOKEN is a keychain secret with sink ci that a person makes. cimiento does not copy
   the Netlify CLI's own login into GitHub: it is the person's whole account and cannot be revoked
   without logging the CLI out.
+- 2026-10-19 Goal 9: down removes what cimiento wrote on this machine for the project, after a down
+  with nothing pending or failed: every keychain account under service cimiento that starts with
+  <slug>/ (security dump-keychain without -d, or secret-tool search, so no value is read) and
+  every file env pull wrote, which env pull records in the gitignored .cimiento/cache/pulled.json.
+  A down that still waits keeps them, because the next down may need a key. The leftovers of
+  earlier field tests (six keychain entries, nine pulled .env.local files) were removed by hand.

@@ -349,6 +349,12 @@ export class FakeCloud implements Io {
       if (!this.keychainSupabaseToken) return fail('security: The specified item could not be found in the keychain.', 44)
       return ok(`${this.keychainSupabaseToken}\n`)
     }
+    if (cmd === 'security' && args[0] === 'dump-keychain') {
+      // Attributes only, as security prints them without -d.
+      const blocks = [...this.keychain.keys()].map((account) => `keychain: "/fake/login.keychain-db"\nclass: "genp"\nattributes:\n    "acct"<blob>="${account}"\n    "svce"<blob>="cimiento"\n`)
+      blocks.push('keychain: "/fake/login.keychain-db"\nclass: "genp"\nattributes:\n    "acct"<blob>="supabase"\n    "svce"<blob>="Supabase CLI"\n')
+      return ok(blocks.join(''))
+    }
     if (cmd === 'security' && args[0] === 'delete-generic-password') {
       const account = args[args.indexOf('-a') + 1]
       if (!this.keychain.delete(account)) return fail('security: The specified item could not be found in the keychain.', 44)

@@ -269,3 +269,32 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
     expect(w.branches.map((b) => b.name)).toEqual(['main'])
   })
 })
+
+describe('BUG-108: down left the project\'s secrets on this machine', () => {
+  it('a clean down removes every keychain entry of the project and the .env.local cimiento pulled, and nothing of another project', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, keychain: { 'my-app/RESEND_API_KEY': 're_fake_not_a_real_key', 'other-app/RESEND_API_KEY': 're_other_fake_not_a_real_key' } })
+    await made(cloud, VERCEL_NEON)
+    // A value cimiento stored for a secret the project no longer declares is the project's too.
+    cloud.keychain.set('my-app/OLD_SECRET', 'old-fake-value')
+    const pull = await cli(cloud, ['env', 'pull', '--json'])
+    expect(pull.code, pull.writer.outText.slice(-400)).toBe(ExitCode.ok)
+    writeFileSync(join(dir, '.env.local'), '# Created by Vercel CLI\nDATABASE_URL="fake"\n')
+    expect([...cloud.keychain.keys()].filter((k) => k.startsWith('my-app/')).length).toBeGreaterThan(1)
+
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code, down.writer.outText.slice(-600)).toBe(ExitCode.ok)
+    expect([...cloud.keychain.keys()].filter((k) => k.startsWith('my-app/'))).toEqual([])
+    expect(cloud.keychain.get('other-app/RESEND_API_KEY')).toBe('re_other_fake_not_a_real_key')
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(dir, '.env.local'))).toBe(false)
+    expect(down.writer.outText).not.toContain('old-fake-value')
+  })
+
+  it('a down that still waits on something keeps the local secrets, so the next down can finish', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: false })
+    await made(cloud, VERCEL_NEON)
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code).not.toBe(ExitCode.ok)
+    expect([...cloud.keychain.keys()].some((k) => k.startsWith('my-app/'))).toBe(true)
+  })
+})

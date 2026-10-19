@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Local secrets
+
+- `down` removes what cimiento wrote on this machine for the project once nothing is left to
+  wait on: every keychain entry under service `cimiento` for its slug and the `.env.local` that
+  `env pull` wrote.
+
 ### Preview credentials
 
 - Previews no longer hold a Neon key. The preview database workflow writes only the branch's own

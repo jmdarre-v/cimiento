@@ -2,7 +2,7 @@
 // dependency order, after the project name is typed back. Every destroy is then verified: a
 // resource that still answers after its delete is reported, never assumed gone.
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { asCimientoError, CimientoError, ExitCode, needsPerson, type CimientoErrorFields } from '../../core/errors'
 import { topoSort } from '../../core/graph'
@@ -13,6 +13,8 @@ import { manifestForOrphan, orphanSpecs } from '../../core/orphans'
 import { ask } from '../../secrets/prompt'
 import { createdOrganizationLeftovers, type OrganizationLeftover } from '../../providers/supabase'
 import { flagList } from '../args'
+import { keychainAccounts, removeKeychainAccount } from '../../secrets/sources'
+import { pulledRecordPath } from '../../providers/hosting'
 import { openProject, type Session } from '../context'
 
 export interface DownEvent {
@@ -52,12 +54,14 @@ export async function downCommand(session: Session): Promise<number> {
     writeProjectState(ctx.cwd, { ...next, manifestHash: hashManifest(readFileSync(join(ctx.cwd, 'stack.yaml'), 'utf8')) })
     const exitCode = legacy.length > 0 ? ExitCode.needsHuman : ExitCode.ok
     const message = legacy.length > 0 ? 'Nothing cimiento can destroy, but state has records it cannot rebuild.' : 'Nothing in state to destroy.'
+    const local = exitCode === ExitCode.ok ? await removeLocalSecrets(ctx) : { keychain: [], files: [] }
     const payload = {
       ok: exitCode === ExitCode.ok,
       command: 'down',
       exitCode,
       destroyed: [],
       released: [],
+      local,
       leftovers: leftovers.map(leftoverJson),
       pending: legacy.map((e) => e.resource),
       errors: [],
@@ -135,6 +139,8 @@ export async function downCommand(session: Session): Promise<number> {
   writeProjectState(ctx.cwd, { ...state, manifestHash })
 
   const exitCode = errors.length > 0 ? ExitCode.failed : pending.length > 0 ? ExitCode.needsHuman : ExitCode.ok
+  // Only after a down that finished: one that waits on something runs again and needs them (BUG-108).
+  const local = exitCode === ExitCode.ok ? await removeLocalSecrets(ctx) : { keychain: [], files: [] }
   if (session.json) {
     session.printer.emit({
       ok: exitCode === ExitCode.ok,
@@ -142,6 +148,7 @@ export async function downCommand(session: Session): Promise<number> {
       exitCode,
       destroyed,
       released,
+      local,
       leftovers: [...leftovers.map(leftoverJson), ...others.map((left) => ({ ...left, code: 'DOWN_LEFTOVER' }))],
       pending,
       errors,
@@ -153,8 +160,38 @@ export async function downCommand(session: Session): Promise<number> {
     for (const error of errors) session.printer.error(error)
     for (const left of leftovers) session.printer.line(leftoverLine(left))
     for (const left of others) session.printer.line(`Left over: the ${left.what} ${left.name}, which cimiento set up. ${left.hint}`)
+    if (local.keychain.length + local.files.length > 0) {
+      session.printer.line(`Removed from this machine: ${[...local.keychain.map((n) => `${n}=****`), ...local.files].join(', ')}.`)
+    }
   }
   return exitCode
+}
+
+/**
+ * Removes what cimiento wrote on this machine for the project: every keychain entry under service
+ * cimiento whose account is <slug>/, and the files env pull wrote. Names only are reported.
+ */
+async function removeLocalSecrets(ctx: Ctx): Promise<{ keychain: string[]; files: string[] }> {
+  const prefix = `${ctx.manifest.slug}/`
+  const keychain: string[] = []
+  for (const account of await keychainAccounts(ctx.io, prefix)) {
+    if (await removeKeychainAccount(ctx.io, account)) keychain.push(account.slice(prefix.length))
+  }
+  const files: string[] = []
+  const record = pulledRecordPath(ctx.cwd)
+  try {
+    for (const file of (JSON.parse(readFileSync(record, 'utf8')) as { files?: string[] }).files ?? []) {
+      const path = join(ctx.cwd, file)
+      if (existsSync(path)) {
+        rmSync(path)
+        files.push(file)
+      }
+    }
+    rmSync(record)
+  } catch {
+    // No record: env pull never ran here.
+  }
+  return { keychain, files }
 }
 
 function legacyError(id: string, reason: string): CimientoError {

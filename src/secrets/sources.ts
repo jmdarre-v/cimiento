@@ -84,6 +84,39 @@ export function keychainAccount(projectSlug: string, name: string): string {
   return `${projectSlug}/${name}`
 }
 
+/**
+ * Every account under service cimiento that starts with prefix, read from the keychain's
+ * attributes only: security dump-keychain without -d, or secret-tool search, never a value.
+ */
+export async function keychainAccounts(io: Io, prefix: string): Promise<string[]> {
+  const accounts: string[] = []
+  if (keychainKind() === 'macos') {
+    const dump = await io.exec('security', ['dump-keychain']).catch(() => undefined)
+    if (!dump || dump.code !== 0) return []
+    for (const block of dump.stdout.split(/\n(?=keychain: )/)) {
+      if (!/"svce"<blob>="cimiento"/.test(block)) continue
+      const account = /"acct"<blob>="([^"]*)"/.exec(block)?.[1]
+      if (account?.startsWith(prefix)) accounts.push(account)
+    }
+  } else {
+    const found = await io.exec('secret-tool', ['search', '--all', 'service', KEYCHAIN_SERVICE]).catch(() => undefined)
+    if (!found || found.code !== 0) return []
+    for (const match of `${found.stdout}\n${found.stderr}`.matchAll(/attribute\.account = (.+)/g)) {
+      if (match[1].trim().startsWith(prefix)) accounts.push(match[1].trim())
+    }
+  }
+  return [...new Set(accounts)].sort()
+}
+
+/** Removes one keychain account under service cimiento. */
+export async function removeKeychainAccount(io: Io, account: string): Promise<boolean> {
+  const result =
+    keychainKind() === 'macos'
+      ? await io.exec('security', ['delete-generic-password', '-s', KEYCHAIN_SERVICE, '-a', account])
+      : await io.exec('secret-tool', ['clear', 'service', KEYCHAIN_SERVICE, 'account', account]).catch(() => ({ code: 127, stdout: '', stderr: '' }))
+  return result.code === 0
+}
+
 /** One argument for security -i, which reads double quoted strings with backslash escapes. */
 function quoted(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`

@@ -1,8 +1,8 @@
 // What the commands need from whichever provider fills the hosting slot: where the project lives in
 // state, how to wait for the deploy of a pushed commit, and the env store for env pull.
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { CimientoError } from '../core/errors'
 import { HOSTING_NAMES, hostingOf, type HostingId } from '../core/hosting'
 import type { Ctx, LiveCommit, ResourceSpec } from '../core/types'
@@ -58,6 +58,7 @@ export async function pullHostingEnv(ctx: Ctx, m: Manifest, target = '.env.local
     const lines = ['# Written by cimiento env pull from the Netlify dev context. Gitignored; never commit it.']
     for (const [name, value] of Object.entries(values).sort(([a], [b]) => a.localeCompare(b))) lines.push(`${name}=${JSON.stringify(value)}`)
     writeFileSync(path, `${lines.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 })
+    recordPulled(ctx.cwd, target)
     return Object.keys(values).sort()
   }
   await ensureLocalLink(ctx, { id: 'env pull', kind: 'binding', provider: 'vercel', dependsOn: [], inputs: {} }, m.slug)
@@ -75,7 +76,26 @@ export async function pullHostingEnv(ctx: Ctx, m: Manifest, target = '.env.local
       needsHuman: false,
     })
   }
+  recordPulled(ctx.cwd, target)
   return readEnvNames(path)
+}
+
+/** Where cimiento notes the files env pull wrote, in the gitignored cache, for down to remove (BUG-108). */
+export function pulledRecordPath(cwd: string): string {
+  return join(cwd, '.cimiento', 'cache', 'pulled.json')
+}
+
+function recordPulled(cwd: string, target: string): void {
+  const path = pulledRecordPath(cwd)
+  let files: string[] = []
+  try {
+    files = (JSON.parse(readFileSync(path, 'utf8')) as { files?: string[] }).files ?? []
+  } catch {
+    files = []
+  }
+  if (!files.includes(target)) files.push(target)
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, `${JSON.stringify({ files }, null, 2)}\n`)
 }
 
 function readEnvNames(path: string): string[] {
