@@ -376,6 +376,16 @@ The tool is installed but too old.
 
 **Looks like:** `cimiento needs >=`
 
+### UPGRADE_FILE_CHANGED
+
+Cimiento upgrade left a file you changed as it is.
+
+**What to do:** Run cimiento upgrade in a terminal; it asks about each file you changed before it replaces it.
+
+**Why:** cimiento upgrade adds what a project made by an older cimiento lacks and replaces the files cimiento wrote that nobody changed, judged by the hashes in .cimiento/scaffold.json or by what 0.4.1 wrote. A file that differs is yours; with --yes and no terminal it is left as it is and reported, and up keeps saying an upgrade is available.
+
+**Looks like:** `Left as you changed them`
+
 ## Tools and logins
 
 ### SESSION_ACCOUNT_MISMATCH

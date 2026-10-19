@@ -198,6 +198,10 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'The value your hosting provider holds for this name is not the one cimiento holds, for example after someone edited it in the dashboard. Your app reads the hosting one. Run cimiento secret set with the name to write the right value back.',
     es: 'El valor que tu proveedor de hosting tiene para este nombre no es el que tiene cimiento, por ejemplo despues de que alguien lo editara en el panel. Tu app lee el del hosting. Ejecuta cimiento secret set con el nombre para volver a escribir el valor correcto.',
   },
+  UPGRADE_FILE_CHANGED: {
+    en: 'cimiento upgrade did not replace a file you changed. Run it in a terminal to choose file by file, or keep your version.',
+    es: 'cimiento upgrade no reemplazo un archivo que cambiaste. Ejecutalo en una terminal para elegir archivo por archivo, o conserva tu version.',
+  },
   ORPHANS_DECISION_NEEDED: {
     en: 'stack.yaml no longer asks for something cimiento created, such as the old hosting project after you switched providers. Choose whether to keep it (retain), stop tracking it and leave it (release), or delete it (destroy).',
     es: 'stack.yaml ya no pide algo que cimiento creo, como el proyecto de hosting anterior despues de cambiar de proveedor. Elige si conservarlo (retain), dejar de seguirlo y dejarlo (release) o borrarlo (destroy).',

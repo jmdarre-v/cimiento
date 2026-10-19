@@ -591,3 +591,12 @@ One line per decision the spec does not cover, with the reasoning.
   every file env pull wrote, which env pull records in the gitignored .cimiento/cache/pulled.json.
   A down that still waits keeps them, because the next down may need a key. The leftovers of
   earlier field tests (six keychain entries, nine pulled .env.local files) were removed by hand.
+- 2026-10-19 Goal 9: cimiento upgrade owns only the files cimiento writes outright (.github/,
+  app/api/cimiento/, lib/, .claude/settings.json, the baseline migration): missing ones are added,
+  ones nobody changed are replaced, judged by sha256 in .cimiento/scaffold.json, written by new and
+  upgrade, or by the hashes of what 0.4.1 wrote, taken from its npm package. .gitignore and
+  package.json are only added to. stack.yaml is edited in place: NEON_API_KEY loses the hosting
+  sink, declarations the current scaffold makes are added, and scaffold.ci false becomes true for a
+  Neon app with a GitHub repository, since 0.4.0 wrote false for projects made from flags. A file
+  that is no longer scaffolded is removed only when nothing left imports it. up reports
+  upgrade-available first and changes nothing.

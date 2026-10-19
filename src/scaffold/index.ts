@@ -11,6 +11,8 @@ import { BASELINE_FILE, BASELINE_SQL, nextjsAppFiles } from './templates/nextjs-
 import { designerSiteFiles } from './templates/designer-site'
 import { neonPreviewFiles } from './templates/neon-preview'
 import { previewDatabaseIsolated } from '../core/hosting'
+import { BASELINE_PATH, baselineFor } from './upgrade'
+import { VERSION } from '../version'
 
 export { BASELINE_FILE, BASELINE_SQL, BASELINE_TABLE, MARKER_NAME } from './templates/nextjs-app'
 
@@ -78,6 +80,10 @@ export function writeScaffold(dir: string, files: Record<string, string>, option
     writeFileSync(path, content, 'utf8')
     written.push(relative)
   }
+  // What cimiento wrote, by hash, so cimiento upgrade can tell its files from the person's (BUG-109).
+  const baseline = join(dir, BASELINE_PATH)
+  mkdirSync(dirname(baseline), { recursive: true })
+  writeFileSync(baseline, `${JSON.stringify({ cimiento: VERSION, files: baselineFor(files) }, null, 2)}\n`, 'utf8')
   return written.sort()
 }
 

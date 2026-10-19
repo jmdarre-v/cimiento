@@ -2,6 +2,7 @@
 // with checks and receipts.
 
 import { acquireProjectLock } from '../../core/lock'
+import { upgradeAvailable } from './upgrade'
 import { sharedPreviewWarning } from '../../core/hosting'
 import { previewProjectNotice } from '../../providers/supabase'
 import { flagString } from '../args'
@@ -49,6 +50,13 @@ export async function runUpIn(session: Session, cwd: string): Promise<UpOutcome>
 
 async function runUpInLocked(session: Session, cwd: string): Promise<UpOutcome> {
   let project = openProject(session, { dryRun: false, cwd })
+  // An older scaffold is reported, never changed by up (BUG-111).
+  const upgrade = upgradeAvailable(session, cwd, project.manifest)
+  if (upgrade.length > 0) {
+    const message = `cimiento upgrade would bring this project up to the current scaffold: ${upgrade.join(', ')}. It shows each change and asks first.`
+    if (session.json) session.printer.emit({ event: 'upgrade-available', files: upgrade, message })
+    else session.printer.line(message)
+  }
   if (await settleOrphans(session, project)) project = openProject(session, { dryRun: false, cwd })
   announceSmoke(session, project)
   await warmDetection(project.ctx, project.providers)

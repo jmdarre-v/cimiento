@@ -18,6 +18,7 @@ import { initCommand, newCommand } from './commands/init'
 import { devCommand } from './commands/dev'
 import { joinCommand } from './commands/join'
 import { publishCommand } from './commands/publish'
+import { upgradeCommand } from './commands/upgrade'
 import { planCommand } from './commands/plan'
 import { secretCheckCommand, secretRemoveCommand, secretRotateCommand, secretSetCommand } from './commands/secret'
 import { upCommand } from './commands/up'
@@ -43,6 +44,7 @@ Usage
   cimiento join                                  on a clone: tools, logins, access, env, checks
   cimiento dev                                   local database, jobs server and app, one Ctrl+C
   cimiento publish [--message <text>]            commit every change, push, wait for the deploy, print the URL
+  cimiento upgrade [--yes]                       bring a project made by an older cimiento up to its scaffold
   cimiento down                                  delete everything in state, after typing the name
   cimiento down --release ID[,ID]               stop tracking resources without deleting anything
   cimiento accounts set <provider> [--to <id>]   pick the account again: github, vercel, netlify, supabase, neon or turnstile
@@ -89,7 +91,7 @@ export async function run(argv: string[], deps: CliDeps = {}): Promise<number> {
 }
 
 /** Commands that change a project's resources or state, and so take its lock (BUG-72). */
-const LOCKING = new Set(['up', 'down', 'publish', 'join', 'secret set', 'secret rotate', 'secret remove', 'domain add', 'domain remove', 'accounts set'])
+const LOCKING = new Set(['up', 'down', 'publish', 'upgrade', 'join', 'secret set', 'secret rotate', 'secret remove', 'domain add', 'domain remove', 'accounts set'])
 
 async function dispatch(session: ReturnType<typeof openSession>, args: ReturnType<typeof parseArgs>): Promise<number> {
   let release = (): void => undefined
@@ -117,6 +119,8 @@ async function dispatch(session: ReturnType<typeof openSession>, args: ReturnTyp
         return await devCommand(session)
       case 'publish':
         return await publishCommand(session)
+      case 'upgrade':
+        return await upgradeCommand(session)
       case 'env':
         if (args.sub === 'pull') return await envPullCommand(session)
         if (args.sub === 'print') return await envPrintCommand(session)

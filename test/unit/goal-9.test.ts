@@ -298,3 +298,110 @@ describe('BUG-108: down left the project\'s secrets on this machine', () => {
     expect([...cloud.keychain.keys()].some((k) => k.startsWith('my-app/'))).toBe(true)
   })
 })
+
+// Item 3: cimiento upgrade.
+
+import { existsSync, rmSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+
+type Plan = { ok: boolean; command: string; applied: boolean; changes: { path: string; action: string }[]; committed?: boolean }
+
+function lastPlan(writer: CaptureWriter): Plan {
+  return writer.jsonObjects().filter((o) => (o as { command?: string }).command === 'upgrade').pop() as Plan
+}
+
+/** What a project made by 0.4.0 looks like next to this scaffold: no preview database files, no baseline. */
+function asIfMadeBy040(): void {
+  for (const path of ['.github/workflows/preview-database.yml', '.github/scripts', 'app/api/cimiento', 'lib/db.ts', '.cimiento/scaffold.json']) rmSync(join(dir, path), { recursive: true, force: true })
+  const stack = join(dir, 'stack.yaml')
+  writeFileSync(stack, readFileSync(stack, 'utf8').replace(/  - name: NEON_API_KEY\n(    .*\n)+?(?=  - name|domain:)/, '').replace(/  - name: VERCEL_TOKEN\n(    .*\n)+?(?=  - name|domain:)/, '').replace(/^secrets:\n(?=domain:)/m, 'secrets: []\n'))
+  const pkg = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8'))
+  delete pkg.dependencies['@neondatabase/serverless']
+  writeFileSync(join(dir, 'package.json'), `${JSON.stringify(pkg, null, 2)}\n`)
+  writeFileSync(join(dir, '.gitignore'), readFileSync(join(dir, '.gitignore'), 'utf8').replace('.cimiento/cache\n', ''))
+}
+
+describe('BUG-109: a project made by an older cimiento kept the old scaffold forever', () => {
+  it('upgrade --json shows each file it would add or change and changes nothing; --yes applies and commits; a second run has nothing to do', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    asIfMadeBy040()
+    const plan = await cli(cloud, ['upgrade', '--json'])
+    expect(plan.code, plan.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    const shown = lastPlan(plan.writer)
+    expect(shown.applied).toBe(false)
+    const paths = shown.changes.map((c) => `${c.action} ${c.path}`)
+    for (const expected of ['add .github/workflows/preview-database.yml', 'add .github/scripts/preview-database.mjs', 'add lib/db.ts', 'add app/api/cimiento/database/route.ts', 'merge .gitignore', 'merge package.json', 'merge stack.yaml']) {
+      expect(paths, expected).toContain(expected)
+    }
+    expect(existsSync(join(dir, 'lib/db.ts'))).toBe(false)
+
+    const commits = cloud.execCalls.filter((c) => /\bcommit\b/.test(c)).length
+    const apply = await cli(cloud, ['upgrade', '--yes', '--json'])
+    expect(apply.code, apply.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(lastPlan(apply.writer)).toMatchObject({ applied: true, committed: true })
+    expect(readFileSync(join(dir, '.github/workflows/preview-database.yml'), 'utf8')).toContain('VERCEL_TOKEN')
+    expect(readFileSync(join(dir, '.gitignore'), 'utf8')).toContain('.cimiento/cache')
+    expect(JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')).dependencies['@neondatabase/serverless']).toBeDefined()
+    expect(readFileSync(join(dir, 'stack.yaml'), 'utf8')).toMatch(/- name: NEON_API_KEY\n    sinks:\n      - ci\n/)
+    expect(cloud.execCalls.filter((c) => /\bcommit\b/.test(c)).length).toBe(commits + 1)
+
+    const again = await cli(cloud, ['upgrade', '--yes', '--json'])
+    expect(lastPlan(again.writer).changes).toEqual([])
+  })
+
+  it('a file the person changed is never overwritten without asking', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    writeFileSync(join(dir, 'lib/db.ts'), `${readFileSync(join(dir, 'lib/db.ts'), 'utf8')}\n// my own change\n`)
+    rmSync(join(dir, '.github/workflows/preview-database.yml'))
+    const apply = await cli(cloud, ['upgrade', '--yes', '--json'])
+    expect(apply.code).toBe(ExitCode.needsHuman)
+    const plan = lastPlan(apply.writer)
+    expect(plan.changes).toContainEqual(expect.objectContaining({ path: 'lib/db.ts', action: 'changed by you' }))
+    expect(readFileSync(join(dir, 'lib/db.ts'), 'utf8')).toContain('// my own change')
+    expect(existsSync(join(dir, '.github/workflows/preview-database.yml'))).toBe(true)
+  })
+
+  it('a file cimiento wrote and nobody changed is replaced by the current one', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    const older = '// what an older cimiento wrote\n'
+    writeFileSync(join(dir, 'app/api/cimiento/database/route.ts'), older)
+    const baseline = JSON.parse(readFileSync(join(dir, '.cimiento/scaffold.json'), 'utf8'))
+    baseline.files['app/api/cimiento/database/route.ts'] = createHash('sha256').update(older).digest('hex')
+    writeFileSync(join(dir, '.cimiento/scaffold.json'), JSON.stringify(baseline))
+    const apply = await cli(cloud, ['upgrade', '--yes', '--json'])
+    expect(apply.code, apply.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(lastPlan(apply.writer).changes).toContainEqual(expect.objectContaining({ path: 'app/api/cimiento/database/route.ts', action: 'replace' }))
+    expect(readFileSync(join(dir, 'app/api/cimiento/database/route.ts'), 'utf8')).toContain('neonKeyInEnv')
+  })
+})
+
+describe('BUG-110: a project made by 0.4.1 kept the Neon key in its previews', () => {
+  it('upgrade moves NEON_API_KEY to Actions only, removes it and the project id from the preview env, and replaces the 0.4.1 files it recognizes', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    const stack = join(dir, 'stack.yaml')
+    writeFileSync(stack, readFileSync(stack, 'utf8').replace(/(- name: NEON_API_KEY\n    sinks:\n      - ci\n)/, '$1      - hosting\n'))
+    const project = [...cloud.vercelProjects.values()][0]
+    const env = cloud.vercelEnv.get(project.id)!
+    env.push({ id: 'env_key', key: 'NEON_API_KEY', value: 'napi_fake_old_not_real', target: ['preview'], type: 'encrypted' }, { id: 'env_pid', key: 'NEON_PROJECT_ID', value: 'proj', target: ['preview'], type: 'encrypted' })
+    const apply = await cli(cloud, ['upgrade', '--yes', '--json'])
+    expect(apply.code, apply.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(readFileSync(stack, 'utf8')).toMatch(/- name: NEON_API_KEY\n    sinks:\n      - ci\n    environments/)
+    expect((cloud.vercelEnv.get(project.id) ?? []).filter((e) => /^NEON_/.test(e.key))).toEqual([])
+    expect(lastPlan(apply.writer).changes).toContainEqual(expect.objectContaining({ action: 'remove from previews' }))
+  })
+})
+
+describe('BUG-111: up never said that the project could be upgraded', () => {
+  it('up reports upgrade-available with the files, and changes none of them', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    asIfMadeBy040()
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.writer.outText).toMatch(/"event":"upgrade-available"[^\n]*preview-database\.yml/)
+    expect(existsSync(join(dir, '.github/workflows/preview-database.yml'))).toBe(false)
+  })
+})

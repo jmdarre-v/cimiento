@@ -295,3 +295,12 @@
   hint: Run cimiento secret set NAME. It writes the value cimiento holds over the one in the hosting env and deploys again.
   fix: A value the hosting never shows again, such as a Vercel sensitive one, is judged by its entry, replaced or edited since cimiento wrote it. doctor and up compare each hosting env value with the one cimiento holds, when it has it without asking anyone, a literal from the plan, or a secret from the environment or the keychain, and never print either. A different value fails the check, and up and secret set write the right one over it. A secret whose source is the hidden prompt is only checked for presence, because nobody is asked just to compare.
   seen: "Goal 7, 2026-10-18 (BUG-92, BUG-90, BUG-91). Rehearsing the demo, vercel env add stored the wrong value as sensitive, which Vercel never shows again, so doctor still said present; cimiento now records the id and update time of the entry it wrote, and a replaced or edited entry fails the check. Before that, a key changed by hand in the Vercel or Netlify env passed doctor, which only checked that the name was present, and secret set reported noop and left the wrong value in place, so the app kept reading a key cimiento never checked."
+
+- code: UPGRADE_FILE_CHANGED
+  provider: core
+  title: cimiento upgrade left a file you changed as it is
+  signatures:
+    - "Left as you changed them"
+  hint: Run cimiento upgrade in a terminal; it asks about each file you changed before it replaces it.
+  fix: cimiento upgrade adds what a project made by an older cimiento lacks and replaces the files cimiento wrote that nobody changed, judged by the hashes in .cimiento/scaffold.json or by what 0.4.1 wrote. A file that differs is yours; with --yes and no terminal it is left as it is and reported, and up keeps saying an upgrade is available.
+  seen: "Goal 9, 2026-10-19 (BUG-109, BUG-110, BUG-111). up never adds scaffold files, so a project made by 0.4.0 never got the preview database workflow and a project made by 0.4.1 kept the Neon key in its previews; up never said either. cimiento upgrade shows each change, applies on confirmation and commits, and up reports when one is available. Proven on a project scaffolded by cimiento 0.4.0 from npm: six changes shown, applied, committed, the app built."

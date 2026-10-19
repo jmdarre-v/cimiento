@@ -189,6 +189,7 @@ export const ERROR_CODES = [
   'PREVIEW_DATABASE_SHARED',
   'SUPABASE_PREVIEW_SHARES_PRODUCTION',
   'SECRET_VALUE_MISMATCH',
+  'UPGRADE_FILE_CHANGED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -221,6 +222,7 @@ export const PERSON_CODES: ReadonlySet<string> = new Set([
   'DOWN_IDENTITY_MISMATCH',
   'LEGACY_STATE_UNRESOLVED',
   'SUPABASE_PREVIEW_SHARES_PRODUCTION',
+  'UPGRADE_FILE_CHANGED',
 ])
 
 export function needsPerson(err: { code: string; needsHuman: boolean }): boolean {

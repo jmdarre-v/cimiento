@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### cimiento upgrade
+
+- `cimiento upgrade` brings a project made by an older cimiento up to the current scaffold for its
+  template: it shows each file it would add, replace, merge or remove, applies on confirmation or
+  `--yes`, never replaces a file you changed without asking, and commits. In a project made by
+  0.4.1 it also takes `NEON_API_KEY` and `NEON_PROJECT_ID` out of the preview env. `up` says when
+  an upgrade is available and changes nothing.
+
 ### Local secrets
 
 - `down` removes what cimiento wrote on this machine for the project once nothing is left to

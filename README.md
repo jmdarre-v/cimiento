@@ -234,6 +234,7 @@ cimiento up --orphans destroy
 | `cimiento secret remove NAME` | Take a secret out of the project and every destination |
 | `cimiento down` | Delete everything in state, after you type the project name back |
 | `cimiento down --release ID` | Stop tracking a resource, deleting nothing |
+| `cimiento upgrade` | Bring a project made by an older cimiento up to the current scaffold, showing each change first |
 | `cimiento doctor --smoke` | Also run the checks that act: a test email, an event, a test token |
 | `cimiento up --orphans <choice>` | Retain, release or destroy resources `stack.yaml` no longer selects |
 | `cimiento new <name> --scaffold-only` | Write the project files and stop, touching no account |
