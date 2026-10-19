@@ -14,7 +14,7 @@ import { ask } from '../../secrets/prompt'
 import { createdOrganizationLeftovers, type OrganizationLeftover } from '../../providers/supabase'
 import { flagList } from '../args'
 import { keychainAccounts, removeKeychainAccount } from '../../secrets/sources'
-import { pulledRecordPath } from '../../providers/hosting'
+import { pulledRecordPath } from '../../core/pulled'
 import { openProject, type Session } from '../context'
 
 export interface DownEvent {

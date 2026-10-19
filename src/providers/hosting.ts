@@ -1,8 +1,9 @@
 // What the commands need from whichever provider fills the hosting slot: where the project lives in
 // state, how to wait for the deploy of a pushed commit, and the env store for env pull.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { recordPulled } from '../core/pulled'
 import { CimientoError } from '../core/errors'
 import { HOSTING_NAMES, hostingOf, type HostingId } from '../core/hosting'
 import type { Ctx, LiveCommit, ResourceSpec } from '../core/types'
@@ -80,23 +81,6 @@ export async function pullHostingEnv(ctx: Ctx, m: Manifest, target = '.env.local
   return readEnvNames(path)
 }
 
-/** Where cimiento notes the files env pull wrote, in the gitignored cache, for down to remove (BUG-108). */
-export function pulledRecordPath(cwd: string): string {
-  return join(cwd, '.cimiento', 'cache', 'pulled.json')
-}
-
-function recordPulled(cwd: string, target: string): void {
-  const path = pulledRecordPath(cwd)
-  let files: string[] = []
-  try {
-    files = (JSON.parse(readFileSync(path, 'utf8')) as { files?: string[] }).files ?? []
-  } catch {
-    files = []
-  }
-  if (!files.includes(target)) files.push(target)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify({ files }, null, 2)}\n`)
-}
 
 function readEnvNames(path: string): string[] {
   if (!existsSync(path)) return []

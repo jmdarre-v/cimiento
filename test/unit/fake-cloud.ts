@@ -5,7 +5,7 @@
 // thing does not exist, then it is created, then it is found by name.
 
 import { createHmac } from 'node:crypto'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { FakeV2 } from './fake-v2'
 import type { ExecOptions, ExecResult, HttpRequest, HttpResponse, Io, Running, SpawnOptions, SqlResult } from '../../src/core/io'
@@ -331,7 +331,7 @@ export class FakeCloud implements Io {
     const v2 = this.v2.exec(cmd, args)
     if (v2) return v2
     if (cmd === 'gh') return this.v2.gh(args) ?? this.gh(args, _opts)
-    if (cmd === 'vercel') return this.vercel(args)
+    if (cmd === 'vercel') return this.vercel(args, _opts)
     if (cmd === 'supabase') return this.supabase(args)
     if (cmd === 'brew' || cmd === 'npm' || cmd === 'pnpm') return ok('installed')
     if (cmd === 'open' || cmd === 'xdg-open') return ok('')
@@ -587,7 +587,7 @@ export class FakeCloud implements Io {
     return fail(`FakeCloud: no gh behavior for "${args.join(' ')}"`)
   }
 
-  private async vercel(args: string[]): Promise<ExecResult> {
+  private async vercel(args: string[], opts: ExecOptions = {}): Promise<ExecResult> {
     if (args[0] === 'whoami') return this.vercelLoggedIn ? ok(`${this.login}\n`) : fail('> Logged out.')
     if (args[0] === 'login') {
       this.vercelLoggedIn = true
@@ -598,6 +598,11 @@ export class FakeCloud implements Io {
       const project = this.findVercelProject(name)
       if (!project) return fail(`Project not found: ${name}`)
       this.linkedProjects.set(project.name, project.id)
+      // As the real CLI does on link --yes (field test 9): it pulls the development env into .env.local.
+      if (opts.cwd && !existsSync(join(opts.cwd, '.env.local'))) {
+        const dev = (this.vercelEnv.get(project.id) ?? []).filter((e) => e.target.includes('development'))
+        writeFileSync(join(opts.cwd, '.env.local'), `# Created by Vercel CLI\n${dev.map((e) => `${e.key}="${e.value}"`).join('\n')}\n`)
+      }
       return ok(`Linked to ${project.name}`)
     }
     if (args[0] === 'integration' && args[1] === 'add' && args[2] === 'supabase') {

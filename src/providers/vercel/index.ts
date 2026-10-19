@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
+import { recordPulled } from '../../core/pulled'
 import { knownEnvValue } from '../../secrets/known'
 import { valueMismatch } from '../../core/hosting'
 import type { LiveCommit } from '../../core/types'
@@ -1038,7 +1039,10 @@ export async function ensureLocalLink(ctx: Ctx, spec: ResourceSpec, projectName:
   const args = ['link', '--yes', '--project', projectName]
   const account = ctx.manifest.accounts.vercel
   if (account) args.push('--scope', account)
+  // link --yes pulls the development env into .env.local; one it made goes with down (BUG-113).
+  const hadEnvFile = existsSync(join(ctx.cwd, '.env.local'))
   const result = await ctx.io.exec('vercel', args, { cwd: ctx.cwd })
+  if (!hadEnvFile && existsSync(join(ctx.cwd, '.env.local'))) recordPulled(ctx.cwd, '.env.local')
   if (result.code !== 0) {
     throw new CimientoError({
       code: 'VERCEL_PROJECT_NOT_FOUND',

@@ -602,3 +602,6 @@ One line per decision the spec does not cover, with the reasoning.
   Neon app with a GitHub repository, since 0.4.0 wrote false for projects made from flags. A file
   that is no longer scaffolded is removed only when nothing left imports it. up reports
   upgrade-available first and changes nothing.
+- 2026-10-19 Goal 9: vercel link --yes pulls the development env into .env.local and has no flag to
+  skip it. When cimiento's own link creates that file, it is recorded with what env pull wrote and
+  down removes it; a .env.local that existed before the link is the person's and stays (BUG-113).

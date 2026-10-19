@@ -438,3 +438,25 @@ describe('BUG-111: up never said that the project could be upgraded', () => {
     expect(existsSync(join(dir, '.github/workflows/preview-database.yml'))).toBe(false)
   })
 })
+
+describe('BUG-113: vercel link wrote .env.local with the development values, and down left it', () => {
+  it('a .env.local the Vercel CLI wrote when cimiento linked the folder goes with down', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    const { existsSync } = await import('node:fs')
+    expect(existsSync(join(dir, '.env.local'))).toBe(true)
+    const down = await cli(cloud, ['down', '--yes', '--json'])
+    expect(down.code, down.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(existsSync(join(dir, '.env.local'))).toBe(false)
+  })
+
+  it('a .env.local the person had before cimiento linked the folder stays', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const scaffolded = await cli(cloud, ['new', 'my-app', ...VERCEL_NEON, '--scaffold-only', '--json', '--dir', dir], root)
+    expect(scaffolded.code).toBe(ExitCode.ok)
+    writeFileSync(join(dir, '.env.local'), 'MINE="kept"\n')
+    expect((await cli(cloud, ['up', '--json', '--yes'])).code).toBe(ExitCode.ok)
+    expect((await cli(cloud, ['down', '--yes', '--json'])).code).toBe(ExitCode.ok)
+    expect(readFileSync(join(dir, '.env.local'), 'utf8')).toBe('MINE="kept"\n')
+  })
+})
