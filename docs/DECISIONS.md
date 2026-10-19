@@ -620,3 +620,7 @@ One line per decision the spec does not cover, with the reasoning.
   is never changed. up records the branches it saw with their own password in the ownPassword
   output, so the check runs once per branch; doctor fails a match as PREVIEW_PASSWORD_SHARED. This
   makes 0.4.0 a version whose previews hold a credential that can read production, beside 0.4.1.
+- 2026-10-19 Goal 9: the workflow and up wait for the operations Neon returns with a new branch
+  before changing it, polling every 2 s for at most two minutes; Neon answers 423 to a role change
+  while they run (BUG-115, field test 9). The v0.4.2 tag was moved to the commit with BUG-114 and
+  BUG-115 fixed, by the owner's decision; the first tag was never published to npm.

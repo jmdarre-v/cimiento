@@ -9,8 +9,8 @@ Status: complete. Items 1 to 3 passed on real accounts. On real Vercel and real 
 preview database workflow made the Neon branch, wrote only its address for that git branch,
 deployed it again, and on delete removed both, with no cimiento command in between; each preview
 read its own branch and held no Neon key. It also works without a hosting token, with `cimiento
-up` writing the address. The field test found BUG-112 and BUG-113, both fixed and proven. Every
-resource is confirmed gone.
+up` writing the address. The field test found BUG-112 and BUG-113, and BUG-114 and BUG-115 came
+after it; all four are fixed and proven on real accounts. Every resource is confirmed gone.
 
 ## Item 1 with the workflow writing the address, cimiento-test-9v and cimiento-test-9m
 
@@ -28,6 +28,27 @@ deleted by `down`. In a person's project the token is one they make.
 | Netlify: `feature/ten` pushed with plain git | The same two lines from the workflow; the site env holds `DATABASE_URL` and `DATABASE_URL_UNPOOLED` for dev, production and `branch:feature/ten`; the branch deploy the workflow started answered `ok: true, rows: 1, neonKeyInEnv: false` on `preview/feature-ten` |
 | Netlify: the branch deleted | The delete run removed the branch values and the Neon branch; the site env lists dev and production only; the Neon API lists only main |
 | `down` of both | Exit 0 each, `local: { keychain: [NEON_API_KEY] }`, and for the Vercel project `files: [.env.local]`, the file `vercel link` wrote (BUG-113, now removed by `down` itself) |
+
+## Item 1, own passwords for preview branches (BUG-114 and BUG-115), cimiento-test-9p
+
+Neon copies the roles of the branch a new branch is made from, passwords included, so the address
+of a preview branch also logged in to the production branch. Vercel hosting, Neon database,
+`deployment_protection: none`, the test-only `VERCEL_TOKEN` Actions secret set as for 9v. Each
+login below was tried with a Postgres client against the real endpoints; only the outcome was
+printed.
+
+| Step | Outcome |
+|---|---|
+| `new --scaffold-only`, `up`, `publish` | Exit 0 each |
+| A branch `preview/feature-old` made through the Neon API the way 0.4.0 to the first v0.4.2 tag made them | Its password is the same as the production branch's; its credentials on the production endpoint: logged in, `select 1` answered |
+| `feature/old` pushed with plain git | The workflow: `The Neon branch preview/feature-old already exists.`, `Gave preview/feature-old its own database password, so its address cannot open production.`, `Wrote the database address for feature/old only, and deployed it again.` |
+| `feature/new` pushed with plain git | The workflow made `preview/feature-new`, then Neon answered 423 to the password reset: the branch was still being made (BUG-115). Fixed: the workflow and `up` wait for the operations Neon returns with a new branch |
+| `cimiento upgrade --yes` on main (replaced `.github/scripts/neon-preview.mjs`), `publish`, `feature/new` merged with main and pushed, and a new `feature/third` pushed | Both runs: own password given, address written, deployed again; `feature/third` made, given its own password and written in one run |
+| Each preview branch's credentials | Password differs from production's; on the production endpoint refused with `28P01 password authentication failed`; on its own endpoint logged in |
+| The deployments the workflow started for `feature/third` and `feature/new` | `ok: true, rows: 1, neonKeyInEnv: false`, each on the endpoint of its own Neon branch; production still answers `ok: true` on main with its unchanged password |
+| `doctor` | `ok: true`; `neon.preview-branches`: each preview reads its own Neon branch, with a password of its own |
+| The three git branches deleted | Each delete run: `Removed the database address of feature/X. Deleted the Neon branch preview/feature-X.` `vercel env ls preview` lists no `DATABASE_*` or `NEON_*` entry; the Neon API lists only main |
+| `down` | Exit 0, `local: { keychain: [NEON_API_KEY], files: [.env.local] }` |
 
 ## Item 1 on Vercel without a hosting token, cimiento-test-9
 
@@ -79,13 +100,17 @@ sentence; it still never reaches production.
 
 ## Confirmation
 
-- `gh repo view` for cimiento-test-9, 9n, 9v and 9m: Could not resolve to a Repository.
-- `vercel project ls`: no project named cimiento-test-9*; https://cimiento-test-9.vercel.app and
-  https://cimiento-test-9v.vercel.app answer 404.
+- `gh repo view` for cimiento-test-9, 9n, 9v, 9m and 9p: Could not resolve to a Repository.
+- `vercel project ls`: no project named cimiento-test-9*; https://cimiento-test-9.vercel.app,
+  https://cimiento-test-9v.vercel.app and https://cimiento-test-9p.vercel.app answer 404.
 - Netlify API: no site named cimiento-test-9n or 9m; both sites answer 404.
 - Neon API, in the organization the keys were made in: no project named cimiento-test-9*, and
-  none of the four project scoped keys is listed (all revoked by `down`).
-- `security dump-keychain`: no account starting `cimiento-test-` under service `cimiento`.
+  none of the five project scoped keys is listed (all revoked by `down`). The one project whose
+  name contains cimiento-test there is another project, made before field test 8 and not by a
+  field test, and was left alone.
+- `security dump-keychain`: no account starting `cimiento-test-` under service `cimiento`, and
+  `security find-generic-password -s cimiento -a <account>` exits 44, not found, for every
+  cimiento-test account used in field tests 2 to 9, 9p included.
 - No `.env.local` in any cimiento-test folder; `~/.cimiento/locks` empty.
 
 ## Timings per phase
@@ -109,6 +134,14 @@ From the first and last line of each run log.
 | `new --scaffold-only` cimiento-test-9v and 9m, then `up` 9v | 01:57:18 to 01:58:59 | under 0.1 s, under 0.1 s, 101.0 s | 2026-10-19T01-57-18-724Z-new.jsonl, 01-57-18-833Z-new, 01-57-18-953Z-up |
 | `publish` 9v, `up` 9m, `publish` 9m | 01:59:00 to 02:02:24 | 33.7 s, 119.2 s, 50.6 s | 2026-10-19T01-59-00-138Z-publish.jsonl, 01-59-33-961Z-up, 02-01-33-371Z-publish |
 | `down` 9v, then 9m | 02:06:00 to 02:06:11 | 5.4 s, 5.1 s | 2026-10-19T02-06-00-780Z-down.jsonl, 02-06-06-376Z-down |
+| `new --scaffold-only` cimiento-test-9p | 02:23:02 | under 0.1 s | 2026-10-19T02-23-02-227Z-new.jsonl |
+| `up` cimiento-test-9p | 08:59:37 to 09:01:22 | 105.2 s | 2026-10-19T08-59-37-191Z-up.jsonl |
+| `publish` cimiento-test-9p | 09:01:29 to 09:02:03 | 34.4 s | 2026-10-19T09-01-29-226Z-publish.jsonl |
+| `upgrade --yes` with the BUG-115 fix, `publish` | 09:05:36 to 09:06:05 | 0.2 s, 28.2 s | 2026-10-19T09-05-36-876Z-upgrade.jsonl, 09-05-37-178Z-publish |
+| `doctor` with three preview branches | 09:07:41 to 09:08:07 | 26.7 s | 2026-10-19T09-07-41-074Z-doctor.jsonl |
+| `down` cimiento-test-9p | 09:09:46 to 09:09:56 | 10.6 s | 2026-10-19T09-09-46-089Z-down.jsonl |
+| The preview database workflow on cimiento-test-9p, five pushes and three deletes | 09:02 to 09:10 | not measured by a run log; 11 s to 17 s each per `gh run list` | not a cimiento command |
+| The BUG-114 logins against real Neon endpoints | 09:02 and 09:07 | not measured by a run log | not a cimiento command |
 | Scaffolds in a temporary folder to build and to hash 0.4.1's files | 01:07 to 01:14 | under 0.1 s each | 2026-10-19T01-07-07-898Z-new.jsonl, 01-14-36-549Z-new |
 | The preview database workflow runs in GitHub Actions | 01:33 to 02:05 | not measured by a run log; each finished within about 15 s of its push or delete, per `gh run watch` | not a cimiento command |
 | Implementation and unit tests | | not measured | no run log |
@@ -120,7 +153,7 @@ Ids continue from BUG-104 in `docs/FIELD-TEST-8.md`. Each has a knowledge base e
 note and a regression test in `test/unit/goal-9.test.ts` that failed on the code before its fix.
 BUG-105 to 111 came from the goal's list, found by those tests; BUG-112 and 113 came from this
 field test; BUG-114 came from Neon's documentation after it, when checking whether 0.4.0's
-previews could read production.
+previews could read production, and BUG-115 from its field test on cimiento-test-9p.
 
 | Id | Description | Fix commit |
 |---|---|---|
@@ -134,3 +167,4 @@ previews could read production.
 | BUG-112 | Vercel refuses to make a token from the CLI's login, and Netlify has no API to make one, so the workflow's hosting token cannot be made unattended | fd7a4b5 |
 | BUG-113 | The .env.local that vercel link writes when cimiento links the folder stayed after down | d73d92e |
 | BUG-114 | A Neon preview branch kept production's role password, so its address also opened production | 44be0b3 |
+| BUG-115 | The password reset on a branch just made was refused with 423 while Neon was still making it | cf5dd0a |

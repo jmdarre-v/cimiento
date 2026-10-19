@@ -33,7 +33,8 @@ and 0.4.1 every preview's database address also opens production; upgrade.
 - Each preview branch gets a database password of its own (BUG-114). Neon copies the roles of the
   branch a new branch is made from, passwords included, so in 0.4.0 and 0.4.1 the address a
   preview held also logged in to the production branch. The workflow and `cimiento up` now reset
-  the preview role's password once before writing its address, and `doctor` reports
+  the preview role's password once before writing its address (after Neon has finished making the
+  branch), and `doctor` reports
   `PREVIEW_PASSWORD_SHARED` for a preview branch that still has production's. In a project made by
   0.4.0 or 0.4.1, run `cimiento upgrade`, then `cimiento up`, which gives each existing preview
   branch its own password and writes its address again. Production's password is never changed.

@@ -139,7 +139,7 @@ this table is about real accounts.
 | Vercel | Project, repository link, env, deploy, publish, branch previews, preview values per git branch, a key changed by hand found by `doctor` and fixed by `secret set` (field test 7), deployment protection none, the commit stamp on a CLI deploy read back by `publish` on a clean tree (field test 8), a branch-scoped preview value read by that branch's preview (field test 9) | Custom domain: added, its DNS record named, removed; serving it was not run | |
 | Netlify | Site, repository link, env per context, deploy, publish, pull request previews, secret set to remove, the commit of a rebuild read back by `publish` on a clean tree (field test 8), a branch context value read by that branch's deploy preview (field test 9) | | |
 | Supabase | Direct and Marketplace paths, migrations, Auth URLs, project secrets | Preview project: the free limit stated first and the run stopped at it on an account with two active free projects (field tests 7 and 8; `test/field/supabase-preview.mjs` runs it when there is room) | The preview-only Marketplace database and a created preview project, covered by unit tests only |
-| Neon | Project, connection strings in the hosting env, migrations through the Postgres client, a Neon branch per preview branch made, kept and removed by `up` and `down` (field test 7); the preview database workflow making and deleting a branch on a plain `git push`, a preview built before its branch answering with the clear message and then reading its own branch, the project scoped key revoked by `down` (field test 8); previews on Vercel and Netlify reading their own branch with no Neon key in reach; the workflow writing the branch's address, deploying it again and removing both with the branch, with no cimiento command between (field test 9) | | |
+| Neon | Project, connection strings in the hosting env, migrations through the Postgres client, a Neon branch per preview branch made, kept and removed by `up` and `down` (field test 7); the preview database workflow making and deleting a branch on a plain `git push`, a preview built before its branch answering with the clear message and then reading its own branch, the project scoped key revoked by `down` (field test 8); previews on Vercel and Netlify reading their own branch with no Neon key in reach; the workflow writing the branch's address, deploying it again and removing both with the branch, with no cimiento command between; each preview branch's password refused by the production endpoint (field test 9) | | |
 | Inngest | Integration, keys, roundtrip event | | |
 | Turnstile | Widget, keys, domains, siteverify | | |
 | Resend | Key, test email to the test inbox | The 0.3.0 read only key check | |
@@ -161,7 +161,9 @@ Previews never read the production database by default.
   git branch only and deploys the branch again, so plain `git push` is enough; without one,
   `cimiento up` writes them. A preview built before its address exists answers with one sentence saying so and never
   reads production; the newer preview the workflow deploys reads its own branch. The app reads
-  `DATABASE_URL` and nothing else: no preview holds a Neon key. `cimiento up` also writes each
+  `DATABASE_URL` and nothing else: no preview holds a Neon key. Each preview branch gets a database
+  password of its own before its address is written, because Neon copies production's passwords
+  into a new branch; a preview's address cannot log in to production. `cimiento up` also writes each
   branch's address, and `down` removes every branch. A Neon branch starts as a copy of production
   taken when it is made; what the preview writes stays in it. `cimiento upgrade` brings a project
   made by an older version up to this.
