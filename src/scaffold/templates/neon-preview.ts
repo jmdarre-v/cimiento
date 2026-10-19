@@ -57,6 +57,19 @@ async function findBranch(name) {
   return branches.find((b) => b.name === name)
 }
 
+/** Waits until Neon has finished each operation; it refuses changes to a branch until then. */
+async function settle(operations, what) {
+  for (const op of operations ?? []) {
+    for (let i = 0; ; i++) {
+      const status = (await neon(\`/projects/\${projectId()}/operations/\${op.id}\`))?.operation?.status
+      if (status === 'finished' || status === 'skipped') break
+      if (status === 'failed' || status === 'error' || status === 'cancelled') throw new Error(\`Neon could not \${what}.\`)
+      if (i >= 60) throw new Error(\`Neon took more than two minutes to \${what}.\`)
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
+  }
+}
+
 /** The Neon branch of a git branch, made once. */
 export async function ensurePreviewBranch(gitBranch) {
   const name = previewBranchName(gitBranch)
@@ -64,6 +77,7 @@ export async function ensurePreviewBranch(gitBranch) {
   if (found) return { name, id: found.id, created: false }
   const made = await neon(\`/projects/\${projectId()}/branches\`, { method: 'POST', body: JSON.stringify({ branch: { name }, endpoints: [{ type: 'read_write' }] }) })
   if (!made?.branch?.id) throw new Error(\`Neon made no branch \${name}.\`)
+  await settle(made.operations, \`make the branch \${name}\`)
   return { name, id: made.branch.id, created: true }
 }
 
@@ -101,15 +115,7 @@ export async function ensureOwnPassword(branchId) {
   const reset = await neon(\`/projects/\${projectId()}/branches/\${branchId}/roles/\${encodeURIComponent(db.owner_name)}/reset_password\`, { method: 'POST' })
   if (!reset) throw new Error(\`Neon has no role \${db.owner_name} on the branch \${branchId}.\`)
   // The new password works once Neon has finished applying it.
-  for (const op of reset.operations ?? []) {
-    for (let i = 0; ; i++) {
-      const status = (await neon(\`/projects/\${projectId()}/operations/\${op.id}\`))?.operation?.status
-      if (status === 'finished' || status === 'skipped') break
-      if (status === 'failed' || status === 'error' || status === 'cancelled') throw new Error(\`Neon could not give the branch \${branchId} its own password.\`)
-      if (i >= 60) throw new Error(\`Neon took more than two minutes to give the branch \${branchId} its own password.\`)
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-    }
-  }
+  await settle(reset.operations, \`give the branch \${branchId} its own password\`)
   return true
 }
 

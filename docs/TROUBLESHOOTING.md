@@ -900,7 +900,7 @@ Neon returned an unexpected error.
 
 **Why:** With a personal login, cimiento always names the organization in accounts.neon, because Neon lists and creates projects per organization. The key for previews, neon.api-key, is an organization API key scoped to the one project; a member of the organization can make it. When this machine's keychain no longer holds its value, cimiento up makes a new one, revokes the old one, and writes the new one to the Actions secret and the preview env.
 
-**Looks like:** `Listing Neon projects failed`, `Creating the Neon project`
+**Looks like:** `Listing Neon projects failed`, `Creating the Neon project`, `running conflicting operations`, `Neon did not finish the work`
 
 ### NEON_MIGRATION_FAILED
 

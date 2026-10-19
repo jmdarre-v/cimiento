@@ -78,6 +78,8 @@ export class FakeV2 {
   readonly repoHooks = new Map<string, string[]>()
   readonly neonOrganizations = [{ id: 'org-fake-neon', name: 'Fake Neon Org' }]
   readonly neonProjects = new Map<string, FakeNeonProject>()
+  /** Neon operations still running, by id (BUG-115). */
+  readonly neonRunning = new Set<string>()
   /** Organization API keys, as Neon keeps them; a revoked one stays listed as revoked. */
   readonly neonApiKeys: { id: number; name: string; org_id: string; project_id?: string; key: string; revoked: boolean }[] = []
   neonProjectLimit = 10
@@ -374,17 +376,24 @@ export class FakeV2 {
       const parent = project.branches.find((b) => b.default) ?? project.branches[0]
       const branch = { id: `br-${this.id('')}`, name, password: parent?.password ?? 'fake-neon-password' }
       project.branches.push(branch)
-      return json(201, { branch, endpoints: [{ id: `ep-${branch.id}`, type: 'read_write' }] })
+      this.neonRunning.add(`op-create-${branch.id}`)
+      return json(201, { branch, endpoints: [{ id: `ep-${branch.id}`, type: 'read_write' }], operations: [{ id: `op-create-${branch.id}`, status: 'running' }] })
     }
     const reset = /^\/branches\/([^/]+)\/roles\/([^/]+)\/reset_password$/.exec(rest)
     if (reset && method === 'POST') {
       const branch = project.branches.find((b) => b.id === reset[1])
       if (!branch) return json(404, { code: '', message: 'branch not found' })
+      // Neon refuses a change while the branch's own operations run (BUG-115).
+      if (this.neonRunning.has(`op-create-${branch.id}`)) return json(423, { code: '', message: 'project already has running conflicting operations' })
       branch.password = `fake-neon-password-${this.id('')}`
       return json(200, { role: { branch_id: branch.id, name: reset[2], password: branch.password }, operations: [{ id: `op-${branch.id}`, action: 'apply_config', status: 'running' }] })
     }
     const operation = /^\/operations\/([^/]+)$/.exec(rest)
-    if (operation && method === 'GET') return json(200, { operation: { id: operation[1], status: 'finished' } })
+    if (operation && method === 'GET') {
+      // Still running the first time it is read, finished after.
+      const running = this.neonRunning.delete(operation[1])
+      return json(200, { operation: { id: operation[1], status: running ? 'running' : 'finished' } })
+    }
     const branchOne = /^\/branches\/([^/]+)(\/databases)?$/.exec(rest)
     if (branchOne) {
       const branch = project.branches.find((b) => b.id === branchOne[1])

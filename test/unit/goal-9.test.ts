@@ -114,6 +114,8 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
   interface World {
     branches: { id: string; name: string; default?: boolean; password: string }[]
     resets: string[]
+    /** Branch operations still running; Neon answers 423 to a change on that branch until they finish (BUG-115). */
+    running: Set<string>
     vercelEnv: { id: string; key: string; value: string; target: string[]; gitBranch?: string; type: string }[]
     deployments: { gitSource: { ref: string; sha: string; repoId: number } }[]
     netlifyEnv: { key: string; values: { id: string; context: string; context_parameter?: string; value: string }[] }[]
@@ -122,7 +124,7 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
 
   /** Neon, Vercel and Netlify as the workflow sees them, on one local port. */
   async function world(): Promise<{ w: World; base: string }> {
-    const w: World = { branches: [{ id: 'br-main', name: 'main', default: true, password: 'main-password' }], resets: [], vercelEnv: [], deployments: [], netlifyEnv: [], netlifyBuilds: [] }
+    const w: World = { branches: [{ id: 'br-main', name: 'main', default: true, password: 'main-password' }], resets: [], running: new Set(), vercelEnv: [], deployments: [], netlifyEnv: [], netlifyBuilds: [] }
     let n = 0
     server = createServer((req, res) => {
       let body = ''
@@ -143,12 +145,20 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
           if (reset && req.method === 'POST') {
             const branch = w.branches.find((b) => b.id === reset[1])
             if (!branch) return send(404, {})
+            if (w.running.has(`op-create-${branch.id}`)) return send(423, { message: 'project already has running conflicting operations' })
             branch.password = `own-password-${++n}`
             w.resets.push(branch.id)
             return send(200, { role: { name: 'neondb_owner', password: branch.password }, operations: [{ id: `op-${n}`, status: 'running' }] })
           }
           const op = /^\/projects\/proj-one\/operations\/([^/]+)$/.exec(p)
-          if (op) return send(200, { operation: { id: op[1], status: 'finished' } })
+          if (op) {
+            // Each operation is still running the first time it is read.
+            if (w.running.has(op[1])) {
+              w.running.delete(op[1])
+              return send(200, { operation: { id: op[1], status: 'running' } })
+            }
+            return send(200, { operation: { id: op[1], status: 'finished' } })
+          }
           const m = /^\/projects\/proj-one(?:\/(branches|connection_uri)(?:\/([^/]+)(\/databases)?)?)?$/.exec(p)
           if (!m) return send(404, { message: 'not allowed outside the project' })
           if (!m[1]) return send(200, { project: { id: 'proj-one' } })
@@ -161,7 +171,8 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
           if (!m[2] && req.method === 'POST') {
             const branch = { id: `br-${++n}`, name: input.branch.name, password: w.branches[0].password }
             w.branches.push(branch)
-            return send(201, { branch })
+            w.running.add(`op-create-${branch.id}`)
+            return send(201, { branch: { id: branch.id, name: branch.name }, operations: [{ id: `op-create-${branch.id}`, status: 'running' }] })
           }
           const branch = w.branches.find((b) => b.id === m[2])
           if (!branch) return send(404, {})
@@ -347,6 +358,17 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
     const values = w.netlifyEnv.flatMap((e) => e.values.map((v) => password(v.value)))
     expect(values).toEqual([w.branches[1].password, w.branches[1].password])
     expect(w.netlifyBuilds).toEqual(['feature/login'])
+  })
+
+  it('BUG-115: a branch just made gets its own password once Neon has finished making it, never a 423', async () => {
+    const { w, base } = await world()
+    const script = await scripts('vercel')
+    const env = { ...common(base), HOSTING: 'vercel', CIMIENTO_VERCEL_API: `${base}/vercel`, VERCEL_TOKEN: 'vercel-token-fake', VERCEL_PROJECT_ID: 'prj_one', VERCEL_TEAM_ID: 'team_fake' }
+    const push = await runScript(script, { ...env, EVENT: 'push' })
+    expect(push.code, push.out).toBe(0)
+    expect(push.out).not.toContain('423')
+    expect(w.running.size).toBe(0)
+    expect(w.resets).toHaveLength(1)
   })
 
   it('BUG-114: without a hosting token a new branch still gets its own password before cimiento up reads its address', async () => {

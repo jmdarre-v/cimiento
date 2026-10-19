@@ -135,17 +135,11 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-/** Gives the role of a preview branch a password of its own, and waits until Neon applied it. */
-async function resetPassword(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string): Promise<void> {
-  const db = await database(ctx, spec, projectId, branchId)
-  const base = `/projects/${encodeURIComponent(projectId)}`
-  const result = await neonCall<{ operations?: { id: string }[] }>(ctx, spec.id, 'POST', `${base}/branches/${encodeURIComponent(branchId)}/roles/${encodeURIComponent(db.owner_name)}/reset_password`)
-  if (!result.ok) {
-    throw neonError(spec.id, result, { code: 'NEON_API_ERROR', message: `Giving the Neon branch ${branchId} its own password failed`, hint: 'cimiento up retries this safely; until then the address of that preview is not written.' })
-  }
-  for (const op of result.body?.operations ?? []) {
+/** Waits until Neon has finished each operation; it answers 423 to a change on the branch until then (BUG-115). */
+async function settle(ctx: Ctx, spec: ResourceSpec, projectId: string, operations: { id: string }[] | undefined, what: string): Promise<void> {
+  for (const op of operations ?? []) {
     for (let i = 0; ; i++) {
-      const read = await neonCall<{ operation?: { status?: string } }>(ctx, spec.id, 'GET', `${base}/operations/${encodeURIComponent(op.id)}`)
+      const read = await neonCall<{ operation?: { status?: string } }>(ctx, spec.id, 'GET', `/projects/${encodeURIComponent(projectId)}/operations/${encodeURIComponent(op.id)}`)
       const status = read.body?.operation?.status
       if (status === 'finished' || status === 'skipped') break
       if (status === 'failed' || status === 'error' || status === 'cancelled' || i >= 60) {
@@ -153,7 +147,7 @@ async function resetPassword(ctx: Ctx, spec: ResourceSpec, projectId: string, br
           code: 'NEON_API_ERROR',
           provider: ID,
           resource: spec.id,
-          message: `Neon did not finish giving the branch ${branchId} its own password (${status ?? 'no status'}).`,
+          message: `Neon did not finish the work to ${what} (${status ?? 'no status'}).`,
           hint: 'cimiento up retries this safely; until then the address of that preview is not written.',
           retryable: true,
           needsHuman: false,
@@ -164,8 +158,19 @@ async function resetPassword(ctx: Ctx, spec: ResourceSpec, projectId: string, br
   }
 }
 
+/** Gives the role of a preview branch a password of its own, and waits until Neon applied it. */
+async function resetPassword(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string): Promise<void> {
+  const db = await database(ctx, spec, projectId, branchId)
+  const base = `/projects/${encodeURIComponent(projectId)}`
+  const result = await neonCall<{ operations?: { id: string }[] }>(ctx, spec.id, 'POST', `${base}/branches/${encodeURIComponent(branchId)}/roles/${encodeURIComponent(db.owner_name)}/reset_password`)
+  if (!result.ok) {
+    throw neonError(spec.id, result, { code: 'NEON_API_ERROR', message: `Giving the Neon branch ${branchId} its own password failed`, hint: 'cimiento up retries this safely; until then the address of that preview is not written.' })
+  }
+  await settle(ctx, spec, projectId, result.body?.operations, `give the branch ${branchId} its own password`)
+}
+
 async function createBranch(ctx: Ctx, spec: ResourceSpec, projectId: string, name: string): Promise<NeonBranch> {
-  const result = await neonCall<{ branch?: NeonBranch }>(ctx, spec.id, 'POST', `/projects/${encodeURIComponent(projectId)}/branches`, {
+  const result = await neonCall<{ branch?: NeonBranch; operations?: { id: string }[] }>(ctx, spec.id, 'POST', `/projects/${encodeURIComponent(projectId)}/branches`, {
     branch: { name },
     endpoints: [{ type: 'read_write' }],
   })
@@ -176,6 +181,7 @@ async function createBranch(ctx: Ctx, spec: ResourceSpec, projectId: string, nam
       hint: 'A Neon plan limits branches per project; the message above says whether this is that. cimiento up retries safely.',
     })
   }
+  await settle(ctx, spec, projectId, result.body.operations, `make the branch ${name}`)
   return result.body.branch
 }
 
