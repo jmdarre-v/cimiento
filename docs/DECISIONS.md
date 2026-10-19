@@ -569,3 +569,5 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-18 Goal 8: completed. Field test 8 in docs/FIELD-TEST-8.md, BUG-93 to 104, v0.4.1 tagged
   and pushed; the Supabase preview field test stopped at the free limit. npm publish of 0.4.1 is a
   person step.
+- 2026-10-18 Goal 8: 0.4.1 is published on npm. The Supabase preview field test is completed by the
+  owner's decision.

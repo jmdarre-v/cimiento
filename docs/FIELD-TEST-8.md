@@ -5,8 +5,8 @@ Goal 8 in `docs/GOALS.md`, items 1 to 4, unattended, on the existing sessions, w
 each run log in `~/.cimiento/runs/`; all times are UTC on 2026-10-18. Account identifiers are
 left out.
 
-Status: items 1 to 3 passed on real accounts; item 4 is recorded as stopped by Supabase's free
-limit, as the goal allows. The field test found BUG-101 to 104, each fixed and proven on the same
+Status: items 1 to 3 passed on real accounts; item 4, the Supabase preview project, is completed
+by the owner's decision after the run stopped at Supabase's free limit. The field test found BUG-101 to 104, each fixed and proven on the same
 project. Every resource is confirmed gone.
 
 ## Item 1: Neon preview branches without cimiento up, on cimiento-test-8
@@ -112,8 +112,8 @@ From the first and last line of each run log.
 
 Ids continue from BUG-92 in `docs/FIELD-TEST-7.md`. Each has a knowledge base entry or `seen:`
 note and a regression test in `test/unit/goal-8.test.ts` that failed on the code before its fix.
-BUG-93 to 100 came from the goal's list, found by those tests; BUG-101 to 104 came from this field
-test.
+BUG-93 to 97, 99 and 100 came from the goal's list, found by those tests; BUG-98 came from building
+a scaffolded project locally; BUG-101 to 104 came from this field test.
 
 | Id | Description | Fix commit |
 |---|---|---|

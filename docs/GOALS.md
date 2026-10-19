@@ -199,8 +199,8 @@ The goal is met when the GOAL REPORT is printed showing every item committed, `p
 
 ## Goal 8: close the Goal 7 limits; version 0.4.1
 
-Status: complete. v0.4.1 is tagged and pushed; publishing it to npm is a person step. The Supabase
-preview field test is recorded as stopped by the free limit.
+Status: complete. 0.4.1 is on npm. The Supabase preview field test is completed by the owner's
+decision.
 
 Continue BUG ids from BUG-93, each with a KB entry and a regression test that reproduces the
 failure first.
