@@ -391,3 +391,19 @@ describe('BUG-104: Next.js compiled a parenthesized await used as a template tag
     expect(route).toMatch(/const query = await sql\(\)\n\s+const rows = \(await query`/)
   })
 })
+
+describe('item 4: the Supabase preview field test runs only when the account has room', () => {
+  it('two free slots, a chosen paid organization, or a recorded stop', async () => {
+    // @ts-expect-error a plain .mjs field test script with no types
+    const { decide } = await import('../field/supabase-preview.mjs')
+    const orgs = [
+      { id: 'free-a', name: 'Free A', paid: false },
+      { id: 'paid-b', name: 'Paid B', paid: true },
+    ]
+    expect(decide({ orgs, active: 0 })).toMatchObject({ run: true, org: 'free-a' })
+    expect(decide({ orgs, active: 1 })).toMatchObject({ run: false })
+    expect(decide({ orgs, active: 2 }).reason).toMatch(/2 active free projects of 2, and this test needs 2 slots/)
+    expect(decide({ orgs, active: 2, chosen: 'paid-b' })).toMatchObject({ run: true, org: 'paid-b' })
+    expect(decide({ orgs, active: 2, chosen: 'nope' }).reason).toMatch(/cannot see/)
+  })
+})

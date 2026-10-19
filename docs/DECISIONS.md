@@ -561,3 +561,8 @@ One line per decision the spec does not cover, with the reasoning.
   project cimiento created: none is null, strict is deploymentType all. standard is Vercel's own
   default for a new project, so cimiento never patches toward it and a setting changed in the
   dashboard stays. An adopted project is never changed (BUG-103).
+- 2026-10-18 Goal 8: the Supabase preview field test is test/field/supabase-preview.mjs. It runs
+  only with two free slots (the app needs its production project and its preview project) or with
+  CIMIENTO_FIELD_SUPABASE_ORG naming a paid organization the person chose; otherwise it prints a
+  blocked record and exits 0. It never pauses or deletes a project it did not create, and makes
+  nothing but cimiento-test-8s, which it takes down at the end.
