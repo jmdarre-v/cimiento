@@ -61,18 +61,33 @@ export const hostingNeonRule: WiringRule = {
         dependsOn: ['neon.project'],
         inputs: { projectId: { deferred: 'neon.project:projectId' }, name: `cimiento-${m.slug}-preview`, secret: NEON_KEY_SECRET },
       })
-      edges.push({ from: hostingEnvId(hosting, NEON_KEY_SECRET, 'preview'), to: 'neon.api-key' }, { from: ciSecretId(NEON_KEY_SECRET), to: 'neon.api-key' })
-      // A key scoped to one project cannot list projects, so the id of that project goes with it
-      // to the workflow and to previews (BUG-102). It is not a secret.
-      const projectId = { deferred: 'neon.project:projectId' }
-      specs.push(hostingEnvSpec(hosting, NEON_PROJECT_ENV, 'preview', { source: 'literal', value: projectId, public: true }, ['neon.project']), {
-        id: ciSecretId(NEON_PROJECT_ENV),
+      edges.push({ from: ciSecretId(NEON_KEY_SECRET), to: 'neon.api-key' })
+      // The workflow needs the ids to act on, which are not secrets; they go only to GitHub
+      // Actions, beside the keys (BUG-102, BUG-105). No Neon key or id reaches a preview.
+      const literal = (key: string, ref: string, dependsOn: string): ResourceSpec => ({
+        id: ciSecretId(key),
         kind: 'binding',
         provider: 'github',
-        dependsOn: ['github.repo', 'neon.project'],
-        inputs: { repo: { deferred: 'github.repo:fullName' }, key: NEON_PROJECT_ENV, source: 'literal', value: projectId },
+        dependsOn: ['github.repo', dependsOn],
+        inputs: { repo: { deferred: 'github.repo:fullName' }, key, source: 'literal', value: { deferred: ref } },
       })
-      edges.push({ from: hostingDeploymentId(hosting), to: hostingEnvId(hosting, NEON_PROJECT_ENV, 'preview') })
+      specs.push(literal(NEON_PROJECT_ENV, 'neon.project:projectId', 'neon.project'))
+      if (hosting === 'vercel') {
+        specs.push(
+          {
+            id: 'vercel.api-token',
+            kind: 'resource',
+            provider: 'vercel',
+            dependsOn: ['vercel.session'],
+            inputs: { name: `cimiento-${m.slug}-preview-database`, secret: 'VERCEL_TOKEN' },
+          },
+          literal('VERCEL_PROJECT_ID', 'vercel.project:projectId', 'vercel.project'),
+          literal('VERCEL_TEAM_ID', 'vercel.project:orgId', 'vercel.project'),
+        )
+        edges.push({ from: ciSecretId('VERCEL_TOKEN'), to: 'vercel.api-token' })
+      } else {
+        specs.push(literal('NETLIFY_SITE_ID', 'netlify.project:projectId', 'netlify.project'))
+      }
     }
     return { specs, edges }
   },

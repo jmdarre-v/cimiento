@@ -130,7 +130,15 @@ export function completeFragment(input: ManifestInput): ManifestInput {
   const sharedPreviews = environments !== undefined && !Array.isArray(environments) && (environments as Record<string, { database?: string } | null>).preview?.database === 'shared'
   const hasPreview = environments === undefined || (Array.isArray(environments) ? environments.includes('preview') : 'preview' in environments)
   if (slots.database === 'neon' && slots.repo === 'github' && hasPreview && !sharedPreviews && !secrets.some((s) => s.name === 'NEON_API_KEY')) {
-    secrets.push({ name: 'NEON_API_KEY', sinks: ['ci', 'hosting'], environments: ['preview'], source: 'generated' })
+    // The key stays in GitHub Actions: a preview never holds a key that can read production (BUG-105).
+    secrets.push({ name: 'NEON_API_KEY', sinks: ['ci'], environments: ['preview'], source: 'generated' })
+    // The workflow writes the branch address into the hosting env with a token of its own.
+    if (hosting === 'vercel' && !secrets.some((s) => s.name === 'VERCEL_TOKEN')) {
+      secrets.push({ name: 'VERCEL_TOKEN', sinks: ['ci'], environments: ['preview'], source: 'generated' })
+    }
+    if (hosting === 'netlify' && !secrets.some((s) => s.name === 'NETLIFY_AUTH_TOKEN')) {
+      secrets.push({ name: 'NETLIFY_AUTH_TOKEN', sinks: ['ci'], environments: ['preview'], source: 'keychain', url: 'https://app.netlify.com/user/applications#personal-access-tokens' })
+    }
   }
   out.secrets = secrets
   return out

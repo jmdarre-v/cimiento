@@ -1,18 +1,20 @@
-// Neon preview databases without cimiento up (Goal 8, BUG-94, BUG-95). The scaffold ships a GitHub
-// Actions workflow that makes a Neon branch for every git branch besides production on push and
-// deletes it when the git branch is deleted, with a key scoped to the one Neon project. The app
-// finds the branch for its own preview at request time with the same key, so the race between the
-// build and the workflow does not matter. A preview whose branch does not exist yet fails with
-// one clear sentence; nothing falls back to the production database, because previews have no
-// DATABASE_URL of their own unless cimiento up wrote one for that branch.
+// Neon preview databases without cimiento up (Goal 8) and without a Neon key in the preview (Goal 9,
+// BUG-105 to 107). The scaffold ships a GitHub Actions workflow that, on every push of a branch
+// besides production, makes a Neon branch for it, writes that branch's two addresses into the
+// hosting env for that git branch only, and deploys the branch again so the preview is built with
+// them; when the git branch is deleted it removes both. The Neon key, scoped to the one project,
+// and the hosting token live only in GitHub Actions secrets. The app reads DATABASE_URL and
+// nothing else: a preview built before its address exists says so in one sentence and never
+// reaches production.
 
+import { hostingOf } from '../../core/hosting'
 import type { Manifest } from '../../manifest/schema'
 
-/** The one helper the workflow script and the app share, so both use the same branch name. */
-export const NEON_PREVIEW_HELPER = `// Written by cimiento. Finds, makes and removes the Neon branch a preview reads. The workflow in
-// .github/workflows/preview-database.yml and lib/db.ts both use it, so they agree on the name.
-// NEON_API_KEY is a key scoped to this one Neon project, which cannot delete the project, and
-// NEON_PROJECT_ID names that project: a scoped key cannot list projects to find it.
+/** The Neon calls the workflow makes, and the branch name cimiento uses too. */
+export const NEON_PREVIEW_HELPER = `// Written by cimiento. Makes, reads and removes the Neon branch of a git branch, for
+// .github/workflows/preview-database.yml. NEON_API_KEY is a key scoped to this one Neon project,
+// which cannot delete the project; NEON_PROJECT_ID names that project, since a scoped key cannot
+// list projects. Both live only in GitHub Actions secrets, never in a preview.
 
 const API = process.env.CIMIENTO_NEON_API || 'https://console.neon.tech/api/v2'
 
@@ -24,7 +26,7 @@ export function previewBranchName(gitBranch) {
 
 async function neon(path, init = {}) {
   const key = process.env.NEON_API_KEY
-  if (!key) throw new Error('NEON_API_KEY is not set, so this preview cannot find its database. cimiento up writes it for previews.')
+  if (!key) throw new Error('The NEON_API_KEY Actions secret is not set. cimiento up writes it.')
   const res = await fetch(\`\${API}\${path}\`, {
     ...init,
     headers: { authorization: \`Bearer \${key}\`, accept: 'application/json', 'content-type': 'application/json' },
@@ -34,82 +36,178 @@ async function neon(path, init = {}) {
   return res.json()
 }
 
-/** This app's Neon project, which the key must reach. */
-export async function previewProject() {
-  const projectId = process.env.NEON_PROJECT_ID
-  if (!projectId) throw new Error('NEON_PROJECT_ID is not set, so this preview cannot find its database. cimiento up writes it for previews.')
-  if (!(await neon(\`/projects/\${encodeURIComponent(projectId)}\`))) {
-    throw new Error(\`NEON_API_KEY cannot reach the Neon project \${projectId}; cimiento up makes a key scoped to it.\`)
-  }
-  return projectId
+function projectId() {
+  const id = process.env.NEON_PROJECT_ID
+  if (!id) throw new Error('The NEON_PROJECT_ID Actions secret is not set. cimiento up writes it.')
+  return id
 }
 
-async function findBranch(projectId, name) {
-  const branches = (await neon(\`/projects/\${projectId}/branches\`))?.branches ?? []
+let reached = false
+
+/** The key must reach the project; a scoped key answers 404 for any other. */
+async function reach() {
+  if (reached) return
+  if (!(await neon(\`/projects/\${projectId()}\`))) throw new Error(\`NEON_API_KEY cannot reach the Neon project \${projectId()}; cimiento up makes a key scoped to it.\`)
+  reached = true
+}
+
+async function findBranch(name) {
+  await reach()
+  const branches = (await neon(\`/projects/\${projectId()}/branches\`))?.branches ?? []
   return branches.find((b) => b.name === name)
 }
 
-/** The address of this git branch's own database. It never returns production's. */
-export async function previewDatabaseUrl(gitBranch) {
-  const projectId = await previewProject()
+/** The Neon branch of a git branch, made once. */
+export async function ensurePreviewBranch(gitBranch) {
   const name = previewBranchName(gitBranch)
-  const branch = await findBranch(projectId, name)
-  if (!branch) {
-    throw new Error(
-      \`No Neon branch \${name} for the preview of \${gitBranch} yet. The preview database workflow in GitHub Actions makes it on every push; reload once it has run. This preview never falls back to the production database.\`,
-    )
+  const found = await findBranch(name)
+  if (found) return { name, id: found.id, created: false }
+  const made = await neon(\`/projects/\${projectId()}/branches\`, { method: 'POST', body: JSON.stringify({ branch: { name }, endpoints: [{ type: 'read_write' }] }) })
+  if (!made?.branch?.id) throw new Error(\`Neon made no branch \${name}.\`)
+  return { name, id: made.branch.id, created: true }
+}
+
+/** The pooled and direct addresses of a branch. */
+export async function branchAddresses(branchId) {
+  const db = (await neon(\`/projects/\${projectId()}/branches/\${branchId}/databases\`))?.databases?.[0] ?? { name: 'neondb', owner_name: 'neondb_owner' }
+  const address = async (pooled) => {
+    const query = new URLSearchParams({ branch_id: branchId, database_name: db.name, role_name: db.owner_name, pooled: String(pooled) })
+    const uri = (await neon(\`/projects/\${projectId()}/connection_uri?\${query}\`))?.uri
+    if (!uri) throw new Error(\`Neon gave no address for the branch \${branchId}.\`)
+    return uri
   }
-  const db = (await neon(\`/projects/\${projectId}/branches/\${branch.id}/databases\`))?.databases?.[0] ?? { name: 'neondb', owner_name: 'neondb_owner' }
-  const query = new URLSearchParams({ branch_id: branch.id, database_name: db.name, role_name: db.owner_name, pooled: 'true' })
-  const uri = (await neon(\`/projects/\${projectId}/connection_uri?\${query}\`))?.uri
-  if (!uri) throw new Error(\`Neon gave no address for \${name}.\`)
-  return { url: uri, branch: name }
+  return { DATABASE_URL: await address(true), DATABASE_URL_UNPOOLED: await address(false) }
 }
 
-/** Makes the branch for a git branch, once. */
-export async function createPreviewBranch(gitBranch) {
-  const projectId = await previewProject()
-  const name = previewBranchName(gitBranch)
-  if (await findBranch(projectId, name)) return { name, created: false }
-  await neon(\`/projects/\${projectId}/branches\`, { method: 'POST', body: JSON.stringify({ branch: { name }, endpoints: [{ type: 'read_write' }] }) })
-  return { name, created: true }
-}
-
-/** Removes the branch of a git branch that was deleted. */
+/** Removes the Neon branch of a deleted git branch. */
 export async function deletePreviewBranch(gitBranch) {
-  const projectId = await previewProject()
   const name = previewBranchName(gitBranch)
-  const branch = await findBranch(projectId, name)
-  if (!branch) return { name, deleted: false }
-  await neon(\`/projects/\${projectId}/branches/\${branch.id}\`, { method: 'DELETE' })
+  const found = await findBranch(name)
+  if (!found) return { name, deleted: false }
+  await neon(\`/projects/\${projectId()}/branches/\${found.id}\`, { method: 'DELETE' })
   return { name, deleted: true }
 }
 `
 
-const HELPER_TYPES = `// Types for neon-preview.mjs, written by cimiento.
-export function previewBranchName(gitBranch: string): string
-export function previewProject(): Promise<string>
-export function previewDatabaseUrl(gitBranch: string): Promise<{ url: string; branch: string }>
-export function createPreviewBranch(gitBranch: string): Promise<{ name: string; created: boolean }>
-export function deletePreviewBranch(gitBranch: string): Promise<{ name: string; deleted: boolean }>
-`
-
 const SCRIPT = `// Written by cimiento. Run by .github/workflows/preview-database.yml on every push of a branch
-// besides production, and on every deleted branch.
-import { createPreviewBranch, deletePreviewBranch } from '../../lib/neon-preview.mjs'
+// besides production, and on every deleted branch. It writes only the branch's own addresses into
+// the hosting env, for that git branch only, so a preview never holds a Neon key.
+import { branchAddresses, deletePreviewBranch, ensurePreviewBranch } from './neon-preview.mjs'
 
+const KEYS = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED']
 const branch = process.env.GIT_BRANCH
-if (!branch) {
-  console.error('GIT_BRANCH is not set.')
-  process.exit(1)
+const hosting = process.env.HOSTING
+
+function need(name) {
+  const value = process.env[name]
+  if (!value) throw new Error(\`The \${name} Actions secret is not set. cimiento up writes it.\`)
+  return value
 }
+
+async function call(base, token, path, init = {}) {
+  const res = await fetch(\`\${base}\${path}\`, {
+    ...init,
+    headers: { authorization: \`Bearer \${token}\`, accept: 'application/json', 'content-type': 'application/json' },
+  })
+  if (!res.ok && res.status !== 404) throw new Error(\`\${hosting} answered \${res.status} to \${init.method || 'GET'} \${path.split('?')[0]}.\`)
+  return res.status === 204 || res.status === 404 ? undefined : res.json().catch(() => undefined)
+}
+
+const vercel = {
+  base: process.env.CIMIENTO_VERCEL_API || 'https://api.vercel.com',
+  path(path) {
+    return \`\${path}\${path.includes('?') ? '&' : '?'}teamId=\${encodeURIComponent(need('VERCEL_TEAM_ID'))}\`
+  },
+  request(path, init) {
+    return call(this.base, need('VERCEL_TOKEN'), this.path(path), init)
+  },
+  async entries() {
+    const envs = (await this.request(\`/v9/projects/\${need('VERCEL_PROJECT_ID')}/env\`))?.envs ?? []
+    return envs.filter((e) => KEYS.includes(e.key) && e.gitBranch === branch)
+  },
+  async write(values) {
+    for (const [key, value] of Object.entries(values)) {
+      await this.request(\`/v10/projects/\${need('VERCEL_PROJECT_ID')}/env?upsert=true\`, {
+        method: 'POST',
+        body: JSON.stringify({ key, value, type: 'encrypted', target: ['preview'], gitBranch: branch }),
+      })
+    }
+  },
+  /** Vercel reads env when it starts a build, so the branch is built again with its addresses. */
+  async deploy() {
+    const project = await this.request(\`/v9/projects/\${need('VERCEL_PROJECT_ID')}\`)
+    if (!project?.link?.repoId) throw new Error('The Vercel project is not linked to the repository.')
+    await this.request('/v13/deployments', {
+      method: 'POST',
+      body: JSON.stringify({ name: project.name, project: project.id, gitSource: { type: 'github', repoId: project.link.repoId, ref: branch, sha: process.env.GIT_SHA } }),
+    })
+  },
+  async remove() {
+    for (const entry of await this.entries()) await this.request(\`/v9/projects/\${need('VERCEL_PROJECT_ID')}/env/\${entry.id}\`, { method: 'DELETE' })
+  },
+}
+
+const netlify = {
+  base: process.env.CIMIENTO_NETLIFY_API || 'https://api.netlify.com/api/v1',
+  request(path, init) {
+    return call(this.base, need('NETLIFY_AUTH_TOKEN'), path, init)
+  },
+  async account() {
+    const site = await this.request(\`/sites/\${need('NETLIFY_SITE_ID')}\`)
+    if (!site?.account_id) throw new Error('Netlify gave no team for the site.')
+    return site.account_id
+  },
+  async all(account) {
+    return (await this.request(\`/accounts/\${account}/env?site_id=\${need('NETLIFY_SITE_ID')}\`)) ?? []
+  },
+  async entries() {
+    const account = await this.account()
+    return (await this.all(account)).filter((e) => KEYS.includes(e.key) && (e.values ?? []).some((v) => v.context === 'branch' && v.context_parameter === branch))
+  },
+  async write(values) {
+    const account = await this.account()
+    const existing = await this.all(account)
+    const site = need('NETLIFY_SITE_ID')
+    for (const [key, value] of Object.entries(values)) {
+      const entry = { context: 'branch', context_parameter: branch, value }
+      if (existing.some((e) => e.key === key)) await this.request(\`/accounts/\${account}/env/\${key}?site_id=\${site}\`, { method: 'PATCH', body: JSON.stringify(entry) })
+      else await this.request(\`/accounts/\${account}/env?site_id=\${site}\`, { method: 'POST', body: JSON.stringify([{ key, values: [entry] }]) })
+    }
+  },
+  /** Netlify reads env when it builds, so the branch is built again with its addresses. */
+  async deploy() {
+    await this.request(\`/sites/\${need('NETLIFY_SITE_ID')}/builds?branch=\${encodeURIComponent(branch)}\`, { method: 'POST' })
+  },
+  async remove() {
+    const account = await this.account()
+    for (const entry of await this.all(account)) {
+      if (!KEYS.includes(entry.key)) continue
+      for (const v of entry.values ?? []) {
+        if (v.context !== 'branch' || v.context_parameter !== branch) continue
+        await this.request(\`/accounts/\${account}/env/\${entry.key}/value/\${v.id}?site_id=\${need('NETLIFY_SITE_ID')}\`, { method: 'DELETE' })
+      }
+    }
+  },
+}
+
 try {
+  if (!branch) throw new Error('GIT_BRANCH is not set.')
+  const host = hosting === 'netlify' ? netlify : hosting === 'vercel' ? vercel : undefined
+  if (!host) throw new Error(\`HOSTING is \${hosting}, not vercel or netlify.\`)
   if (process.env.EVENT === 'delete') {
+    await host.remove()
     const { name, deleted } = await deletePreviewBranch(branch)
-    console.log(deleted ? \`Deleted the Neon branch \${name}.\` : \`No Neon branch \${name}; nothing to delete.\`)
+    console.log(\`Removed the database address of \${branch}. \${deleted ? \`Deleted the Neon branch \${name}.\` : \`No Neon branch \${name}.\`}\`)
   } else {
-    const { name, created } = await createPreviewBranch(branch)
+    const { name, id, created } = await ensurePreviewBranch(branch)
     console.log(created ? \`Created the Neon branch \${name}.\` : \`The Neon branch \${name} already exists.\`)
+    if ((await host.entries()).length < KEYS.length) {
+      await host.write(await branchAddresses(id))
+      await host.deploy()
+      console.log(\`Wrote the database address for \${branch} only, and deployed it again.\`)
+    } else {
+      console.log(\`The database address for \${branch} is already in place.\`)
+    }
   }
 } catch (err) {
   console.error(err instanceof Error ? err.message : String(err))
@@ -119,10 +217,19 @@ try {
 
 function workflow(m: Manifest): string {
   const production = m.options.github.defaultBranch
+  const hosting = hostingOf(m) ?? 'vercel'
+  const hostSecrets =
+    hosting === 'netlify'
+      ? `          NETLIFY_AUTH_TOKEN: \${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: \${{ secrets.NETLIFY_SITE_ID }}`
+      : `          VERCEL_TOKEN: \${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: \${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_TEAM_ID: \${{ secrets.VERCEL_TEAM_ID }}`
   return `name: preview database
 
 # Written by cimiento. Every git branch besides ${production} gets its own Neon branch, made on push
-# and deleted with the git branch, so its preview never reads the production database.
+# and deleted with the git branch. Only that branch's address goes into the hosting env, for that
+# git branch only; the keys below stay in GitHub Actions.
 
 on:
   push:
@@ -144,28 +251,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Make or remove the Neon branch
+      - name: Make or remove the preview database
         env:
+          HOSTING: ${hosting}
           NEON_API_KEY: \${{ secrets.NEON_API_KEY }}
           NEON_PROJECT_ID: \${{ secrets.NEON_PROJECT_ID }}
+${hostSecrets}
           EVENT: \${{ github.event_name }}
           GIT_BRANCH: \${{ github.event_name == 'delete' && github.event.ref || github.ref_name }}
+          GIT_SHA: \${{ github.sha }}
         run: node .github/scripts/preview-database.mjs
 `
 }
 
-const DB = `// Written by cimiento. The address of this deployment's own database: DATABASE_URL when the
-// environment has one (production, development, or a preview branch cimiento up wrote), else, on
-// a preview, the Neon branch the preview database workflow made for this git branch. There is no
-// other fallback, so a preview never reads the production database.
+const DB = `// Written by cimiento. This deployment's own database: DATABASE_URL and nothing else. A preview
+// gets it from the preview database workflow, for its git branch only; one built before that says
+// so, and never falls back to the production database.
 import { neon } from '@neondatabase/serverless'
-import { previewDatabaseUrl } from './neon-preview.mjs'
-
-export interface Database {
-  url: string
-  source: 'env' | 'preview branch'
-  branch?: string
-}
 
 /** The git branch of this preview, or undefined outside a preview. */
 export function previewGitBranch(): string | undefined {
@@ -174,48 +276,43 @@ export function previewGitBranch(): string | undefined {
   return undefined
 }
 
-let resolved: Promise<Database> | undefined
-
-export function database(): Promise<Database> {
-  if (!resolved) {
-    resolved = (async (): Promise<Database> => {
-      if (process.env.DATABASE_URL) return { url: process.env.DATABASE_URL, source: 'env' }
-      const branch = previewGitBranch()
-      if (!branch) throw new Error('DATABASE_URL is not set. Run cimiento env pull for local development, or cimiento doctor.')
-      const found = await previewDatabaseUrl(branch)
-      return { url: found.url, source: 'preview branch', branch: found.branch }
-    })()
-    // A preview whose branch did not exist yet looks again on the next request.
-    resolved.catch(() => {
-      resolved = undefined
-    })
+export function databaseUrl(): string {
+  const url = process.env.DATABASE_URL
+  if (url) return url
+  const branch = previewGitBranch()
+  if (branch) {
+    throw new Error(
+      \`No database for the preview of \${branch} yet. The preview database workflow in GitHub Actions makes its Neon branch, writes its address for this branch only and deploys it again; open that newer preview once it is ready. This preview never falls back to the production database.\`,
+    )
   }
-  return resolved
+  throw new Error('DATABASE_URL is not set. Run cimiento env pull for local development, or cimiento doctor.')
 }
 
 export async function sql() {
-  return neon((await database()).url)
+  return neon(databaseUrl())
 }
 `
 
 const ROUTE = `// Written by cimiento. Says which database this deployment reads, by the Neon endpoint name only,
-// and proves it answers. cimiento's field tests read it; the address itself is never shown.
+// proves it answers, and says whether a Neon API key is within its reach. The address itself is
+// never shown.
 import { NextResponse } from 'next/server'
-import { database, sql } from '@/lib/db'
+import { databaseUrl, previewGitBranch, sql } from '@/lib/db'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+  const neonKeyInEnv = Boolean(process.env.NEON_API_KEY)
+  const branch = previewGitBranch() ?? null
   try {
-    const db = await database()
+    const endpoint = new URL(databaseUrl()).hostname.split('.')[0].replace(/-pooler$/, '')
     // The query function first, then the tagged query: Next.js compiled an awaited call used as
     // a template tag into a call on the promise itself (BUG-104).
     const query = await sql()
     const rows = (await query\`select count(*)::int as count from public.cimiento_baseline\`) as { count: number }[]
-    const endpoint = new URL(db.url).hostname.split('.')[0].replace(/-pooler$/, '')
-    return NextResponse.json({ ok: true, source: db.source, branch: db.branch ?? null, endpoint, rows: rows[0]?.count ?? 0 })
+    return NextResponse.json({ ok: true, branch, endpoint, rows: rows[0]?.count ?? 0, neonKeyInEnv })
   } catch (err) {
-    return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 503 })
+    return NextResponse.json({ ok: false, branch, error: err instanceof Error ? err.message : String(err), neonKeyInEnv }, { status: 503 })
   }
 }
 `
@@ -223,11 +320,13 @@ export async function GET() {
 /** The files, for a nextjs-app with Neon, a GitHub repository, hosting and previews of their own. */
 export function neonPreviewFiles(m: Manifest): Record<string, string> {
   return {
-    'lib/neon-preview.mjs': NEON_PREVIEW_HELPER,
-    'lib/neon-preview.d.mts': HELPER_TYPES,
     'lib/db.ts': DB,
     'app/api/cimiento/database/route.ts': ROUTE,
+    '.github/scripts/neon-preview.mjs': NEON_PREVIEW_HELPER,
     '.github/scripts/preview-database.mjs': SCRIPT,
     '.github/workflows/preview-database.yml': workflow(m),
   }
 }
+
+/** Files earlier versions wrote that this scaffold no longer has: cimiento upgrade removes them. */
+export const RETIRED_FILES = ['lib/neon-preview.mjs', 'lib/neon-preview.d.mts']

@@ -22,6 +22,24 @@ deprecated on npm with a message that names the fixed one.
 
 A leak of a value through any of those paths is a vulnerability; please report it.
 
+## What GitHub Actions holds for preview databases
+
+A project with Neon, a GitHub repository and hosting has a workflow, `preview-database`, that
+makes a Neon branch per git branch and writes its address into the hosting env. It holds, in
+GitHub Actions secrets only:
+
+- `NEON_API_KEY`, an organization API key scoped to the app's one Neon project. It can make,
+  read and delete that project's branches, the production branch included, but cannot delete the
+  project or reach another. cimiento makes it, and `down` revokes it.
+- `VERCEL_TOKEN`, a Vercel token scoped to the team in `stack.yaml`, which cimiento makes for the
+  workflow and `down` revokes; on Netlify, `NETLIFY_AUTH_TOKEN`, a personal access token you make,
+  because Netlify offers no API to make one.
+- The project, team and site ids, which are not secrets.
+
+Previews hold none of these, only their own branch's address (since 0.4.2; 0.4.1 put the Neon key
+in the preview env). Anyone who can push a branch to the repository controls what the workflow
+runs and so can read these secrets; give push access accordingly.
+
 ## What cimiento does not promise
 
 - The `.env` hook in the Claude Code plugin and the `.claude/settings.json` deny rule are guards

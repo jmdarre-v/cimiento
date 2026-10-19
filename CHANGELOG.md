@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Preview credentials
+
+- Previews no longer hold a Neon key. The preview database workflow writes only the branch's own
+  addresses into the hosting env, for that git branch only, and deploys it again; `NEON_API_KEY`
+  stays in GitHub Actions. 0.4.1 put `NEON_API_KEY` in the preview env, where preview code could
+  read the production branch with it; run `cimiento upgrade` in a project made by 0.4.1.
+- On Vercel the workflow uses `VERCEL_TOKEN`, a token cimiento makes for the team and `down`
+  revokes. On Netlify it uses `NETLIFY_AUTH_TOKEN`, a personal access token you make, because
+  Netlify has no API to make one.
+
 ## 0.4.1
 
 Closes the limits 0.4.0 left: Neon previews without `cimiento up`, the commit stamp on CLI deploys,

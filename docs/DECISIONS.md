@@ -571,3 +571,17 @@ One line per decision the spec does not cover, with the reasoning.
   person step.
 - 2026-10-18 Goal 8: 0.4.1 is published on npm. The Supabase preview field test is completed by the
   owner's decision.
+- 2026-10-19 Goal 9: previews hold no Neon key (BUG-105). The preview database workflow makes the
+  Neon branch, writes DATABASE_URL and DATABASE_URL_UNPOOLED as Vercel preview values with
+  gitBranch or Netlify branch context values (Netlify's per branch value is the branch context
+  with context_parameter), and deploys the branch again, since both hosts read env when a build
+  starts and the push build starts with the workflow. It writes only when the branch's values are
+  missing, so a later push neither rewrites nor redeploys. NEON_API_KEY has sink ci only; the Neon
+  helper moved to .github/scripts and the app reads DATABASE_URL only.
+- 2026-10-19 Goal 9: the workflow's Vercel credential is VERCEL_TOKEN, made by vercel.api-token
+  with the CLI login through POST /v3/user/tokens with the team's teamId, kept as a generated
+  secret with sink ci only and revoked by down. Netlify has no documented API to make a personal
+  access token (its Open API lists none; the forum's create_token is internal), so on Netlify
+  NETLIFY_AUTH_TOKEN is a keychain secret with sink ci that a person makes. cimiento does not copy
+  the Netlify CLI's own login into GitHub: it is the person's whole account and cannot be revoked
+  without logging the CLI out.

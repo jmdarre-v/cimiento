@@ -155,16 +155,15 @@ this table is about real accounts.
 Previews never read the production database by default.
 
 - Neon: every git branch besides production gets a Neon branch of the project. The scaffold's
-  GitHub Actions workflow, `preview-database`, makes it on every push and deletes it when the git
-  branch is deleted, and the app finds its own branch at request time, so plain `git push` is
-  enough. A preview whose branch is not made yet answers with one sentence saying so and never
-  reads production; reload once the workflow has run. Both use `NEON_API_KEY`, a key cimiento makes
-  scoped to the one Neon project (it cannot delete the project or reach another), keeps in the
-  keychain and writes only to the Actions secret and the preview env; `down` revokes it.
-  `cimiento up` also writes each branch's address for its previews, and `down` removes every
-  branch. A Neon branch starts as a copy of production taken when it is made; what the preview
-  writes stays in it. A project made by 0.4.0 or older gets the workflow by copying it from a new
-  scaffold.
+  GitHub Actions workflow, `preview-database`, makes it on every push, writes that branch's two
+  addresses into the hosting env for that git branch only, and deploys the branch again so its
+  preview is built with them; when the git branch is deleted it removes both. Plain `git push` is
+  enough. A preview built before its address exists answers with one sentence saying so and never
+  reads production; the newer preview the workflow deploys reads its own branch. The app reads
+  `DATABASE_URL` and nothing else: no preview holds a Neon key. `cimiento up` also writes each
+  branch's address, and `down` removes every branch. A Neon branch starts as a copy of production
+  taken when it is made; what the preview writes stays in it. `cimiento upgrade` brings a project
+  made by an older version up to this.
 - Supabase: previews read a second project, `<slug>-preview`, with the same migrations and its own
   sign in addresses. Through the Vercel Marketplace it is a second Marketplace database connected
   to the preview environment only, and production's is connected to production and development.

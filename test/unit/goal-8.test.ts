@@ -88,7 +88,8 @@ import { previewBranchName } from '../../src/core/hosting'
 import { manifestFor } from './helpers'
 import { scaffoldFiles } from '../../src/scaffold'
 
-const PREVIEW_FILES = ['.github/workflows/preview-database.yml', '.github/scripts/preview-database.mjs', 'lib/neon-preview.mjs', 'lib/neon-preview.d.mts', 'lib/db.ts', 'app/api/cimiento/database/route.ts']
+// Goal 9 moved the Neon helper from lib/ to .github/scripts/, out of the app (BUG-107).
+const PREVIEW_FILES = ['.github/workflows/preview-database.yml', '.github/scripts/preview-database.mjs', '.github/scripts/neon-preview.mjs', 'lib/db.ts', 'app/api/cimiento/database/route.ts']
 
 describe('BUG-94: the scaffold gives previews a way to their own Neon branch without cimiento up', () => {
   it('vercel, neon and github: the workflow, its script, the helper, the database module and the route, and the Neon driver', () => {
@@ -174,11 +175,11 @@ describe('BUG-95: the workflow script and the app find the preview database by t
   /** The generated files, written to disk and imported the way the workflow and the app import them. */
   async function generated(): Promise<{ helper: Record<string, (...a: string[]) => Promise<unknown>> & { previewBranchName: (b: string) => string }; script: string }> {
     const files = scaffoldFiles(manifestFor({ slots: { repo: 'github', hosting: 'vercel', database: 'neon' } }))
-    for (const path of ['lib/neon-preview.mjs', '.github/scripts/preview-database.mjs']) {
+    for (const path of ['.github/scripts/neon-preview.mjs', '.github/scripts/preview-database.mjs']) {
       mkdirSync(join(root, path, '..'), { recursive: true })
       writeFileSync(join(root, path), files[path])
     }
-    const helper = await import(`${pathToFileURL(join(root, 'lib/neon-preview.mjs')).href}?t=${Date.now()}`)
+    const helper = await import(`${pathToFileURL(join(root, '.github/scripts/neon-preview.mjs')).href}?t=${Date.now()}`)
     return { helper, script: join(root, '.github/scripts/preview-database.mjs') }
   }
 
@@ -199,43 +200,39 @@ describe('BUG-95: the workflow script and the app find the preview database by t
     }
   })
 
-  it('a push creates the Neon branch once, a second push changes nothing, deleting the git branch removes it', async () => {
+  it('the workflow helper makes the Neon branch once and removes it with the git branch (Goal 9 moved the hosting writes to the script, tested in goal-9)', async () => {
     const neon = await fakeNeon()
-    const { script } = await generated()
-    const first = await runScript(script, 'push', 'feature/login')
-    expect(first.code, first.out).toBe(0)
+    const { helper } = await generated()
+    const first = (await helper.ensurePreviewBranch('feature/login')) as { name: string; created: boolean }
+    expect(first).toMatchObject({ name: 'preview/feature-login', created: true })
+    const again = (await helper.ensurePreviewBranch('feature/login')) as { created: boolean }
+    expect(again.created).toBe(false)
     expect(neon.branches.map((b) => b.name)).toEqual(['main', 'preview/feature-login'])
-    const again = await runScript(script, 'push', 'feature/login')
-    expect(again.code, again.out).toBe(0)
-    expect(neon.branches).toHaveLength(2)
-    const gone = await runScript(script, 'delete', 'feature/login')
-    expect(gone.code, gone.out).toBe(0)
+    await helper.deletePreviewBranch('feature/login')
     expect(neon.branches.map((b) => b.name)).toEqual(['main'])
   })
 
-  it('the app reads its own branch, says clearly when it does not exist yet, and never another project', async () => {
+  it('the addresses the workflow writes are the branch\'s own, never main\'s', async () => {
     const neon = await fakeNeon()
     const { helper } = await generated()
-    await expect(helper.previewDatabaseUrl('feature/login')).rejects.toThrow(/No Neon branch preview\/feature-login.*never falls back to the production database/)
     neon.branches.push({ id: 'br-77', name: 'preview/feature-login' })
-    const found = (await helper.previewDatabaseUrl('feature/login')) as { url: string; branch: string }
-    expect(found.branch).toBe('preview/feature-login')
-    expect(found.url).toContain('ep-br-77')
-    expect(found.url).not.toContain('br-main')
+    const addresses = (await helper.branchAddresses('br-77')) as Record<string, string>
+    expect(addresses.DATABASE_URL).toContain('ep-br-77')
+    expect(Object.values(addresses).some((a) => a.includes('br-main'))).toBe(false)
   })
 
   it('BUG-102: a key scoped to one project cannot list projects, so the project id comes with it; a wrong one is named', async () => {
     await fakeNeon('proj-one')
     const { helper } = await generated()
     process.env.NEON_PROJECT_ID = 'proj-other'
-    await expect(helper.previewDatabaseUrl('feature/login')).rejects.toThrow(/NEON_API_KEY cannot reach the Neon project proj-other/)
+    await expect(helper.ensurePreviewBranch('feature/login')).rejects.toThrow(/NEON_API_KEY cannot reach the Neon project proj-other/)
     delete process.env.NEON_PROJECT_ID
-    await expect(helper.previewDatabaseUrl('feature/login')).rejects.toThrow(/NEON_PROJECT_ID is not set/)
+    await expect(helper.ensurePreviewBranch('feature/login')).rejects.toThrow(/NEON_PROJECT_ID Actions secret is not set/)
   })
 })
 
 describe('BUG-96: cimiento makes the key the workflow and the previews use, scoped to the one Neon project', () => {
-  it('new mints one project-scoped key, keeps it, writes it to the Actions secret and to previews only; up reuses it; down revokes it', async () => {
+  it('new mints one project-scoped key, keeps it, writes it to the Actions secret only (Goal 9, BUG-105); up reuses it; down revokes it', async () => {
     const cloud = new FakeCloud({ ghDeleteScope: true })
     await made(cloud, VERCEL_NEON)
     const stack = readFileSync(join(dir, 'stack.yaml'), 'utf8')
@@ -248,13 +245,10 @@ describe('BUG-96: cimiento makes the key the workflow and the previews use, scop
     const repo = [...cloud.actionsSecrets.keys()][0]
     expect(cloud.actionsSecrets.get(repo)?.get('NEON_API_KEY')).toBe(value)
     const projectId = [...cloud.vercelProjects.values()][0].id
-    const env = (cloud.vercelEnv.get(projectId) ?? []).filter((e) => e.key === 'NEON_API_KEY')
-    expect(env.map((e) => e.target)).toEqual([['preview']])
-    expect(env[0].value).toBe(value)
+    // Never in a preview: the key can read the production branch (BUG-105).
+    expect((cloud.vercelEnv.get(projectId) ?? []).filter((e) => /^NEON_/.test(e.key))).toEqual([])
     // A scoped key cannot list projects, so the project id goes with it (BUG-102).
     expect(cloud.actionsSecrets.get(repo)?.get('NEON_PROJECT_ID')).toBe(project.id)
-    const projectEnv = (cloud.vercelEnv.get(projectId) ?? []).filter((e) => e.key === 'NEON_PROJECT_ID')
-    expect(projectEnv.map((e) => [e.target, e.value])).toEqual([[['preview'], project.id]])
 
     const up = await cli(cloud, ['up', '--json', '--yes'])
     expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
@@ -278,8 +272,6 @@ describe('BUG-96: cimiento makes the key the workflow and the previews use, scop
     expect(cloud.v2.neonApiKeys).toHaveLength(2)
     const repo = [...cloud.actionsSecrets.keys()][0]
     expect(cloud.actionsSecrets.get(repo)?.get('NEON_API_KEY')).toBe(live[0].key)
-    const projectId = [...cloud.vercelProjects.values()][0].id
-    expect((cloud.vercelEnv.get(projectId) ?? []).find((e) => e.key === 'NEON_API_KEY')?.value).toBe(live[0].key)
   })
 })
 

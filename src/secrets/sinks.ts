@@ -50,7 +50,7 @@ export function databaseSinkSpecs(m: Manifest): ResourceSpec[] {
 }
 
 /** Where the version of a value cimiento makes comes from, so an Actions secret follows a new one. */
-const GENERATED_VERSIONS: Record<string, string> = { NEON_API_KEY: 'neon.api-key:keyId' }
+const GENERATED_VERSIONS: Record<string, string> = { NEON_API_KEY: 'neon.api-key:keyId', VERCEL_TOKEN: 'vercel.api-token:tokenId' }
 
 export function ciSinkSpecs(m: Manifest): ResourceSpec[] {
   if (m.slots.repo !== 'github') return []
