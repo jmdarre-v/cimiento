@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- `cimiento explain neon.tool.neonctl` and `cimiento explain netlify.tool.netlify` answer in English
+  and Spanish; both said nothing was written (BUG-116).
+
 ## 0.4.2
 
 Previews hold no Neon key, `down` cleans this machine, and `cimiento upgrade` brings older

@@ -38,6 +38,10 @@ interface NeonProject {
 }
 
 const EXPLAIN: Record<string, { en: string; es?: string }> = {
+  'neon.tool.neonctl': {
+    en: 'The Neon command line tool, neonctl. cimiento uses it to log you in to Neon, and reads that login to create the database and its branches.',
+    es: 'La herramienta de linea de comandos de Neon, neonctl. cimiento la usa para iniciar tu sesion en Neon y lee esa sesion para crear la base de datos y sus ramas.',
+  },
   'neon.session': {
     en: 'Your Neon login on this machine, through neonctl. cimiento uses it to create the database and read its connection details.',
     es: 'Tu sesion de Neon en esta maquina, con neonctl. cimiento la usa para crear la base de datos y leer sus datos de conexion.',

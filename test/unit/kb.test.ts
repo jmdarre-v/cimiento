@@ -7,6 +7,8 @@ import { ERROR_CODES } from '../../src/core/errors'
 import { loadKb, lookupCode, matchSignature, missingCodes, orphanEntries } from '../../src/kb'
 import { collectSpecs, explainKey, allProviders } from '../../src/registry'
 import { emptyProjectState } from '../../src/core/state'
+import { completeFragment } from '../../src/manifest/presets'
+import type { ManifestInput } from '../../src/manifest/schema'
 import { manifestFor } from './helpers'
 
 /** Written as a code point so the character itself never appears in the source. */
@@ -73,6 +75,20 @@ describe('explain coverage', () => {
     const missing = directSpecs.map((s) => s.id).filter((id) => !explainKey(id, 'en', direct))
     expect(missing).toEqual([])
   })
+
+  // BUG-116: neon.tool.neonctl and netlify.tool.netlify had no text, because no stack above
+  // selects Neon or Netlify; cimiento explain --list (PR 4) showed them.
+  for (const [name, slots, accounts] of [
+    ['netlify, neon, resend, stripe and posthog', { repo: 'github', hosting: 'netlify', database: 'neon', email: 'resend', payments: 'stripe', analytics: 'posthog' }, {}],
+    ['vercel and neon', { repo: 'github', hosting: 'vercel', database: 'neon' }, {}],
+  ] as const) {
+    it(`has English and Spanish text for every resource id the ${name} stack produces`, () => {
+      const m = manifestFor({ ...completeFragment({ slots } as ManifestInput), accounts } as ManifestInput)
+      const ids = collectSpecs(m, emptyProjectState(), allProviders(m)).map((s) => s.id)
+      expect(ids.filter((id) => !explainKey(id, 'en', m))).toEqual([])
+      expect(ids.filter((id) => explainKey(id, 'es', m) === explainKey(id, 'en', m))).toEqual([])
+    })
+  }
 
   it('has English text for every error code', () => {
     const missing = ERROR_CODES.filter((code) => !explainKey(code, 'en', manifest))

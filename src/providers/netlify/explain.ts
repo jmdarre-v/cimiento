@@ -1,6 +1,10 @@
 // Plain language for every Netlify resource id and error code, in English and Spanish.
 
 export const NETLIFY_EXPLAIN: Record<string, { en: string; es?: string }> = {
+  'netlify.tool.netlify': {
+    en: 'The Netlify command line tool. cimiento uses it to log you in to Netlify, and reads that login to create the site and manage it.',
+    es: 'La herramienta de linea de comandos de Netlify. cimiento la usa para iniciar tu sesion en Netlify y lee esa sesion para crear el sitio y administrarlo.',
+  },
   'netlify.session': {
     en: 'Your Netlify login on this machine, through the Netlify CLI. cimiento uses it to create the site, set its environment variables and start builds.',
     es: 'Tu sesion de Netlify en esta maquina, con la CLI de Netlify. cimiento la usa para crear el sitio, poner sus variables de entorno e iniciar construcciones.',
