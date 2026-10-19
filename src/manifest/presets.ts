@@ -133,11 +133,14 @@ export function completeFragment(input: ManifestInput): ManifestInput {
     // The key stays in GitHub Actions: a preview never holds a key that can read production (BUG-105).
     secrets.push({ name: 'NEON_API_KEY', sinks: ['ci'], environments: ['preview'], source: 'generated' })
     // The workflow writes the branch address into the hosting env with a token of its own.
+    // Neither host lets cimiento make a token from the login it has (BUG-112), so the token is one
+    // a person makes, and optional: without it the workflow makes the Neon branch and cimiento up
+    // writes its address.
     if (hosting === 'vercel' && !secrets.some((s) => s.name === 'VERCEL_TOKEN')) {
-      secrets.push({ name: 'VERCEL_TOKEN', sinks: ['ci'], environments: ['preview'], source: 'generated' })
+      secrets.push({ name: 'VERCEL_TOKEN', sinks: ['ci'], environments: ['preview'], source: 'keychain', url: 'https://vercel.com/account/tokens', optional: true })
     }
     if (hosting === 'netlify' && !secrets.some((s) => s.name === 'NETLIFY_AUTH_TOKEN')) {
-      secrets.push({ name: 'NETLIFY_AUTH_TOKEN', sinks: ['ci'], environments: ['preview'], source: 'keychain', url: 'https://app.netlify.com/user/applications#personal-access-tokens' })
+      secrets.push({ name: 'NETLIFY_AUTH_TOKEN', sinks: ['ci'], environments: ['preview'], source: 'keychain', url: 'https://app.netlify.com/user/applications#personal-access-tokens', optional: true })
     }
   }
   out.secrets = secrets

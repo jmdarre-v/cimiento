@@ -73,18 +73,7 @@ export const hostingNeonRule: WiringRule = {
       })
       specs.push(literal(NEON_PROJECT_ENV, 'neon.project:projectId', 'neon.project'))
       if (hosting === 'vercel') {
-        specs.push(
-          {
-            id: 'vercel.api-token',
-            kind: 'resource',
-            provider: 'vercel',
-            dependsOn: ['vercel.session'],
-            inputs: { name: `cimiento-${m.slug}-preview-database`, secret: 'VERCEL_TOKEN' },
-          },
-          literal('VERCEL_PROJECT_ID', 'vercel.project:projectId', 'vercel.project'),
-          literal('VERCEL_TEAM_ID', 'vercel.project:orgId', 'vercel.project'),
-        )
-        edges.push({ from: ciSecretId('VERCEL_TOKEN'), to: 'vercel.api-token' })
+        specs.push(literal('VERCEL_PROJECT_ID', 'vercel.project:projectId', 'vercel.project'), literal('VERCEL_TEAM_ID', 'vercel.project:orgId', 'vercel.project'))
       } else {
         specs.push(literal('NETLIFY_SITE_ID', 'netlify.project:projectId', 'netlify.project'))
       }

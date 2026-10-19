@@ -31,9 +31,9 @@ GitHub Actions secrets only:
 - `NEON_API_KEY`, an organization API key scoped to the app's one Neon project. It can make,
   read and delete that project's branches, the production branch included, but cannot delete the
   project or reach another. cimiento makes it, and `down` revokes it.
-- `VERCEL_TOKEN`, a Vercel token scoped to the team in `stack.yaml`, which cimiento makes for the
-  workflow and `down` revokes; on Netlify, `NETLIFY_AUTH_TOKEN`, a personal access token you make,
-  because Netlify offers no API to make one.
+- `VERCEL_TOKEN` or `NETLIFY_AUTH_TOKEN`, when you set one: a token you make, because neither
+  host lets cimiento make one from its login. Make it with the narrowest scope the host offers
+  (on Vercel, the project's team only) and revoke it when the project goes; `down` cannot.
 - The project, team and site ids, which are not secrets.
 
 Previews hold none of these, only their own branch's address (since 0.4.2; 0.4.1 put the Neon key

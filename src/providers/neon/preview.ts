@@ -173,11 +173,10 @@ export async function verifyPreviewBranches(spec: ResourceSpec, ctx: Ctx): Promi
   const wanted = listed.map((b) => b.name).filter((name) => name !== input.production)
   if (wanted.length === 0) return { ok: true, evidence: `no branch besides ${input.production}; the first one gets its own Neon branch at the next cimiento up` }
   const existing = await neonBranches(ctx, spec, input.projectId)
-  // With the key for previews, a preview finds its own branch, so the branch is enough (BUG-97);
-  // without it, the branch needs the address cimiento up writes for it.
-  const keyed = ctx.manifest.secrets.some((s) => s.name === 'NEON_API_KEY')
-  const withEnv = keyed ? undefined : new Set(await branchEnvBranches(ctx, spec, input.hosting, input.hostingProjectId, 'DATABASE_URL'))
-  const lacking = wanted.filter((git) => !existing.some((b) => b.name === previewBranchName(git)) || (withEnv !== undefined && !withEnv.has(git)))
+  // A preview reads only the address written for its branch, by the workflow or by cimiento up;
+  // since 0.4.2 no preview looks its branch up with a Neon key (BUG-105).
+  const withEnv = new Set(await branchEnvBranches(ctx, spec, input.hosting, input.hostingProjectId, 'DATABASE_URL'))
+  const lacking = wanted.filter((git) => !existing.some((b) => b.name === previewBranchName(git)) || !withEnv.has(git))
   if (lacking.length === 0) return { ok: true, evidence: `previews of ${wanted.join(', ')} each read their own Neon branch` }
   return {
     ok: false,

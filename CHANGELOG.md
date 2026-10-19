@@ -22,9 +22,11 @@
   addresses into the hosting env, for that git branch only, and deploys it again; `NEON_API_KEY`
   stays in GitHub Actions. 0.4.1 put `NEON_API_KEY` in the preview env, where preview code could
   read the production branch with it; run `cimiento upgrade` in a project made by 0.4.1.
-- On Vercel the workflow uses `VERCEL_TOKEN`, a token cimiento makes for the team and `down`
-  revokes. On Netlify it uses `NETLIFY_AUTH_TOKEN`, a personal access token you make, because
-  Netlify has no API to make one.
+- The workflow writes each branch's address with `VERCEL_TOKEN` or `NETLIFY_AUTH_TOKEN`, a token
+  you make (neither host lets cimiento make one from its login) and set with `cimiento secret set`;
+  it goes to GitHub Actions only. Both are optional: without one the workflow still makes and
+  removes the Neon branch, and `cimiento up` writes its address.
+- Secrets take `optional: true`: a missing value is skipped, never waited on.
 
 ## 0.4.1
 

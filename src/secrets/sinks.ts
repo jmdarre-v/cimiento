@@ -50,7 +50,7 @@ export function databaseSinkSpecs(m: Manifest): ResourceSpec[] {
 }
 
 /** Where the version of a value cimiento makes comes from, so an Actions secret follows a new one. */
-const GENERATED_VERSIONS: Record<string, string> = { NEON_API_KEY: 'neon.api-key:keyId', VERCEL_TOKEN: 'vercel.api-token:tokenId' }
+const GENERATED_VERSIONS: Record<string, string> = { NEON_API_KEY: 'neon.api-key:keyId' }
 
 export function ciSinkSpecs(m: Manifest): ResourceSpec[] {
   if (m.slots.repo !== 'github') return []
@@ -167,6 +167,8 @@ export async function ensureCiSecret(spec: ResourceSpec, ctx: Ctx): Promise<Ensu
   const versionOut = version ? { outputs: { version: { value: version, secret: false } } } : {}
   if (exists && !rotate && !stale) return { action: 'noop', externalId: `${repo}/${key}`, ...versionOut }
   if (ctx.dryRun) return { action: 'noop' }
+  // An optional secret nobody has set is skipped, never waited on (BUG-112).
+  if (!exists && optionalSecret(ctx, key) && !(await ctx.secrets.get(key).catch(() => undefined))) return { action: 'noop' }
   const value = await secretValue(ctx, spec, key)
   // gh reads the value from stdin when no --body is given, so it never shows in the process list.
   const result = await ctx.io.exec('gh', ['secret', 'set', key, '-R', repo], { input: value })
@@ -184,10 +186,18 @@ export async function ensureCiSecret(spec: ResourceSpec, ctx: Ctx): Promise<Ensu
   return { action: exists ? 'updated' : 'created', externalId: `${repo}/${key}`, ...versionOut }
 }
 
+function optionalSecret(ctx: Ctx, key: string): boolean {
+  return ctx.manifest.secrets.find((s) => s.name === key)?.optional === true
+}
+
 export async function verifyCiSecret(spec: ResourceSpec, ctx: Ctx): Promise<CheckResult> {
   const key = str(spec.inputs.key)
   const repo = str(spec.inputs.repo)
   if ((await githubSecretNames(ctx, spec)).includes(key)) return { ok: true, evidence: `${key}=**** present in the Actions secrets of ${repo}` }
+  if (optionalSecret(ctx, key)) {
+    const url = ctx.manifest.secrets.find((s) => s.name === key)?.url
+    return { ok: true, evidence: `${key} is not set; it is optional. Make one${url ? ` at ${url}` : ''} and run cimiento secret set ${key} to let the preview database workflow write each branch's address itself` }
+  }
   return {
     ok: false,
     error: new CimientoError({

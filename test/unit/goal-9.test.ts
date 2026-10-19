@@ -49,27 +49,43 @@ async function made(cloud: FakeCloud, args: string[]): Promise<void> {
 const VERCEL_NEON = ['--repo', 'github', '--hosting', 'vercel', '--database', 'neon', '--template', 'nextjs-app']
 
 describe('BUG-105: previews held a Neon key that can read the production branch', () => {
-  it('no Neon key or project id in the hosting env; the workflow gets the Neon key, a Vercel token cimiento makes and the ids it needs', async () => {
+  it('no Neon key or project id in the hosting env; the workflow gets the Neon key and the ids it needs; down revokes the key', async () => {
     const cloud = new FakeCloud({ ghDeleteScope: true })
     await made(cloud, VERCEL_NEON)
     expect(readFileSync(join(dir, 'stack.yaml'), 'utf8')).toMatch(/- name: NEON_API_KEY\n    sinks:\n      - ci\n    environments/)
     const project = [...cloud.vercelProjects.values()][0]
-    const env = cloud.vercelEnv.get(project.id) ?? []
-    expect(env.filter((e) => /^NEON_/.test(e.key))).toEqual([])
+    expect((cloud.vercelEnv.get(project.id) ?? []).filter((e) => /^NEON_/.test(e.key))).toEqual([])
     const repo = [...cloud.actionsSecrets.keys()][0]
     const secrets = cloud.actionsSecrets.get(repo)!
-    for (const name of ['NEON_API_KEY', 'NEON_PROJECT_ID', 'VERCEL_TOKEN', 'VERCEL_PROJECT_ID', 'VERCEL_TEAM_ID']) expect(secrets.has(name), name).toBe(true)
+    for (const name of ['NEON_API_KEY', 'NEON_PROJECT_ID', 'VERCEL_PROJECT_ID', 'VERCEL_TEAM_ID']) expect(secrets.has(name), name).toBe(true)
     expect(secrets.get('VERCEL_PROJECT_ID')).toBe(project.id)
-    const tokens = cloud.vercelTokens.filter((t) => !t.revoked)
-    expect(tokens).toHaveLength(1)
-    expect(secrets.get('VERCEL_TOKEN')).toBe(tokens[0].bearerToken)
-
-    const again = await cli(cloud, ['up', '--json', '--yes'])
-    expect(again.code, again.writer.outText.slice(-800)).toBe(ExitCode.ok)
-    expect(cloud.vercelTokens).toHaveLength(1)
     const down = await cli(cloud, ['down', '--yes', '--json'])
     expect(down.code, down.writer.outText.slice(-800)).toBe(ExitCode.ok)
-    expect(cloud.vercelTokens.every((t) => t.revoked)).toBe(true)
+    expect(cloud.v2.neonApiKeys.every((k) => k.revoked)).toBe(true)
+  })
+})
+
+describe('BUG-112: Vercel refuses to make an access token from the CLI login, and Netlify has no API for one', () => {
+  it('the hosting token is an optional secret a person makes: new finishes without it, and secret set sends it to Actions only', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true, keychainEmpty: true })
+    await made(cloud, VERCEL_NEON)
+    const stack = readFileSync(join(dir, 'stack.yaml'), 'utf8')
+    expect(stack).toMatch(/- name: VERCEL_TOKEN\n    sinks:\n      - ci\n[\s\S]*?source: keychain[\s\S]*?optional: true/)
+    const repo = [...cloud.actionsSecrets.keys()][0]
+    expect(cloud.actionsSecrets.get(repo)!.has('VERCEL_TOKEN')).toBe(false)
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    const item = (doctor.writer.jsonObjects().pop() as { items: { id: string; ok: boolean; evidence?: string }[] }).items.find((i) => i.id === 'github.secret.VERCEL_TOKEN')
+    expect(item?.ok).toBe(true)
+    expect(item?.evidence).toContain('optional')
+
+    // As a person typing it at the hidden prompt.
+    const writer = new CaptureWriter()
+    const code = await run(['secret', 'set', 'VERCEL_TOKEN', '--json'], { io: cloud, cwd: dir, writer, interactive: false, onManual: personDoesIt, secrets: { VERCEL_TOKEN: 'vercel_fake_person_made_token_not_real' } })
+    const set = { code, writer }
+    expect(set.code, set.writer.outText.slice(-500)).toBe(ExitCode.ok)
+    expect(cloud.actionsSecrets.get(repo)!.get('VERCEL_TOKEN')).toBe('vercel_fake_person_made_token_not_real')
+    const project = [...cloud.vercelProjects.values()][0]
+    expect((cloud.vercelEnv.get(project.id) ?? []).some((e) => e.key === 'VERCEL_TOKEN')).toBe(false)
   })
 })
 
@@ -246,6 +262,22 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
     const gone = await runScript(script, { ...env, EVENT: 'delete' })
     expect(gone.code, gone.out).toBe(0)
     expect(w.vercelEnv).toEqual([])
+    expect(w.branches.map((b) => b.name)).toEqual(['main'])
+  })
+
+  it('BUG-112: without a hosting token the workflow makes the Neon branch, writes nothing, and says what writes the address', async () => {
+    const { w, base } = await world()
+    const script = await scripts('vercel')
+    // No Actions secret: empty, whatever the test process holds.
+    const env = { ...common(base), HOSTING: 'vercel', CIMIENTO_VERCEL_API: `${base}/vercel`, VERCEL_TOKEN: '', VERCEL_PROJECT_ID: 'prj_one', VERCEL_TEAM_ID: 'team_fake' }
+    const push = await runScript(script, { ...env, EVENT: 'push' })
+    expect(push.code, push.out).toBe(0)
+    expect(push.out).toContain('written by the next cimiento up')
+    expect(w.branches.map((b) => b.name)).toEqual(['main', 'preview/feature-login'])
+    expect(w.vercelEnv).toEqual([])
+    expect(w.deployments).toEqual([])
+    const gone = await runScript(script, { ...env, EVENT: 'delete' })
+    expect(gone.code, gone.out).toBe(0)
     expect(w.branches.map((b) => b.name)).toEqual(['main'])
   })
 

@@ -6,7 +6,6 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { CimientoError } from '../../core/errors'
 import { recordedId } from '../../core/identity'
-import { apiTokenPresence, destroyApiToken, ensureApiToken, verifyApiToken } from './token'
 import { knownEnvValue } from '../../secrets/known'
 import { valueMismatch } from '../../core/hosting'
 import type { LiveCommit } from '../../core/types'
@@ -240,7 +239,6 @@ export function createVercelProvider(m?: Manifest): Provider {
       if (spec.id === 'vercel.binding.git-repo') return ensureGitLink(spec, ctx)
       if (spec.id.startsWith('vercel.env.')) return ensureEnv(spec, ctx)
       if (spec.id === 'vercel.binding.supabase-install' || spec.id === 'vercel.binding.supabase-preview-install') return ensureSupabaseInstall(spec, ctx)
-      if (spec.id === 'vercel.api-token') return ensureApiToken(spec, ctx)
       if (spec.id === 'vercel.deployment') return ensureDeployment(spec, ctx)
       if (spec.id === 'vercel.binding.domain') return ensureDomain(spec, ctx)
       throw unknownResource(spec)
@@ -261,7 +259,6 @@ export function createVercelProvider(m?: Manifest): Provider {
       }
       if (spec.id.startsWith('vercel.env.')) return verifyEnv(spec, ctx)
       if (spec.id === 'vercel.binding.supabase-install' || spec.id === 'vercel.binding.supabase-preview-install') return verifySupabaseInstall(spec, ctx)
-      if (spec.id === 'vercel.api-token') return verifyApiToken(spec, ctx)
       if (spec.id === 'vercel.deployment') return verifyDeployment(spec, ctx)
       if (spec.id === 'vercel.check.deployed') return verifyDeployed(spec, ctx)
       if (spec.id === 'vercel.check.secrets-present') return verifySecretsPresent(spec, ctx)
@@ -272,7 +269,6 @@ export function createVercelProvider(m?: Manifest): Provider {
     },
 
     async destroy(spec: ResourceSpec, ctx: Ctx): Promise<void> {
-      if (spec.id === 'vercel.api-token') return destroyApiToken(spec, ctx)
       if (spec.id !== 'vercel.project') return
       const name = str(spec.inputs.name)
       // By the recorded id: a project made later under the same name is not this one (BUG-82).
@@ -288,7 +284,6 @@ export function createVercelProvider(m?: Manifest): Provider {
     },
 
     async presence(spec: ResourceSpec, ctx: Ctx): Promise<Presence> {
-      if (spec.id === 'vercel.api-token') return apiTokenPresence(spec, ctx)
       // A deployment exists only inside its project.
       if (spec.id !== 'vercel.project' && spec.id !== 'vercel.deployment') return 'unknown'
       const id = ctx.state.resources['vercel.project']?.externalId

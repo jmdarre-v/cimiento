@@ -155,10 +155,11 @@ this table is about real accounts.
 Previews never read the production database by default.
 
 - Neon: every git branch besides production gets a Neon branch of the project. The scaffold's
-  GitHub Actions workflow, `preview-database`, makes it on every push, writes that branch's two
-  addresses into the hosting env for that git branch only, and deploys the branch again so its
-  preview is built with them; when the git branch is deleted it removes both. Plain `git push` is
-  enough. A preview built before its address exists answers with one sentence saying so and never
+  GitHub Actions workflow, `preview-database`, makes it on every push and removes it when the git
+  branch is deleted. With a hosting token you make (`cimiento secret set VERCEL_TOKEN`, or
+  `NETLIFY_AUTH_TOKEN`), it also writes that branch's two addresses into the hosting env for that
+  git branch only and deploys the branch again, so plain `git push` is enough; without one,
+  `cimiento up` writes them. A preview built before its address exists answers with one sentence saying so and never
   reads production; the newer preview the workflow deploys reads its own branch. The app reads
   `DATABASE_URL` and nothing else: no preview holds a Neon key. `cimiento up` also writes each
   branch's address, and `down` removes every branch. A Neon branch starts as a copy of production

@@ -140,8 +140,6 @@ export class FakeCloud implements Io {
   readonly actionsSecrets = new Map<string, Map<string, string>>()
   readonly supabaseSecrets = new Map<string, Map<string, string>>()
   readonly vercelProjects = new Map<string, FakeVercelProject>()
-  /** Vercel access tokens, as the user's token list holds them; a revoked one stays here, marked. */
-  readonly vercelTokens: { id: string; name: string; bearerToken: string; teamId?: string; revoked: boolean }[] = []
   readonly vercelEnv = new Map<string, FakeVercelEnv[]>()
   readonly deployments = new Map<string, FakeDeployment[]>()
   readonly supabaseProjects: FakeSupabaseProject[] = []
@@ -1003,20 +1001,8 @@ export class FakeCloud implements Io {
     }
 
     if (path === '/v3/user/tokens' && method === 'POST') {
-      const body = req.body as { name: string }
-      const token = { id: this.id('tok'), name: body.name, bearerToken: `vercel_fake_scoped_token_${this.vercelTokens.length}_not_real`, ...(url.searchParams.get('teamId') ? { teamId: url.searchParams.get('teamId')! } : {}), revoked: false }
-      this.vercelTokens.push(token)
-      return json(200, { token: { id: token.id, name: token.name, type: 'oauth2-token' }, bearerToken: token.bearerToken })
-    }
-    if (path === '/v5/user/tokens' && method === 'GET') {
-      return json(200, { tokens: this.vercelTokens.filter((t) => !t.revoked).map(({ id, name }) => ({ id, name })) })
-    }
-    const tokenMatch = /^\/v3\/user\/tokens\/([^/]+)$/.exec(path)
-    if (tokenMatch && method === 'DELETE') {
-      const token = this.vercelTokens.find((t) => t.id === decodeURIComponent(tokenMatch[1]) && !t.revoked)
-      if (!token) return json(404, { error: { message: 'token not found' } })
-      token.revoked = true
-      return json(200, { tokenId: token.id })
+      // As real Vercel answers the CLI's own login (field test 9): it cannot make tokens.
+      return json(403, { error: { code: 'forbidden', message: 'Cannot create tokens for this app.' } })
     }
 
     const projectMatch = /^\/v9\/projects\/([^/]+)$/.exec(path)

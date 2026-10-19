@@ -578,13 +578,15 @@ One line per decision the spec does not cover, with the reasoning.
   starts and the push build starts with the workflow. It writes only when the branch's values are
   missing, so a later push neither rewrites nor redeploys. NEON_API_KEY has sink ci only; the Neon
   helper moved to .github/scripts and the app reads DATABASE_URL only.
-- 2026-10-19 Goal 9: the workflow's Vercel credential is VERCEL_TOKEN, made by vercel.api-token
-  with the CLI login through POST /v3/user/tokens with the team's teamId, kept as a generated
-  secret with sink ci only and revoked by down. Netlify has no documented API to make a personal
-  access token (its Open API lists none; the forum's create_token is internal), so on Netlify
-  NETLIFY_AUTH_TOKEN is a keychain secret with sink ci that a person makes. cimiento does not copy
-  the Netlify CLI's own login into GitHub: it is the person's whole account and cannot be revoked
-  without logging the CLI out.
+- 2026-10-19 Goal 9: the workflow's hosting credential is one a person makes. Vercel refuses to
+  make a token from the CLI's own login (POST /v3/user/tokens answered 403 Cannot create tokens for
+  this app in field test 9), and Netlify has no documented API to make a personal access token (its
+  Open API lists none; the forum's create_token is internal). VERCEL_TOKEN and NETLIFY_AUTH_TOKEN
+  are keychain secrets with sink ci only and optional: true, a new manifest field meaning a missing
+  value is skipped, never waited on, and doctor says it is optional. Without the token the
+  workflow makes and removes the Neon branch and cimiento up writes the address, as in 0.4.0.
+  cimiento does not copy either CLI's own login into GitHub: it is the person's whole account and
+  cannot be revoked without logging the CLI out (BUG-112).
 - 2026-10-19 Goal 9: down removes what cimiento wrote on this machine for the project, after a down
   with nothing pending or failed: every keychain account under service cimiento that starts with
   <slug>/ (security dump-keychain without -d, or secret-tool search, so no value is read) and

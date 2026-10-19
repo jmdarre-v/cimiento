@@ -147,6 +147,8 @@ const secretSchema = z
     sinks: z.array(z.enum(SINKS)).min(1).default(['hosting']),
     environments: z.array(z.enum(ENVIRONMENTS)).min(1).default(['preview', 'production']),
     source: z.enum(SECRET_SOURCES).default('prompt'),
+    /** A secret the project works without: a missing value is skipped, never waited on. */
+    optional: z.boolean().optional(),
     /** The page where the value is created, shown with the hidden prompt. Known services need none. */
     url: z.string().url().optional(),
     /** Where the 1password source reads the value, op://vault/item/field. */

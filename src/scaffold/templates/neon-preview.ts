@@ -91,7 +91,8 @@ export async function deletePreviewBranch(gitBranch) {
 
 const SCRIPT = `// Written by cimiento. Run by .github/workflows/preview-database.yml on every push of a branch
 // besides production, and on every deleted branch. It writes only the branch's own addresses into
-// the hosting env, for that git branch only, so a preview never holds a Neon key.
+// the hosting env, for that git branch only, so a preview never holds a Neon key. The hosting
+// token is optional: without it the workflow only makes and removes the Neon branch.
 import { branchAddresses, deletePreviewBranch, ensurePreviewBranch } from './neon-preview.mjs'
 
 const KEYS = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED']
@@ -195,13 +196,17 @@ try {
   const host = hosting === 'netlify' ? netlify : hosting === 'vercel' ? vercel : undefined
   if (!host) throw new Error(\`HOSTING is \${hosting}, not vercel or netlify.\`)
   if (process.env.EVENT === 'delete') {
-    await host.remove()
+    if (process.env[hosting === 'netlify' ? 'NETLIFY_AUTH_TOKEN' : 'VERCEL_TOKEN']) await host.remove()
     const { name, deleted } = await deletePreviewBranch(branch)
     console.log(\`Removed the database address of \${branch}. \${deleted ? \`Deleted the Neon branch \${name}.\` : \`No Neon branch \${name}.\`}\`)
   } else {
     const { name, id, created } = await ensurePreviewBranch(branch)
     console.log(created ? \`Created the Neon branch \${name}.\` : \`The Neon branch \${name} already exists.\`)
-    if ((await host.entries()).length < KEYS.length) {
+    const token = hosting === 'netlify' ? 'NETLIFY_AUTH_TOKEN' : 'VERCEL_TOKEN'
+    if (!process.env[token]) {
+      // A hosting token is one a person makes; without it cimiento up writes the address.
+      console.log(\`No \${token} Actions secret, so the address of \${branch} is written by the next cimiento up. Make a token and run cimiento secret set \${token} to have this workflow write it on every push.\`)
+    } else if ((await host.entries()).length < KEYS.length) {
       await host.write(await branchAddresses(id))
       await host.deploy()
       console.log(\`Wrote the database address for \${branch} only, and deployed it again.\`)

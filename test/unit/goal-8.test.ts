@@ -275,14 +275,16 @@ describe('BUG-96: cimiento makes the key the workflow and the previews use, scop
   })
 })
 
-describe('BUG-97: a branch the workflow made is a working preview database, even before cimiento up writes its address', () => {
-  it('doctor passes the preview check when the Neon branch exists and previews hold the key', async () => {
+describe('BUG-97: a branch the workflow made is a working preview database (since Goal 9, once its address is written)', () => {
+  it('doctor passes the preview check when the Neon branch exists and the workflow wrote its address for that branch', async () => {
     const cloud = new FakeCloud({ ghDeleteScope: true })
     await made(cloud, VERCEL_NEON)
     cloud.pushedBranches.set('feature/login', cloud.gitSha())
     const project = [...cloud.v2.neonProjects.values()][0]
     project.branches.push({ id: 'br-by-workflow', name: 'preview/feature-login' })
     const projectId = [...cloud.vercelProjects.values()][0].id
+    // What the preview database workflow writes, for that git branch only (Goal 9, BUG-106).
+    cloud.vercelEnv.get(projectId)!.push({ id: 'env_wf', key: 'DATABASE_URL', value: 'postgresql://u:p@ep-br-by-workflow-pooler.example.neon.tech/neondb', target: ['preview'], gitBranch: 'feature/login', type: 'encrypted' })
     const list = cloud.deployments.get(projectId) ?? []
     list.unshift({ uid: 'dpl_branch', url: 'my-app-git-preview.vercel.app', readyState: 'READY', target: null as unknown as string, createdAt: Date.now(), meta: { githubCommitSha: cloud.gitSha(), githubCommitRef: 'feature/login' } })
     cloud.deployments.set(projectId, list)
