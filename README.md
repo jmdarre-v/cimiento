@@ -243,6 +243,7 @@ cimiento up --orphans destroy
 | `cimiento domain add <domain>` | Put your own domain on the site; Supabase Auth URLs and Turnstile follow |
 | `cimiento domain remove` | Take it off again; the default address keeps working |
 | `cimiento explain <id>` | Plain language for a resource or an error, `--lang es` |
+| `cimiento explain --list` | Sorted error codes and resource ids selected by `stack.yaml`; supports `--json` |
 
 Every command takes `--json`. Exit codes are 0 ok, 1 failed, 2 needs human, 3 blocked.
 

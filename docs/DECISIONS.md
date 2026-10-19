@@ -620,3 +620,4 @@ One line per decision the spec does not cover, with the reasoning.
   is never changed. up records the branches it saw with their own password in the ownPassword
   output, so the check runs once per branch; doctor fails a match as PREVIEW_PASSWORD_SHARED. This
   makes 0.4.0 a version whose previews hold a credential that can read production, beside 0.4.1.
+- 2026-10-19 explain --list reads the manifest and collects static provider and wiring specs with empty state, never project state or live provider operations. JSON has sorted, duplicate-free errorCodes and resourceIds arrays; without stack.yaml only error codes are listed. Normal command run logging stays unchanged.

@@ -1,14 +1,27 @@
 // The command surface: every command works with --json, every failure is a CimientoError with a
 // hint, and the exit codes follow spec section 10.
 
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest'
 import { run, VERSION } from '../../src/cli/index'
 import { parseArgs } from '../../src/cli/args'
-import { ExitCode } from '../../src/core/errors'
+import { writeManifest } from '../../src/manifest'
+import { buildProviders, collectSpecs } from '../../src/registry'
+import * as registry from '../../src/registry'
+import { emptyProjectState } from '../../src/core/state'
+import { ERROR_CODES, ExitCode } from '../../src/core/errors'
 import { FakeCloud } from './fake-cloud'
-import { CaptureWriter, removeDir, tempDir, useFakeTokens, personDoesIt } from './helpers'
+import { CaptureWriter, removeDir, tempDir, useFakeTokens, personDoesIt, manifestFor } from './helpers'
+
+function snapshot(dir: string): Record<string, string> {
+  return Object.fromEntries(readdirSync(dir).sort().flatMap((name) => {
+    const path = join(dir, name)
+    return statSync(path).isDirectory()
+      ? Object.entries(snapshot(path)).map(([child, contents]) => [`${name}/${child}`, contents])
+      : [[name, readFileSync(path, 'utf8')]]
+  }))
+}
 
 describe('argument parsing', () => {
   it('splits a command, a subcommand and flags', () => {
@@ -104,6 +117,68 @@ describe('commands', () => {
     const code = await run(['init', 'x', '--preset', 'nope', '--json'], deps())
     expect(code).toBe(ExitCode.needsHuman)
     expect(writer.outText).toContain('fullstack and designer')
+  })
+
+  it('explain --list works without a manifest, with every error code and no resource ids', async () => {
+    expect(await run(['explain', '--list', '--json'], deps())).toBe(ExitCode.ok)
+    const payload = writer.jsonObjects()[0] as { errorCodes: string[]; resourceIds: string[] }
+    expect(payload.errorCodes).toEqual([...ERROR_CODES].sort())
+    expect(payload.resourceIds).toEqual([])
+    expect(new Set(payload.errorCodes).size).toBe(payload.errorCodes.length)
+    expect(snapshot(dir)).toEqual({})
+  })
+
+  it('explain --list text and JSON agree on selected provider and wiring ids, without external IO or project writes', async () => {
+    const manifest = manifestFor({}, 'designer')
+    writeManifest(dir, manifest)
+    mkdirSync(join(dir, '.cimiento'))
+    writeFileSync(join(dir, '.cimiento/state.json'), 'not valid state, and not needed for listing')
+    const before = snapshot(dir)
+    const expected = [...new Set(collectSpecs(manifest, emptyProjectState(), buildProviders(manifest)).map((spec) => spec.id))].sort()
+    const spies: MockInstance[] = [vi.spyOn(cloud, 'exec'), vi.spyOn(cloud, 'interactive'), vi.spyOn(cloud, 'spawn'), vi.spyOn(cloud, 'http'), vi.spyOn(cloud, 'sql')]
+    const originalBuild = registry.buildProviders
+    const build = vi.spyOn(registry, 'buildProviders').mockImplementation((...args) => {
+      const providers = originalBuild(...args)
+      for (const provider of providers) {
+        for (const method of ['detect', 'login', 'ensure', 'verify', 'destroy', 'outputs'] as const) {
+          spies.push(vi.spyOn(provider, method))
+        }
+      }
+      return providers
+    })
+    try {
+      expect(await run(['explain', '--list', '--json'], deps())).toBe(ExitCode.ok)
+      const payload = writer.jsonObjects()[0] as { errorCodes: string[]; resourceIds: string[] }
+      expect(payload.resourceIds).toEqual(expected)
+      expect(payload.resourceIds).toContain('github.repo')
+      expect(payload.resourceIds).toContain('vercel.binding.git-repo')
+      expect(payload.resourceIds.some((id) => id.startsWith('supabase.'))).toBe(false)
+      expect(payload.resourceIds.some((id) => id.startsWith('neon.'))).toBe(false)
+      expect(new Set(payload.resourceIds).size).toBe(payload.resourceIds.length)
+      const text = new CaptureWriter()
+      expect(await run(['explain', '--list'], { ...deps(), writer: text })).toBe(ExitCode.ok)
+      const listed = text.outText.split('\n').filter((line) => line.startsWith('  ')).map((line) => line.trim())
+      expect(listed).toEqual([...payload.errorCodes, ...payload.resourceIds])
+      expect(snapshot(dir)).toEqual(before)
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    } finally {
+      for (const spy of spies) spy.mockRestore()
+      build.mockRestore()
+    }
+  })
+
+  it('explain --list deduplicates a provider selected for two slots', async () => {
+    writeManifest(dir, manifestFor({ slots: { database: 'supabase', auth: 'supabase' }, accounts: { supabase: 'direct' } }))
+    expect(await run(['explain', '--list', '--json'], deps())).toBe(ExitCode.ok)
+    const payload = writer.jsonObjects()[0] as { resourceIds: string[] }
+    expect(payload.resourceIds.filter((id) => id === 'supabase.project')).toHaveLength(1)
+    expect(payload.resourceIds).toEqual([...new Set(payload.resourceIds)].sort())
+  })
+
+  it('explain --list reports an invalid manifest instead of silently omitting its resources', async () => {
+    writeFileSync(join(dir, 'stack.yaml'), 'not: [valid')
+    expect(await run(['explain', '--list', '--json'], deps())).toBe(ExitCode.needsHuman)
+    expect(writer.outText).toContain('MANIFEST_INVALID')
   })
 
   it('explain answers for a resource id and for an error code', async () => {
