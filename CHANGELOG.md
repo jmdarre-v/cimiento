@@ -3,7 +3,8 @@
 ## 0.4.2
 
 Previews hold no Neon key, `down` cleans this machine, and `cimiento upgrade` brings older
-projects along. 0.4.1 puts a Neon key that can read production in the preview env; upgrade.
+projects along. 0.4.1 puts a Neon key that can read production in the preview env, and in 0.4.0
+and 0.4.1 every preview's database address also opens production; upgrade.
 
 ### cimiento upgrade
 
@@ -29,6 +30,13 @@ projects along. 0.4.1 puts a Neon key that can read production in the preview en
   you make (neither host lets cimiento make one from its login) and set with `cimiento secret set`;
   it goes to GitHub Actions only. Both are optional: without one the workflow still makes and
   removes the Neon branch, and `cimiento up` writes its address.
+- Each preview branch gets a database password of its own (BUG-114). Neon copies the roles of the
+  branch a new branch is made from, passwords included, so in 0.4.0 and 0.4.1 the address a
+  preview held also logged in to the production branch. The workflow and `cimiento up` now reset
+  the preview role's password once before writing its address, and `doctor` reports
+  `PREVIEW_PASSWORD_SHARED` for a preview branch that still has production's. In a project made by
+  0.4.0 or 0.4.1, run `cimiento upgrade`, then `cimiento up`, which gives each existing preview
+  branch its own password and writes its address again. Production's password is never changed.
 - Secrets take `optional: true`: a missing value is skipped, never waited on.
 
 ## 0.4.1

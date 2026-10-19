@@ -606,9 +606,17 @@ One line per decision the spec does not cover, with the reasoning.
   skip it. When cimiento's own link creates that file, it is recorded with what env pull wrote and
   down removes it; a .env.local that existed before the link is the person's and stays (BUG-113).
 - 2026-10-19 Goal 9: completed. Field test 9 in docs/FIELD-TEST-9.md, BUG-105 to 113, v0.4.2 tagged
-  and pushed. 0.4.1 is the only published version whose previews hold a key that can read
-  production: 0.4.0 declares no NEON_API_KEY, and 0.4.1 declares it with sinks ci and hosting.
+  and pushed. 0.4.1 declares NEON_API_KEY with sinks ci and hosting, so its previews hold a key
+  that can read production; 0.4.0 declares none (but see BUG-114 below).
 - 2026-10-19 Goal 9: to prove the workflow writes the address on real hosts unattended, field test 9
   set each test repository's VERCEL_TOKEN or NETLIFY_AUTH_TOKEN Actions secret from the existing
   CLI login, on stdin, never printed, in repositories down deleted with their secrets. This is a
   field test step only; cimiento itself never copies a CLI login into GitHub.
+- 2026-10-19 Goal 9: each Neon preview branch gets a role password of its own (BUG-114). Neon's
+  documentation says a new branch has the same roles and passwords as its parent, so a preview
+  address opened production's endpoint, whose host name is not a secret. The workflow and up
+  compare the preview role's password with production's and, when they match, reset the preview
+  one (POST reset_password, then wait for its operations) before writing the address; production's
+  is never changed. up records the branches it saw with their own password in the ownPassword
+  output, so the check runs once per branch; doctor fails a match as PREVIEW_PASSWORD_SHARED. This
+  makes 0.4.0 a version whose previews hold a credential that can read production, beside 0.4.1.

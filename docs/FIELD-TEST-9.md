@@ -119,7 +119,8 @@ From the first and last line of each run log.
 Ids continue from BUG-104 in `docs/FIELD-TEST-8.md`. Each has a knowledge base entry or `seen:`
 note and a regression test in `test/unit/goal-9.test.ts` that failed on the code before its fix.
 BUG-105 to 111 came from the goal's list, found by those tests; BUG-112 and 113 came from this
-field test.
+field test; BUG-114 came from Neon's documentation after it, when checking whether 0.4.0's
+previews could read production.
 
 | Id | Description | Fix commit |
 |---|---|---|
@@ -132,3 +133,4 @@ field test.
 | BUG-111 | up never said that a project could be upgraded | 5bd11c7 |
 | BUG-112 | Vercel refuses to make a token from the CLI's login, and Netlify has no API to make one, so the workflow's hosting token cannot be made unattended | fd7a4b5 |
 | BUG-113 | The .env.local that vercel link writes when cimiento links the folder stayed after down | d73d92e |
+| BUG-114 | A Neon preview branch kept production's role password, so its address also opened production | 44be0b3 |

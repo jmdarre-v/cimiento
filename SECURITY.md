@@ -37,7 +37,11 @@ GitHub Actions secrets only:
 - The project, team and site ids, which are not secrets.
 
 Previews hold none of these, only their own branch's address (since 0.4.2; 0.4.1 put the Neon key
-in the preview env). Anyone who can push a branch to the repository controls what the workflow
+in the preview env). That address carries a password of the preview branch's own: Neon copies a
+parent branch's role passwords into a new branch, so the workflow and `cimiento up` reset the
+preview role's password before writing the address, and `doctor` fails a preview branch whose
+password still matches production's (0.4.0 and 0.4.1 left it matching, so their previews could log
+in to the production branch). Anyone who can push a branch to the repository controls what the workflow
 runs and so can read these secrets; give push access accordingly.
 
 ## What cimiento does not promise
@@ -55,6 +59,7 @@ runs and so can read these secrets; give push access accordingly.
 
 Only the latest release gets fixes. 0.1.0 and 0.2.0 can lose track of resources during teardown, and
 0.3.0 and older delete some resources by name, so a resource made later with the same name can be
-deleted in place of the one cimiento made; upgrade to 0.4.0 or later. 0.4.1 puts a Neon key that can
-read the production branch in the preview env; upgrade to 0.4.2 and run `cimiento upgrade` in each
-project it made.
+deleted in place of the one cimiento made; upgrade to 0.4.0 or later. 0.4.0 and 0.4.1 give previews a
+database address whose password also opens the production branch, and 0.4.1 also puts a Neon key
+that can read it in the preview env; upgrade to 0.4.2 and run `cimiento upgrade`, then `cimiento
+up`, in each project they made.
