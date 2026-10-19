@@ -212,3 +212,15 @@ failure first.
 5. Record in `docs/FIELD-TEST-8.md` with run-log timings. Update the README capability matrix with what is now proven. Bump to 0.4.1, CHANGELOG, TROUBLESHOOTING, tag v0.4.1, push.
 
 The goal is met when the GOAL REPORT is printed showing every item committed or recorded as stopped with its reason, `pnpm test` and CI green on the last commit, the v0.4.1 tag pushed, git status clean, and every field-test resource confirmed gone with each provider's CLI or API. The report includes the bug table and timings inline; its Next line lists only person steps: `npm publish` of 0.4.1, and freeing a Supabase free slot if the Supabase preview test was blocked.
+
+## Goal 9: close the Goal 8 limits; version 0.4.2
+
+Continue BUG ids from BUG-105, each with a KB entry and a regression test that reproduces the
+failure first.
+
+1. Preview credentials: previews must not hold a key that can read the production branch. The GitHub Actions workflow creates the Neon branch and writes only that branch's connection string as a branch-scoped preview env var in the hosting provider (Vercel gitBranch env, Netlify branch-deploy context); the project-scoped Neon key lives only in GitHub Actions secrets, never in hosting env. On branch delete the workflow removes the branch and its env var. Prove on real Vercel and real Netlify, unattended on existing sessions: a preview reads its own branch, the preview runtime has no Neon API key in its env, deleting the git branch removes both.
+2. `down` removes every local secret cimiento wrote for the project: keychain entries under service cimiento for that project, and `.env.local` values it pulled. Clean up the leftover `cimiento-test-8/NEON_API_KEY`.
+3. Existing projects: add `cimiento upgrade`, which compares the project with the current scaffold for its template, shows each file it would add or change (workflows, route helpers, `.gitignore` lines), never overwrites a file the person changed without asking, applies on confirmation, and commits. `up` reports when an upgrade is available. Test on a project scaffolded by 0.4.0 from the npm tarball.
+4. Record in `docs/FIELD-TEST-9.md` with run-log timings. Update the README capability matrix and the security notes on preview credentials. Bump to 0.4.2, CHANGELOG, TROUBLESHOOTING, tag v0.4.2, push.
+
+The goal is met when the GOAL REPORT is printed showing every item committed, `pnpm test` and CI green on the last commit, the v0.4.2 tag pushed, git status clean, every field-test resource confirmed gone with each provider's CLI or API, and `security find-generic-password` returning nothing for service cimiento with a cimiento-test- account. The report includes the bug table and timings inline; its Next line lists only person steps: `npm publish` of 0.4.2, and the exact `npm deprecate` command for each published version whose previews hold a key that can read production (check 0.4.0 and 0.4.1 in the code, list only those that do).
