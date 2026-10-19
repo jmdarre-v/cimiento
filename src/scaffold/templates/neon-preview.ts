@@ -196,9 +196,11 @@ try {
   const host = hosting === 'netlify' ? netlify : hosting === 'vercel' ? vercel : undefined
   if (!host) throw new Error(\`HOSTING is \${hosting}, not vercel or netlify.\`)
   if (process.env.EVENT === 'delete') {
-    if (process.env[hosting === 'netlify' ? 'NETLIFY_AUTH_TOKEN' : 'VERCEL_TOKEN']) await host.remove()
+    const token = process.env[hosting === 'netlify' ? 'NETLIFY_AUTH_TOKEN' : 'VERCEL_TOKEN']
+    if (token) await host.remove()
     const { name, deleted } = await deletePreviewBranch(branch)
-    console.log(\`Removed the database address of \${branch}. \${deleted ? \`Deleted the Neon branch \${name}.\` : \`No Neon branch \${name}.\`}\`)
+    const address = token ? \`Removed the database address of \${branch}.\` : \`The database address of \${branch} is removed by the next cimiento up.\`
+    console.log(\`\${address} \${deleted ? \`Deleted the Neon branch \${name}.\` : \`No Neon branch \${name}.\`}\`)
   } else {
     const { name, id, created } = await ensurePreviewBranch(branch)
     console.log(created ? \`Created the Neon branch \${name}.\` : \`The Neon branch \${name} already exists.\`)
@@ -287,7 +289,7 @@ export function databaseUrl(): string {
   const branch = previewGitBranch()
   if (branch) {
     throw new Error(
-      \`No database for the preview of \${branch} yet. The preview database workflow in GitHub Actions makes its Neon branch, writes its address for this branch only and deploys it again; open that newer preview once it is ready. This preview never falls back to the production database.\`,
+      \`No database for the preview of \${branch} yet. The preview database workflow in GitHub Actions makes its Neon branch; its address is written for this branch only by that workflow when it has a hosting token, or by cimiento up, and the branch is deployed again. Open that newer preview once it is ready. This preview never falls back to the production database.\`,
     )
   }
   throw new Error('DATABASE_URL is not set. Run cimiento env pull for local development, or cimiento doctor.')

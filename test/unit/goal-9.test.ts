@@ -278,6 +278,7 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
     expect(w.deployments).toEqual([])
     const gone = await runScript(script, { ...env, EVENT: 'delete' })
     expect(gone.code, gone.out).toBe(0)
+    expect(gone.out).toContain('is removed by the next cimiento up')
     expect(w.branches.map((b) => b.name)).toEqual(['main'])
   })
 
