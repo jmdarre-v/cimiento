@@ -1,9 +1,11 @@
-// Preview data isolation on Neon (Goal 7, BUG-88). cimiento is not running when the hosting builds
+// Preview data isolation on Neon (Goal 7, BUG-88; own passwords, BUG-114). cimiento is not running when the hosting builds
 // a preview, so the branches are reconciled by up: every git branch besides production gets a Neon
 // branch of the project, and its addresses are written for that git branch's previews only. A git
 // branch that is gone takes its Neon branch and its env values with it. A branch pushed with plain
 // git has no database until the next up, so its preview fails loudly instead of reaching
-// production.
+// production. A Neon branch keeps the role passwords of the branch it was made from, so each
+// preview branch's role gets its own password before its address is written; otherwise that
+// address would also open production.
 
 import { CimientoError } from '../../core/errors'
 import { previewBranchName, type HostingId } from '../../core/hosting'
@@ -52,9 +54,23 @@ function recorded(ctx: Ctx, spec: ResourceSpec): Record<string, string> {
   }
 }
 
-function outputs(map: Record<string, string>): Record<string, Output> {
+/** The Neon branch ids whose role cimiento saw with a password of its own. */
+function recordedOwn(ctx: Ctx, spec: ResourceSpec): Set<string> {
+  try {
+    return new Set(JSON.parse(ctx.state.resources[spec.id]?.outputs?.ownPassword ?? '[]') as string[])
+  } catch {
+    return new Set()
+  }
+}
+
+function outputs(map: Record<string, string>, own: Set<string>): Record<string, Output> {
   const sorted = Object.fromEntries(Object.entries(map).sort(([a], [b]) => a.localeCompare(b)))
-  return { branches: { value: JSON.stringify(sorted), secret: false }, count: { value: String(Object.keys(sorted).length), secret: false } }
+  const ids = new Set(Object.values(sorted))
+  return {
+    branches: { value: JSON.stringify(sorted), secret: false },
+    count: { value: String(Object.keys(sorted).length), secret: false },
+    ownPassword: { value: JSON.stringify([...own].filter((id) => ids.has(id)).sort()), secret: false },
+  }
 }
 
 async function gitBranches(ctx: Ctx, spec: ResourceSpec, input: Inputs): Promise<string[]> {
@@ -81,14 +97,18 @@ async function neonBranches(ctx: Ctx, spec: ResourceSpec, projectId: string): Pr
   return result.body?.branches ?? []
 }
 
-async function branchUri(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string, pooled: boolean): Promise<string> {
-  const db = await neonCall<{ databases?: { name: string; owner_name: string }[] }>(
-    ctx,
-    spec.id,
-    'GET',
-    `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/databases`,
-  )
-  const first = db.body?.databases?.[0] ?? { name: 'neondb', owner_name: 'neondb_owner' }
+interface Database {
+  name: string
+  owner_name: string
+}
+
+async function database(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string): Promise<Database> {
+  const db = await neonCall<{ databases?: Database[] }>(ctx, spec.id, 'GET', `/projects/${encodeURIComponent(projectId)}/branches/${encodeURIComponent(branchId)}/databases`)
+  return db.body?.databases?.[0] ?? { name: 'neondb', owner_name: 'neondb_owner' }
+}
+
+async function branchUri(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string, pooled: boolean, db?: Database): Promise<string> {
+  const first = db ?? (await database(ctx, spec, projectId, branchId))
   const result = await neonCall<{ uri?: string }>(
     ctx,
     spec.id,
@@ -101,6 +121,47 @@ async function branchUri(ctx: Ctx, spec: ResourceSpec, projectId: string, branch
   }
   ctx.redactor.addValue(uri)
   return uri
+}
+
+/** True when the preview branch's role still has the password of the production branch. */
+async function sharesPassword(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string, productionId: string): Promise<boolean> {
+  const db = await database(ctx, spec, projectId, branchId)
+  const mine = new URL(await branchUri(ctx, spec, projectId, branchId, false, db)).password
+  const theirs = new URL(await branchUri(ctx, spec, projectId, productionId, false, db)).password
+  return mine === theirs
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/** Gives the role of a preview branch a password of its own, and waits until Neon applied it. */
+async function resetPassword(ctx: Ctx, spec: ResourceSpec, projectId: string, branchId: string): Promise<void> {
+  const db = await database(ctx, spec, projectId, branchId)
+  const base = `/projects/${encodeURIComponent(projectId)}`
+  const result = await neonCall<{ operations?: { id: string }[] }>(ctx, spec.id, 'POST', `${base}/branches/${encodeURIComponent(branchId)}/roles/${encodeURIComponent(db.owner_name)}/reset_password`)
+  if (!result.ok) {
+    throw neonError(spec.id, result, { code: 'NEON_API_ERROR', message: `Giving the Neon branch ${branchId} its own password failed`, hint: 'cimiento up retries this safely; until then the address of that preview is not written.' })
+  }
+  for (const op of result.body?.operations ?? []) {
+    for (let i = 0; ; i++) {
+      const read = await neonCall<{ operation?: { status?: string } }>(ctx, spec.id, 'GET', `${base}/operations/${encodeURIComponent(op.id)}`)
+      const status = read.body?.operation?.status
+      if (status === 'finished' || status === 'skipped') break
+      if (status === 'failed' || status === 'error' || status === 'cancelled' || i >= 60) {
+        throw new CimientoError({
+          code: 'NEON_API_ERROR',
+          provider: ID,
+          resource: spec.id,
+          message: `Neon did not finish giving the branch ${branchId} its own password (${status ?? 'no status'}).`,
+          hint: 'cimiento up retries this safely; until then the address of that preview is not written.',
+          retryable: true,
+          needsHuman: false,
+        })
+      }
+      await sleep(2000)
+    }
+  }
 }
 
 async function createBranch(ctx: Ctx, spec: ResourceSpec, projectId: string, name: string): Promise<NeonBranch> {
@@ -131,6 +192,8 @@ export async function ensurePreviewBranches(spec: ResourceSpec, ctx: Ctx): Promi
   const existing = await neonBranches(ctx, spec, input.projectId)
   const was = recorded(ctx, spec)
   const withEnv = new Set(await branchEnvBranches(ctx, spec, input.hosting, input.hostingProjectId, 'DATABASE_URL'))
+  const production = existing.find((b) => b.default)
+  const own = recordedOwn(ctx, spec)
 
   const map: Record<string, string> = {}
   const missing: string[] = []
@@ -139,18 +202,28 @@ export async function ensurePreviewBranches(spec: ResourceSpec, ctx: Ctx): Promi
     const found = existing.find((b) => b.id === was[git]) ?? existing.find((b) => b.name === previewBranchName(git))
     if (found) map[git] = found.id
     if (!found || !withEnv.has(git)) missing.push(git)
+    // Written by 0.4.0 to 0.4.2, or by a workflow without a hosting token: checked once (BUG-114).
+    else if (!own.has(found.id) && production) {
+      if (await sharesPassword(ctx, spec, input.projectId, found.id, production.id)) missing.push(git)
+      else own.add(found.id)
+    }
   }
   // Only branches state recorded are deleted, by id; env values for gone branches are removed too.
   const gone = Object.keys(was).filter((git) => !wanted.includes(git))
   const strayEnv = [...withEnv].filter((git) => !wanted.includes(git))
   if (missing.length === 0 && gone.length === 0 && strayEnv.length === 0) {
-    return { action: 'noop', externalId: input.projectId, outputs: outputs(map) }
+    return { action: 'noop', externalId: input.projectId, outputs: outputs(map, own) }
   }
   if (ctx.dryRun) return { action: 'noop' }
 
   for (const git of missing) {
     const id = map[git] ?? (await createBranch(ctx, spec, input.projectId, previewBranchName(git))).id
     map[git] = id
+    if (production && (await sharesPassword(ctx, spec, input.projectId, id, production.id))) {
+      await resetPassword(ctx, spec, input.projectId, id)
+      ctx.logger.log({ level: 'info', event: 'preview-database', resource: spec.id, message: `Gave the Neon branch ${previewBranchName(git)} its own password, so its address cannot open production.` })
+    }
+    own.add(id)
     const pooled = await branchUri(ctx, spec, input.projectId, id, true)
     const direct = await branchUri(ctx, spec, input.projectId, id, false)
     await setBranchEnv(ctx, spec, input.hosting, input.hostingProjectId, 'DATABASE_URL', pooled, git)
@@ -162,7 +235,7 @@ export async function ensurePreviewBranches(spec: ResourceSpec, ctx: Ctx): Promi
     if (was[git]) await deleteBranch(ctx, spec, input.projectId, was[git])
     ctx.logger.log({ level: 'info', event: 'preview-database', resource: spec.id, message: `Removed the preview database of ${git}, whose git branch is gone.` })
   }
-  return { action: Object.keys(was).length === 0 && missing.length > 0 ? 'created' : 'updated', externalId: input.projectId, outputs: outputs(map) }
+  return { action: Object.keys(was).length === 0 && missing.length > 0 ? 'created' : 'updated', externalId: input.projectId, outputs: outputs(map, own) }
 }
 
 /** Read only: every branch besides production has its Neon branch and its env value. */
@@ -177,7 +250,29 @@ export async function verifyPreviewBranches(spec: ResourceSpec, ctx: Ctx): Promi
   // since 0.4.2 no preview looks its branch up with a Neon key (BUG-105).
   const withEnv = new Set(await branchEnvBranches(ctx, spec, input.hosting, input.hostingProjectId, 'DATABASE_URL'))
   const lacking = wanted.filter((git) => !existing.some((b) => b.name === previewBranchName(git)) || !withEnv.has(git))
-  if (lacking.length === 0) return { ok: true, evidence: `previews of ${wanted.join(', ')} each read their own Neon branch` }
+  if (lacking.length === 0) {
+    // A preview branch whose role still has production's password opens production too (BUG-114).
+    const production = existing.find((b) => b.default)
+    const own = recordedOwn(ctx, spec)
+    const shared: string[] = []
+    for (const git of wanted) {
+      const branch = existing.find((b) => b.name === previewBranchName(git))!
+      if (production && !own.has(branch.id) && (await sharesPassword(ctx, spec, input.projectId, branch.id, production.id))) shared.push(git)
+    }
+    if (shared.length === 0) return { ok: true, evidence: `previews of ${wanted.join(', ')} each read their own Neon branch, with a password of its own` }
+    return {
+      ok: false,
+      error: new CimientoError({
+        code: 'PREVIEW_PASSWORD_SHARED',
+        provider: ID,
+        resource: spec.id,
+        message: `The Neon branches of ${shared.join(', ')} still have the production branch's password, so their preview address also opens the production database.`,
+        hint: 'Run cimiento up: it gives each of those branches its own password and writes its address again. Push the branch again afterwards so the preview is built with it.',
+        retryable: true,
+        needsHuman: false,
+      }),
+    }
+  }
   return {
     ok: false,
     error: new CimientoError({

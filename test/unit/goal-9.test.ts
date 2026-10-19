@@ -112,7 +112,8 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
   })
 
   interface World {
-    branches: { id: string; name: string }[]
+    branches: { id: string; name: string; default?: boolean; password: string }[]
+    resets: string[]
     vercelEnv: { id: string; key: string; value: string; target: string[]; gitBranch?: string; type: string }[]
     deployments: { gitSource: { ref: string; sha: string; repoId: number } }[]
     netlifyEnv: { key: string; values: { id: string; context: string; context_parameter?: string; value: string }[] }[]
@@ -121,7 +122,7 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
 
   /** Neon, Vercel and Netlify as the workflow sees them, on one local port. */
   async function world(): Promise<{ w: World; base: string }> {
-    const w: World = { branches: [{ id: 'br-main', name: 'main' }], vercelEnv: [], deployments: [], netlifyEnv: [], netlifyBuilds: [] }
+    const w: World = { branches: [{ id: 'br-main', name: 'main', default: true, password: 'main-password' }], resets: [], vercelEnv: [], deployments: [], netlifyEnv: [], netlifyBuilds: [] }
     let n = 0
     server = createServer((req, res) => {
       let body = ''
@@ -137,13 +138,28 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
         if (path.startsWith('/neon')) {
           if (req.headers.authorization !== 'Bearer neon-key-fake') return send(401, { message: 'unauthorized' })
           const p = path.replace('/neon', '')
+          // Neon copies the parent's roles with their passwords into a new branch (BUG-114).
+          const reset = /^\/projects\/proj-one\/branches\/([^/]+)\/roles\/neondb_owner\/reset_password$/.exec(p)
+          if (reset && req.method === 'POST') {
+            const branch = w.branches.find((b) => b.id === reset[1])
+            if (!branch) return send(404, {})
+            branch.password = `own-password-${++n}`
+            w.resets.push(branch.id)
+            return send(200, { role: { name: 'neondb_owner', password: branch.password }, operations: [{ id: `op-${n}`, status: 'running' }] })
+          }
+          const op = /^\/projects\/proj-one\/operations\/([^/]+)$/.exec(p)
+          if (op) return send(200, { operation: { id: op[1], status: 'finished' } })
           const m = /^\/projects\/proj-one(?:\/(branches|connection_uri)(?:\/([^/]+)(\/databases)?)?)?$/.exec(p)
           if (!m) return send(404, { message: 'not allowed outside the project' })
           if (!m[1]) return send(200, { project: { id: 'proj-one' } })
-          if (m[1] === 'connection_uri') return send(200, { uri: `postgresql://u:p@ep-${url.searchParams.get('branch_id')}${url.searchParams.get('pooled') === 'true' ? '-pooler' : ''}.example.neon.tech/neondb` })
-          if (!m[2] && req.method === 'GET') return send(200, { branches: w.branches })
+          if (m[1] === 'connection_uri') {
+            const id = url.searchParams.get('branch_id') ?? 'br-main'
+            const password = w.branches.find((b) => b.id === id)?.password
+            return send(200, { uri: `postgresql://neondb_owner:${password}@ep-${id}${url.searchParams.get('pooled') === 'true' ? '-pooler' : ''}.example.neon.tech/neondb` })
+          }
+          if (!m[2] && req.method === 'GET') return send(200, { branches: w.branches.map(({ password: _p, ...b }) => b) })
           if (!m[2] && req.method === 'POST') {
-            const branch = { id: `br-${++n}`, name: input.branch.name }
+            const branch = { id: `br-${++n}`, name: input.branch.name, password: w.branches[0].password }
             w.branches.push(branch)
             return send(201, { branch })
           }
@@ -151,7 +167,7 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
           if (!branch) return send(404, {})
           if (m[3]) return send(200, { databases: [{ name: 'neondb', owner_name: 'neondb_owner' }] })
           if (req.method === 'DELETE') w.branches.splice(w.branches.indexOf(branch), 1)
-          return send(200, { branch })
+          return send(200, { branch: { id: branch.id, name: branch.name } })
         }
         if (path.startsWith('/vercel')) {
           if (req.headers.authorization !== 'Bearer vercel-token-fake' || url.searchParams.get('teamId') !== 'team_fake') return send(403, { error: { message: 'forbidden' } })
@@ -300,6 +316,46 @@ describe('BUG-106: the workflow writes only the branch address into the hosting 
     expect(gone.code, gone.out).toBe(0)
     expect(w.netlifyEnv.flatMap((e) => e.values)).toEqual([])
     expect(w.branches.map((b) => b.name)).toEqual(['main'])
+  })
+  const password = (uri: string) => new URL(uri).password
+
+  it('BUG-114: the address the workflow writes carries the preview branch\'s own password, never the one it copied from production', async () => {
+    const { w, base } = await world()
+    const script = await scripts('vercel')
+    const env = { ...common(base), HOSTING: 'vercel', CIMIENTO_VERCEL_API: `${base}/vercel`, VERCEL_TOKEN: 'vercel-token-fake', VERCEL_PROJECT_ID: 'prj_one', VERCEL_TEAM_ID: 'team_fake' }
+    const push = await runScript(script, { ...env, EVENT: 'push' })
+    expect(push.code, push.out).toBe(0)
+    const preview = w.branches.find((b) => b.name === 'preview/feature-login')!
+    expect(preview.password).not.toBe('main-password')
+    expect(w.vercelEnv.map((e) => password(e.value))).toEqual([preview.password, preview.password])
+    expect(push.out).not.toContain(preview.password)
+    // A second push changes nothing: the branch already has its own password.
+    await runScript(script, { ...env, EVENT: 'push' })
+    expect(w.resets).toEqual([preview.id])
+    expect(w.deployments).toHaveLength(1)
+  })
+
+  it('BUG-114: a branch whose address still carries production\'s password gets its own and its address is written again', async () => {
+    const { w, base } = await world()
+    const script = await scripts('netlify')
+    w.branches.push({ id: 'br-old', name: 'preview/feature-login', password: 'main-password' })
+    w.netlifyEnv = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED'].map((key) => ({ key, values: [{ id: `val-${key}`, context: 'branch', context_parameter: 'feature/login', value: 'postgresql://neondb_owner:main-password@ep-br-old.example.neon.tech/neondb' }] }))
+    const env = { ...common(base), HOSTING: 'netlify', CIMIENTO_NETLIFY_API: `${base}/netlify`, NETLIFY_AUTH_TOKEN: 'netlify-token-fake', NETLIFY_SITE_ID: 'site-one' }
+    const push = await runScript(script, { ...env, EVENT: 'push' })
+    expect(push.code, push.out).toBe(0)
+    expect(w.resets).toEqual(['br-old'])
+    const values = w.netlifyEnv.flatMap((e) => e.values.map((v) => password(v.value)))
+    expect(values).toEqual([w.branches[1].password, w.branches[1].password])
+    expect(w.netlifyBuilds).toEqual(['feature/login'])
+  })
+
+  it('BUG-114: without a hosting token a new branch still gets its own password before cimiento up reads its address', async () => {
+    const { w, base } = await world()
+    const script = await scripts('vercel')
+    const env = { ...common(base), HOSTING: 'vercel', CIMIENTO_VERCEL_API: `${base}/vercel`, VERCEL_TOKEN: '', VERCEL_PROJECT_ID: 'prj_one', VERCEL_TEAM_ID: 'team_fake' }
+    const push = await runScript(script, { ...env, EVENT: 'push' })
+    expect(push.code, push.out).toBe(0)
+    expect(w.branches.find((b) => b.name === 'preview/feature-login')!.password).not.toBe('main-password')
   })
 })
 
@@ -458,5 +514,62 @@ describe('BUG-113: vercel link wrote .env.local with the development values, and
     expect((await cli(cloud, ['up', '--json', '--yes'])).code).toBe(ExitCode.ok)
     expect((await cli(cloud, ['down', '--yes', '--json'])).code).toBe(ExitCode.ok)
     expect(readFileSync(join(dir, '.env.local'), 'utf8')).toBe('MINE="kept"\n')
+  })
+})
+
+/** A branch pushed with plain git, with the ready preview Vercel builds for it. */
+function pushBranch(cloud: FakeCloud, branch: string): void {
+  const sha = cloud.gitSha()
+  cloud.pushedBranches.set(branch, sha)
+  const project = [...cloud.vercelProjects.values()][0]
+  const list = cloud.deployments.get(project.id) ?? []
+  list.unshift({ uid: `dpl_${branch}`, url: `${project.name}-git-preview.vercel.app`, readyState: 'READY', target: null as unknown as string, createdAt: Date.now(), meta: { githubCommitSha: sha, githubCommitRef: branch } })
+  cloud.deployments.set(project.id, list)
+}
+
+describe('BUG-114: a Neon branch keeps the role passwords of the branch it was made from', () => {
+  const password = (uri: string) => new URL(uri).password
+
+  it('cimiento up writes a preview address whose password does not open production', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    const envs = () => cloud.vercelEnv.get(projectId) ?? []
+    const production = password(envs().find((e) => e.key === 'DATABASE_URL' && e.target.includes('production'))!.value)
+    pushBranch(cloud, 'feature/login')
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    const scoped = envs().filter((e) => e.gitBranch === 'feature/login')
+    expect(scoped).toHaveLength(2)
+    for (const e of scoped) expect(password(e.value)).not.toBe(production)
+    expect(up.writer.outText).not.toContain(password(scoped[0].value))
+    const again = await cli(cloud, ['up', '--json', '--yes'])
+    expect(again.writer.outText).toMatch(/"id":"neon\.preview-branches"[^}]*"action":"noop"/)
+  })
+
+  it('a preview made by 0.4.0 to 0.4.2 that shares production\'s password fails doctor, and up gives it its own and writes it again', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    await made(cloud, VERCEL_NEON)
+    pushBranch(cloud, 'feature/login')
+    await cli(cloud, ['up', '--json', '--yes'])
+    // As the earlier versions left it: the branch with production's password, and no record of a reset.
+    const neon = [...cloud.v2.neonProjects.values()][0]
+    const branch = neon.branches.find((b) => b.name === 'preview/feature-login')!
+    branch.password = neon.branches.find((b) => b.default)?.password ?? 'fake-neon-password'
+    const projectId = [...cloud.vercelProjects.values()][0].id
+    for (const e of cloud.vercelEnv.get(projectId) ?? []) if (e.gitBranch === 'feature/login') e.value = e.value.replace(/:[^:@]+@/, `:${branch.password}@`)
+    const path = join(dir, '.cimiento', 'state.json')
+    const state = JSON.parse(readFileSync(path, 'utf8'))
+    delete state.resources['neon.preview-branches'].outputs.ownPassword
+    writeFileSync(path, JSON.stringify(state, null, 2))
+
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    expect(doctor.writer.outText).toContain('PREVIEW_PASSWORD_SHARED')
+    const up = await cli(cloud, ['up', '--json', '--yes'])
+    expect(up.code, up.writer.outText.slice(-800)).toBe(ExitCode.ok)
+    expect(branch.password).not.toBe('fake-neon-password')
+    for (const e of (cloud.vercelEnv.get(projectId) ?? []).filter((x) => x.gitBranch === 'feature/login')) expect(password(e.value)).toBe(branch.password)
+    const after = await cli(cloud, ['doctor', '--json'])
+    expect(after.writer.outText).not.toContain('PREVIEW_PASSWORD_SHARED')
   })
 })

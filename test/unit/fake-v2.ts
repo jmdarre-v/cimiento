@@ -41,7 +41,8 @@ interface FakeNeonProject {
   org_id?: string
   tables: Set<string>
   migrations: string[]
-  branches: { id: string; name: string; default?: boolean }[]
+  /** Neon copies the parent's roles with their passwords into a new branch (BUG-114). */
+  branches: { id: string; name: string; default?: boolean; password?: string }[]
 }
 
 function ok(stdout: string): ExecResult {
@@ -370,10 +371,20 @@ export class FakeV2 {
     if (rest === '/branches' && method === 'POST') {
       const name = (req.body as { branch?: { name?: string } }).branch?.name ?? `br-${this.id('')}`
       if (project.branches.some((b) => b.name === name)) return json(409, { code: '', message: 'branch with that name already exists' })
-      const branch = { id: `br-${this.id('')}`, name }
+      const parent = project.branches.find((b) => b.default) ?? project.branches[0]
+      const branch = { id: `br-${this.id('')}`, name, password: parent?.password ?? 'fake-neon-password' }
       project.branches.push(branch)
       return json(201, { branch, endpoints: [{ id: `ep-${branch.id}`, type: 'read_write' }] })
     }
+    const reset = /^\/branches\/([^/]+)\/roles\/([^/]+)\/reset_password$/.exec(rest)
+    if (reset && method === 'POST') {
+      const branch = project.branches.find((b) => b.id === reset[1])
+      if (!branch) return json(404, { code: '', message: 'branch not found' })
+      branch.password = `fake-neon-password-${this.id('')}`
+      return json(200, { role: { branch_id: branch.id, name: reset[2], password: branch.password }, operations: [{ id: `op-${branch.id}`, action: 'apply_config', status: 'running' }] })
+    }
+    const operation = /^\/operations\/([^/]+)$/.exec(rest)
+    if (operation && method === 'GET') return json(200, { operation: { id: operation[1], status: 'finished' } })
     const branchOne = /^\/branches\/([^/]+)(\/databases)?$/.exec(rest)
     if (branchOne) {
       const branch = project.branches.find((b) => b.id === branchOne[1])
@@ -391,7 +402,8 @@ export class FakeV2 {
       if (branchId && !project.branches.some((b) => b.id === branchId)) return json(404, { code: '', message: 'branch not found' })
       // A branch other than the default has its own compute endpoint, so its own host.
       const host = branchId && branchId !== 'br-main' ? `ep-${project.id}--${branchId}` : `ep-${project.id}`
-      return json(200, { uri: `postgresql://neondb_owner:fake-neon-password@${host}${pooled ? '-pooler' : ''}.us-east-2.aws.neon.tech/neondb?sslmode=require` })
+      const password = project.branches.find((b) => b.id === (branchId ?? 'br-main'))?.password ?? 'fake-neon-password'
+      return json(200, { uri: `postgresql://neondb_owner:${password}@${host}${pooled ? '-pooler' : ''}.us-east-2.aws.neon.tech/neondb?sslmode=require` })
     }
     return json(404, { code: '', message: `fake neon has no route for ${method} ${path}` })
   }

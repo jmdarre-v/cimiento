@@ -296,6 +296,16 @@ Previews share the production database on purpose.
 
 **Looks like:** `every preview deployment reads and writes the production database`
 
+### PREVIEW_PASSWORD_SHARED
+
+A preview's database address also opens production.
+
+**What to do:** Run cimiento up. It gives each of those Neon branches its own password and writes its address again; push the branch again so its preview is built with it.
+
+**Why:** Neon copies the roles of the branch a new branch is made from, passwords included, so the address of a preview branch also logs in to the production branch's endpoint, whose host name is not a secret. The preview database workflow and cimiento up reset the role password of each preview branch before they write its address, and doctor fails a preview branch whose password still matches production's. The production password is never changed.
+
+**Looks like:** `still have the production branch's password`
+
 ### PROJECT_LOCKED
 
 Another cimiento run is working on this project.

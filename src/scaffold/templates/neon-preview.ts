@@ -67,16 +67,50 @@ export async function ensurePreviewBranch(gitBranch) {
   return { name, id: made.branch.id, created: true }
 }
 
+async function database(branchId) {
+  return (await neon(\`/projects/\${projectId()}/branches/\${branchId}/databases\`))?.databases?.[0] ?? { name: 'neondb', owner_name: 'neondb_owner' }
+}
+
+async function address(branchId, db, pooled) {
+  const query = new URLSearchParams({ branch_id: branchId, database_name: db.name, role_name: db.owner_name, pooled: String(pooled) })
+  const uri = (await neon(\`/projects/\${projectId()}/connection_uri?\${query}\`))?.uri
+  if (!uri) throw new Error(\`Neon gave no address for the branch \${branchId}.\`)
+  return uri
+}
+
 /** The pooled and direct addresses of a branch. */
 export async function branchAddresses(branchId) {
-  const db = (await neon(\`/projects/\${projectId()}/branches/\${branchId}/databases\`))?.databases?.[0] ?? { name: 'neondb', owner_name: 'neondb_owner' }
-  const address = async (pooled) => {
-    const query = new URLSearchParams({ branch_id: branchId, database_name: db.name, role_name: db.owner_name, pooled: String(pooled) })
-    const uri = (await neon(\`/projects/\${projectId()}/connection_uri?\${query}\`))?.uri
-    if (!uri) throw new Error(\`Neon gave no address for the branch \${branchId}.\`)
-    return uri
+  const db = await database(branchId)
+  return { DATABASE_URL: await address(branchId, db, true), DATABASE_URL_UNPOOLED: await address(branchId, db, false) }
+}
+
+/**
+ * A new Neon branch keeps the role passwords of the branch it was made from, so the address of a
+ * preview branch would also open production. This gives the preview branch's role its own
+ * password, once: true when it did, false when the password was already its own.
+ */
+export async function ensureOwnPassword(branchId) {
+  await reach()
+  const branches = (await neon(\`/projects/\${projectId()}/branches\`))?.branches ?? []
+  const production = branches.find((b) => b.default)
+  if (!production || production.id === branchId) throw new Error('The Neon project has no production branch besides this one.')
+  const db = await database(branchId)
+  const mine = new URL(await address(branchId, db, false)).password
+  const theirs = new URL(await address(production.id, db, false)).password
+  if (mine !== theirs) return false
+  const reset = await neon(\`/projects/\${projectId()}/branches/\${branchId}/roles/\${encodeURIComponent(db.owner_name)}/reset_password\`, { method: 'POST' })
+  if (!reset) throw new Error(\`Neon has no role \${db.owner_name} on the branch \${branchId}.\`)
+  // The new password works once Neon has finished applying it.
+  for (const op of reset.operations ?? []) {
+    for (let i = 0; ; i++) {
+      const status = (await neon(\`/projects/\${projectId()}/operations/\${op.id}\`))?.operation?.status
+      if (status === 'finished' || status === 'skipped') break
+      if (status === 'failed' || status === 'error' || status === 'cancelled') throw new Error(\`Neon could not give the branch \${branchId} its own password.\`)
+      if (i >= 60) throw new Error(\`Neon took more than two minutes to give the branch \${branchId} its own password.\`)
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+    }
   }
-  return { DATABASE_URL: await address(true), DATABASE_URL_UNPOOLED: await address(false) }
+  return true
 }
 
 /** Removes the Neon branch of a deleted git branch. */
@@ -93,7 +127,7 @@ const SCRIPT = `// Written by cimiento. Run by .github/workflows/preview-databas
 // besides production, and on every deleted branch. It writes only the branch's own addresses into
 // the hosting env, for that git branch only, so a preview never holds a Neon key. The hosting
 // token is optional: without it the workflow only makes and removes the Neon branch.
-import { branchAddresses, deletePreviewBranch, ensurePreviewBranch } from './neon-preview.mjs'
+import { branchAddresses, deletePreviewBranch, ensureOwnPassword, ensurePreviewBranch } from './neon-preview.mjs'
 
 const KEYS = ['DATABASE_URL', 'DATABASE_URL_UNPOOLED']
 const branch = process.env.GIT_BRANCH
@@ -205,15 +239,23 @@ try {
     const { name, id, created } = await ensurePreviewBranch(branch)
     console.log(created ? \`Created the Neon branch \${name}.\` : \`The Neon branch \${name} already exists.\`)
     const token = hosting === 'netlify' ? 'NETLIFY_AUTH_TOKEN' : 'VERCEL_TOKEN'
+    const own = \`Gave \${name} its own database password, so its address cannot open production.\`
     if (!process.env[token]) {
+      // A branch made here has no address yet; an older one's address is cimiento up's to change.
+      if (created && (await ensureOwnPassword(id))) console.log(own)
       // A hosting token is one a person makes; without it cimiento up writes the address.
       console.log(\`No \${token} Actions secret, so the address of \${branch} is written by the next cimiento up. Make a token and run cimiento secret set \${token} to have this workflow write it on every push.\`)
-    } else if ((await host.entries()).length < KEYS.length) {
-      await host.write(await branchAddresses(id))
-      await host.deploy()
-      console.log(\`Wrote the database address for \${branch} only, and deployed it again.\`)
     } else {
-      console.log(\`The database address for \${branch} is already in place.\`)
+      // An address that still carries production's password is written again with the new one.
+      const reset = await ensureOwnPassword(id)
+      if (reset) console.log(own)
+      if (reset || (await host.entries()).length < KEYS.length) {
+        await host.write(await branchAddresses(id))
+        await host.deploy()
+        console.log(\`Wrote the database address for \${branch} only, and deployed it again.\`)
+      } else {
+        console.log(\`The database address for \${branch} is already in place.\`)
+      }
     }
   }
 } catch (err) {

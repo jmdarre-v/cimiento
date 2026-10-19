@@ -281,7 +281,8 @@ describe('BUG-97: a branch the workflow made is a working preview database (sinc
     await made(cloud, VERCEL_NEON)
     cloud.pushedBranches.set('feature/login', cloud.gitSha())
     const project = [...cloud.v2.neonProjects.values()][0]
-    project.branches.push({ id: 'br-by-workflow', name: 'preview/feature-login' })
+    // The workflow gives the branch its own password before writing its address (BUG-114).
+    project.branches.push({ id: 'br-by-workflow', name: 'preview/feature-login', password: 'own-by-workflow' })
     const projectId = [...cloud.vercelProjects.values()][0].id
     // What the preview database workflow writes, for that git branch only (Goal 9, BUG-106).
     cloud.vercelEnv.get(projectId)!.push({ id: 'env_wf', key: 'DATABASE_URL', value: 'postgresql://u:p@ep-br-by-workflow-pooler.example.neon.tech/neondb', target: ['preview'], gitBranch: 'feature/login', type: 'encrypted' })

@@ -190,6 +190,10 @@ export const CORE_EXPLAIN: Record<string, { en: string; es?: string }> = {
     en: 'A preview of one of your branches has no database of its own yet, so it gets none rather than your production data. Run cimiento up to make it, then push the branch again.',
     es: 'Una vista previa de una de tus ramas aun no tiene base de datos propia, asi que no recibe ninguna en lugar de tus datos de produccion. Ejecuta cimiento up para crearla y vuelve a subir la rama.',
   },
+  PREVIEW_PASSWORD_SHARED: {
+    en: 'The database address a preview uses still has the same password as your production database, so anyone who can read the preview could also open production. Run cimiento up to give each preview its own password, then push the branch again.',
+    es: 'La direccion de base de datos que usa una vista previa aun tiene la misma contrasena que tu base de datos de produccion, asi que quien pueda leer la vista previa tambien podria abrir produccion. Ejecuta cimiento up para dar a cada vista previa su propia contrasena y vuelve a subir la rama.',
+  },
   PREVIEW_DATABASE_SHARED: {
     en: 'stack.yaml says previews share the production database, so a preview of unfinished work can change real data. Remove that setting to give previews their own database.',
     es: 'stack.yaml dice que las vistas previas comparten la base de datos de produccion, asi que una vista previa de trabajo sin terminar puede cambiar datos reales. Quita esa opcion para darles su propia base de datos.',
