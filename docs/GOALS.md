@@ -215,6 +215,9 @@ The goal is met when the GOAL REPORT is printed showing every item committed or 
 
 ## Goal 9: close the Goal 8 limits; version 0.4.2
 
+Status: complete. v0.4.2 is tagged and pushed; publishing it to npm is a person step. The
+workflow writing the address itself on a real host waits on a hosting token only a person can make.
+
 Continue BUG ids from BUG-105, each with a KB entry and a regression test that reproduces the
 failure first.
 

@@ -605,3 +605,6 @@ One line per decision the spec does not cover, with the reasoning.
 - 2026-10-19 Goal 9: vercel link --yes pulls the development env into .env.local and has no flag to
   skip it. When cimiento's own link creates that file, it is recorded with what env pull wrote and
   down removes it; a .env.local that existed before the link is the person's and stays (BUG-113).
+- 2026-10-19 Goal 9: completed. Field test 9 in docs/FIELD-TEST-9.md, BUG-105 to 113, v0.4.2 tagged
+  and pushed. 0.4.1 is the only published version whose previews hold a key that can read
+  production: 0.4.0 declares no NEON_API_KEY, and 0.4.1 declares it with sinks ci and hosting.

@@ -53,6 +53,8 @@ runs and so can read these secrets; give push access accordingly.
 
 ## Supported versions
 
-Only the latest release gets fixes. 0.1.0 and 0.2.0 can lose track of resources during teardown,
-and 0.3.0 and older delete some resources by name, so a resource made later with the same name can
-be deleted in place of the one cimiento made; upgrade to 0.4.0 or later.
+Only the latest release gets fixes. 0.1.0 and 0.2.0 can lose track of resources during teardown, and
+0.3.0 and older delete some resources by name, so a resource made later with the same name can be
+deleted in place of the one cimiento made; upgrade to 0.4.0 or later. 0.4.1 puts a Neon key that can
+read the production branch in the preview env; upgrade to 0.4.2 and run `cimiento upgrade` in each
+project it made.

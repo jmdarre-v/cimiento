@@ -1,6 +1,6 @@
 {
   "name": "cimiento",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "One command from nothing to a deployed, wired, verified project skeleton.",
   "license": "MIT",
   "bin": {

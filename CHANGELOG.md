@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.2
+
+Previews hold no Neon key, `down` cleans this machine, and `cimiento upgrade` brings older
+projects along. 0.4.1 puts a Neon key that can read production in the preview env; upgrade.
 
 ### cimiento upgrade
 
