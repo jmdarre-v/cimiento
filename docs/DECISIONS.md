@@ -566,3 +566,6 @@ One line per decision the spec does not cover, with the reasoning.
   CIMIENTO_FIELD_SUPABASE_ORG naming a paid organization the person chose; otherwise it prints a
   blocked record and exits 0. It never pauses or deletes a project it did not create, and makes
   nothing but cimiento-test-8s, which it takes down at the end.
+- 2026-10-18 Goal 8: completed. Field test 8 in docs/FIELD-TEST-8.md, BUG-93 to 104, v0.4.1 tagged
+  and pushed; the Supabase preview field test stopped at the free limit. npm publish of 0.4.1 is a
+  person step.

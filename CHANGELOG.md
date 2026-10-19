@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
+
+Closes the limits 0.4.0 left: Neon previews without `cimiento up`, the commit stamp on CLI deploys,
+and a noop `up` that took 90 s.
 
 ### Preview data
 
