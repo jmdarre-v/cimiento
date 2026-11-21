@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- `cimiento doctor` in a project without `stack.yaml` also reads the variable names in
+  `.env.example` (never the values) as evidence: `SUPABASE_*`, `RESEND_*`, `STRIPE_*` and the like,
+  and `DATABASE_URL` with a neon.tech host in a comment for Neon (#3).
 - `cimiento explain neon.tool.neonctl` and `cimiento explain netlify.tool.netlify` answer in English
   and Spanish; both said nothing was written (BUG-116).
 

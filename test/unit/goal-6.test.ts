@@ -507,6 +507,45 @@ describe('BUG-80: doctor in an existing project without stack.yaml detects provi
     expect(readdirSync(dir).sort()).toEqual(before)
     expect(cloud.httpCalls.filter((c) => /^(POST|PUT|PATCH|DELETE) /.test(c))).toEqual([])
   })
+
+  it('reads the variable names in .env.example as evidence, never a value, and writes nothing', async () => {
+    const { mkdirSync, writeFileSync, readdirSync } = await import('node:fs')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(
+      join(dir, '.env.example'),
+      [
+        '\uFEFF# Database: the pooled address from the Neon console, host ends in .neon.tech',
+        'DATABASE_URL=',
+        'NEXT_PUBLIC_SUPABASE_URL=https://fake-value-ref.supabase.co',
+        'export SUPABASE_SERVICE_ROLE_KEY="fake-service-role-value"',
+        'RESEND_API_KEY\r',
+        'NODE_ENV=development',
+        '',
+      ].join('\n'),
+    )
+    const cloud = new FakeCloud()
+    const before = readdirSync(dir).sort()
+    const doctor = await cli(cloud, ['doctor', '--json'])
+    expect(doctor.code, doctor.writer.outText).toBe(ExitCode.ok)
+    const report = doctor.writer.jsonObjects().pop() as { detected: { provider: string; slot: string; evidence: string[] }[] }
+    const evidence = Object.fromEntries(report.detected.map((d) => [d.provider, d.evidence]))
+    expect(Object.keys(evidence).sort()).toEqual(['neon', 'resend', 'supabase'])
+    expect(evidence.supabase).toEqual(['.env.example names NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY'])
+    expect(evidence.neon).toEqual(['.env.example names DATABASE_URL, with a neon.tech host in a comment'])
+    expect(evidence.resend).toEqual(['.env.example names RESEND_API_KEY'])
+    expect(doctor.writer.outText).not.toContain('fake-value-ref')
+    expect(doctor.writer.outText).not.toContain('fake-service-role-value')
+    expect(readdirSync(dir).sort()).toEqual(before)
+  })
+
+  it('DATABASE_URL alone, with no neon.tech comment, is not evidence of Neon', async () => {
+    const { mkdirSync, writeFileSync } = await import('node:fs')
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, '.env.example'), '# any Postgres works\nDATABASE_URL=\n')
+    const doctor = await cli(new FakeCloud(), ['doctor', '--json'])
+    const report = doctor.writer.jsonObjects().pop() as { detected: { provider: string }[] }
+    expect(report.detected.map((d) => d.provider)).toEqual([])
+  })
 })
 
 // Item 14, tests at operational boundaries, where each one lives:

@@ -1,6 +1,6 @@
 // cimiento doctor in a project with no stack.yaml (Goal 6, BUG-80). It only reads: package.json,
-// the hosting link files, the Supabase folder and the git remote say which providers the project
-// uses, and each provider's own detect says whether its tool is installed and logged in. Nothing
+// the variable names in .env.example, the hosting link files, the Supabase folder and the git
+// remote say which providers the project uses, and each provider's own detect says whether its tool is installed and logged in. Nothing
 // is written, no stack.yaml and no state; cimiento init is the step that writes.
 
 import { existsSync, readFileSync } from 'node:fs'
@@ -35,6 +35,43 @@ const PACKAGES: Record<string, { provider: string; slot: string }> = {
   '@marsidev/react-turnstile': { provider: 'turnstile', slot: 'bot_protection' },
 }
 
+/** Variable names in .env.example that say a provider is in use. */
+const ENV_NAMES: { pattern: RegExp; provider: string; slot: string }[] = [
+  { pattern: /^(NEXT_PUBLIC_)?SUPABASE_/, provider: 'supabase', slot: 'database' },
+  { pattern: /^NEON_/, provider: 'neon', slot: 'database' },
+  { pattern: /^INNGEST_/, provider: 'inngest', slot: 'jobs' },
+  { pattern: /^RESEND_/, provider: 'resend', slot: 'email' },
+  { pattern: /^(NEXT_PUBLIC_)?STRIPE_/, provider: 'stripe', slot: 'payments' },
+  { pattern: /^(NEXT_PUBLIC_)?POSTHOG_/, provider: 'posthog', slot: 'analytics' },
+  { pattern: /^ANTHROPIC_/, provider: 'anthropic', slot: 'ai' },
+  { pattern: /^(NEXT_PUBLIC_)?TURNSTILE_/, provider: 'turnstile', slot: 'bot_protection' },
+]
+
+/**
+ * The variable names in .env.example and whether a comment names a neon.tech host. Everything
+ * after = is skipped unread, so no value ever reaches the output, even a real one left there.
+ */
+function envExample(cwd: string): { names: string[]; neonComment: boolean } {
+  let text: string
+  try {
+    text = readFileSync(join(cwd, '.env.example'), 'utf8')
+  } catch {
+    return { names: [], neonComment: false }
+  }
+  const names: string[] = []
+  let neonComment = false
+  for (const line of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith('#')) {
+      if (/\bneon\.tech\b/i.test(trimmed)) neonComment = true
+      continue
+    }
+    const name = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*(?:=|$)/.exec(trimmed)?.[1]
+    if (name && !names.includes(name)) names.push(name)
+  }
+  return { names, neonComment }
+}
+
 function readJson(path: string): Record<string, unknown> | undefined {
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>
@@ -57,6 +94,17 @@ async function findProviders(session: Session): Promise<{ found: Found[]; name: 
     const hit = PACKAGES[dep]
     if (hit) add(hit.provider, hit.slot, `package.json depends on ${dep}`)
   }
+  const env = envExample(cwd)
+  const named = new Map<string, { slot: string; names: string[] }>()
+  for (const name of env.names) {
+    const hit = ENV_NAMES.find((e) => e.pattern.test(name))
+    if (!hit) continue
+    const entry = named.get(hit.provider) ?? { slot: hit.slot, names: [] }
+    entry.names.push(name)
+    named.set(hit.provider, entry)
+  }
+  for (const [provider, { slot, names }] of named) add(provider, slot, `.env.example names ${names.join(', ')}`)
+  if (env.neonComment && env.names.includes('DATABASE_URL')) add('neon', 'database', '.env.example names DATABASE_URL, with a neon.tech host in a comment')
   if (existsSync(join(cwd, '.vercel', 'project.json'))) add('vercel', 'hosting', '.vercel/project.json links this folder to a Vercel project')
   if (existsSync(join(cwd, 'vercel.json'))) add('vercel', 'hosting', 'vercel.json')
   if (existsSync(join(cwd, 'netlify.toml'))) add('netlify', 'hosting', 'netlify.toml')

@@ -624,3 +624,7 @@ One line per decision the spec does not cover, with the reasoning.
   before changing it, polling every 2 s for at most two minutes; Neon answers 423 to a role change
   while they run (BUG-115, field test 9). The v0.4.2 tag was moved to the commit with BUG-114 and
   BUG-115 fixed, by the owner's decision; the first tag was never published to npm.
+- 2026-11-21 Issue 3: doctor without stack.yaml reads only the names in .env.example, never what
+  follows =, and comments only for a neon.tech host. DATABASE_URL counts as Neon only with that
+  comment; any Postgres uses the name. Names are matched by provider prefix (SUPABASE_, RESEND_ and
+  the rest, with or without NEXT_PUBLIC_).
