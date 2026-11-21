@@ -26,6 +26,7 @@ import { RunLog } from '../core/runlog'
 import { upgradeLegacy, type LegacyOutcome, type LegacyUnresolved } from '../core/legacy'
 import { renderPersonStep, STEP_WORDS, type PersonStep } from '../core/person'
 import { flagBool, flagList, flagString, type ParsedArgs } from './args'
+import { t } from './i18n'
 import { Printer, type Writer } from './output'
 
 export interface CliDeps {
@@ -307,9 +308,9 @@ async function openUrlWith(io: Io, url: string): Promise<void> {
 
 /** A lock left by a run that no longer runs, said out loud before it is taken over (BUG-72). */
 export function reportStaleLock(session: Session, stale: StaleLock): void {
-  const message = `A lock left by cimiento ${stale.command} (process ${stale.pid}, started ${stale.startedAt}) was stale: that run is gone. Taking it over. Run cimiento doctor if that run was interrupted.`
-  if (session.json) session.printer.emit({ event: 'stale-lock', pid: stale.pid, command: stale.command, startedAt: stale.startedAt, message })
-  else session.printer.line(message)
+  const vars = { command: stale.command, pid: stale.pid, startedAt: stale.startedAt }
+  if (session.json) session.printer.emit({ event: 'stale-lock', ...vars, message: t('en', 'staleLock', vars) })
+  else session.printer.line(t(session.lang, 'staleLock', vars))
 }
 
 /**

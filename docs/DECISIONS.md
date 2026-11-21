@@ -624,3 +624,6 @@ One line per decision the spec does not cover, with the reasoning.
   before changing it, polling every 2 s for at most two minutes; Neon answers 423 to a role change
   while they run (BUG-115, field test 9). The v0.4.2 tag was moved to the commit with BUG-114 and
   BUG-115 fixed, by the owner's decision; the first tag was never published to npm.
+- 2026-11-21 Issue 1: the orphan question, its choices, the line saying what was done with them and
+  the stale lock notice follow --lang. The stale-lock event in --json keeps its message in English,
+  like every other --json message, so scripts that read it do not change with the language.

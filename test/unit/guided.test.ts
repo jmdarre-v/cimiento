@@ -3,9 +3,9 @@
 // Spanish with --lang es, projectsDir defaulting to ~/Code.nosync with the reason, and the
 // designer-site template with its design/ folder.
 
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { run } from '../../src/cli/index'
 import { messageIn, messageKeys, nextAction, t } from '../../src/cli/i18n'
@@ -169,6 +169,61 @@ describe('guided failures and words', () => {
   it('the default folder sentence names ~/Code.nosync, and the default is that folder', () => {
     expect(t('en', 'folderWhy')).toMatch(/^~\/Code\.nosync is the default because/)
     expect(join(homedir(), 'Code.nosync')).toMatch(/Code\.nosync$/)
+  })
+})
+
+describe('the orphan question and the stale lock notice in Spanish (issue 1)', () => {
+  async function designer(cloud: FakeCloud): Promise<string> {
+    const dir = join(root, 'mi-sitio')
+    const made = await run(['new', 'mi-sitio', '--preset', 'designer', '--json', '--yes', '--dir', dir], { io: cloud, cwd: root, writer: new CaptureWriter(), interactive: false, onManual: personDoesIt })
+    expect(made).toBe(ExitCode.ok)
+    return dir
+  }
+
+  it('asks what happens to resources stack.yaml no longer selects, and says what it did, in Spanish', async () => {
+    const cloud = new FakeCloud({ ghDeleteScope: true })
+    const dir = await designer(cloud)
+    const file = join(dir, 'stack.yaml')
+    writeFileSync(file, readFileSync(file, 'utf8').replace(/hosting: vercel/, 'hosting: netlify'))
+    const asked: { question: string; labels: string[] }[] = []
+    const writer = new CaptureWriter()
+    const code = await run(['up', '--yes', '--lang', 'es'], {
+      io: cloud,
+      cwd: dir,
+      writer,
+      interactive: true,
+      onManual: personDoesIt,
+      ask: async () => 'y',
+      choose: async (question, options) => {
+        asked.push({ question, labels: options.map((o) => o.label) })
+        return 'retain'
+      },
+    })
+    expect(code, writer.outText.slice(-600)).toBe(ExitCode.ok)
+    expect(asked[0].question).toBe(t('es', 'orphansQuestion', { ids: 'vercel.deployment, vercel.project' }))
+    expect(asked[0].labels).toEqual([t('es', 'orphanRetain'), t('es', 'orphanRelease'), t('es', 'orphanDestroy')])
+    expect(writer.outText).toContain('Conservados: vercel.deployment, vercel.project')
+    expect(writer.outText).not.toContain('Retained:')
+  })
+
+  it('reports a stale lock in Spanish, and keeps the English message in --json', async () => {
+    const { lockPath } = await import('../../src/core/lock')
+    const { hostname } = await import('node:os')
+    const cloud = new FakeCloud()
+    const dir = await designer(cloud)
+    const lock = { pid: 2147483646, host: hostname(), command: 'up', startedAt: '2026-10-18T00:00:00.000Z' }
+    const vars = { command: 'up', pid: lock.pid, startedAt: lock.startedAt }
+    mkdirSync(dirname(lockPath(dir)), { recursive: true })
+    writeFileSync(lockPath(dir), JSON.stringify(lock))
+    const writer = new CaptureWriter()
+    expect(await run(['up', '--yes', '--lang', 'es'], { io: cloud, cwd: dir, writer, interactive: false, onManual: personDoesIt })).toBe(ExitCode.ok)
+    expect(writer.outText).toContain(t('es', 'staleLock', vars))
+    expect(writer.outText).toContain('estaba vencido')
+
+    writeFileSync(lockPath(dir), JSON.stringify(lock))
+    const json = new CaptureWriter()
+    expect(await run(['up', '--yes', '--json', '--lang', 'es'], { io: cloud, cwd: dir, writer: json, interactive: false, onManual: personDoesIt })).toBe(ExitCode.ok)
+    expect(json.jsonObjects().find((o) => (o as { event?: string }).event === 'stale-lock')).toMatchObject({ ...vars, message: t('en', 'staleLock', vars) })
   })
 })
 

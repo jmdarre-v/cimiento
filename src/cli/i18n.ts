@@ -66,6 +66,26 @@ const MESSAGES = {
     en: 'Newer versions are available: {list}. Upgrade them now?',
     es: 'Hay versiones nuevas: {list}. Actualizarlas ahora?',
   },
+  orphansQuestion: {
+    en: 'stack.yaml no longer selects {ids}. What should happen to them?',
+    es: 'stack.yaml ya no selecciona {ids}. Que debe pasar con ellos?',
+  },
+  orphanRetain: {
+    en: 'Retain: keep them and keep tracking them; down deletes them later',
+    es: 'Conservar: mantenerlos y seguir controlandolos; down los borra despues',
+  },
+  orphanRelease: {
+    en: 'Release: stop tracking them and leave them where they are',
+    es: 'Soltar: dejar de controlarlos y dejarlos donde estan',
+  },
+  orphanDestroy: { en: 'Destroy: delete them now', es: 'Borrar: eliminarlos ahora' },
+  orphansRetained: { en: 'Retained: {ids}', es: 'Conservados: {ids}' },
+  orphansReleased: { en: 'Released: {ids}', es: 'Soltados: {ids}' },
+  orphansDestroyed: { en: 'Destroyed: {ids}', es: 'Borrados: {ids}' },
+  staleLock: {
+    en: 'A lock left by cimiento {command} (process {pid}, started {startedAt}) was stale: that run is gone. Taking it over. Run cimiento doctor if that run was interrupted.',
+    es: 'Un bloqueo que dejo cimiento {command} (proceso {pid}, iniciado {startedAt}) estaba vencido: esa ejecucion ya no existe. Lo tomo. Ejecuta cimiento doctor si esa ejecucion se interrumpio.',
+  },
 } as const
 
 export type MessageKey = keyof typeof MESSAGES
