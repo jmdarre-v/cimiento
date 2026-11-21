@@ -389,10 +389,10 @@ async function settleOrphans(session: Session, project: ProjectSession): Promise
   let choice = flag as OrphanChoice | undefined
   const choose = sessionChooser(session)
   if (!choice && session.interactive && choose) {
-    choice = (await choose(`stack.yaml no longer selects ${ids.join(', ')}. What should happen to them?`, [
-      { value: 'retain', label: 'Retain: keep them and keep tracking them; down deletes them later' },
-      { value: 'release', label: 'Release: stop tracking them and leave them where they are' },
-      { value: 'destroy', label: 'Destroy: delete them now' },
+    choice = (await choose(t(session.lang, 'orphansQuestion', { ids: ids.join(', ') }), [
+      { value: 'retain', label: t(session.lang, 'orphanRetain') },
+      { value: 'release', label: t(session.lang, 'orphanRelease') },
+      { value: 'destroy', label: t(session.lang, 'orphanDestroy') },
     ])) as OrphanChoice
   }
   if (!choice) {
@@ -444,6 +444,6 @@ async function settleOrphans(session: Session, project: ProjectSession): Promise
   }
   writeProjectState(project.ctx.cwd, state)
   if (session.json) session.printer.emit({ event: 'orphans', choice, ids })
-  else session.printer.line(`${choice === 'retain' ? 'Retained' : choice === 'release' ? 'Released' : 'Destroyed'}: ${ids.join(', ')}`)
+  else session.printer.line(t(session.lang, choice === 'retain' ? 'orphansRetained' : choice === 'release' ? 'orphansReleased' : 'orphansDestroyed', { ids: ids.join(', ') }))
   return true
 }

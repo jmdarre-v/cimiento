@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- With `--lang es`, `cimiento up` asks in Spanish what happens to resources `stack.yaml` no longer
+  selects, says in Spanish what it did with them, and reports a stale lock in Spanish (#1).
 - `cimiento explain neon.tool.neonctl` and `cimiento explain netlify.tool.netlify` answer in English
   and Spanish; both said nothing was written (BUG-116).
 
