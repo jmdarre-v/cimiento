@@ -514,11 +514,11 @@ describe('BUG-80: doctor in an existing project without stack.yaml detects provi
     writeFileSync(
       join(dir, '.env.example'),
       [
-        '# Database: the pooled address from the Neon console, host ends in .neon.tech',
+        '\uFEFF# Database: the pooled address from the Neon console, host ends in .neon.tech',
         'DATABASE_URL=',
         'NEXT_PUBLIC_SUPABASE_URL=https://fake-value-ref.supabase.co',
         'export SUPABASE_SERVICE_ROLE_KEY="fake-service-role-value"',
-        'RESEND_API_KEY',
+        'RESEND_API_KEY\r',
         'NODE_ENV=development',
         '',
       ].join('\n'),

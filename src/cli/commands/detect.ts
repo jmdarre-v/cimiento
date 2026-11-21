@@ -60,7 +60,7 @@ function envExample(cwd: string): { names: string[]; neonComment: boolean } {
   }
   const names: string[] = []
   let neonComment = false
-  for (const line of text.split(/\r?\n/)) {
+  for (const line of text.replace(/^\uFEFF/, '').split(/\r?\n/)) {
     const trimmed = line.trim()
     if (trimmed.startsWith('#')) {
       if (/\bneon\.tech\b/i.test(trimmed)) neonComment = true
