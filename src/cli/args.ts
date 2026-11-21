@@ -11,6 +11,7 @@ export interface ParsedArgs {
 const GLOBAL_BOOLEANS = new Set([
   'guided',
   'json',
+  'list',
   'yes',
   'allow-billing',
   'help',

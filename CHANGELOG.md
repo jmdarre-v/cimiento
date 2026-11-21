@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- `cimiento explain --list` prints every error code and the resource ids the selected providers
+  produce, with `--json`; it refuses a resource id or error code given beside `--list` (#2).
 - `cimiento explain neon.tool.neonctl` and `cimiento explain netlify.tool.netlify` answer in English
   and Spanish; both said nothing was written (BUG-116).
 

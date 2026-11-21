@@ -624,3 +624,7 @@ One line per decision the spec does not cover, with the reasoning.
   before changing it, polling every 2 s for at most two minutes; Neon answers 423 to a role change
   while they run (BUG-115, field test 9). The v0.4.2 tag was moved to the commit with BUG-114 and
   BUG-115 fixed, by the owner's decision; the first tag was never published to npm.
+- 2026-10-19 explain --list reads the manifest and collects static provider and wiring specs with
+  empty state, never project state or live provider operations. JSON has sorted, duplicate-free
+  errorCodes and resourceIds arrays; without stack.yaml only error codes are listed. Normal command
+  run logging stays unchanged.

@@ -54,6 +54,7 @@ Usage
   cimiento domain add <domain>                   put your own domain on the site, with auth URLs and Turnstile following
   cimiento domain remove [domain]                take it off again; the default address keeps working
   cimiento explain <resource|error>              plain language
+  cimiento explain --list                        list available error codes and selected resource ids
 
 Flags
   --json                 machine readable output, one object or one event per line

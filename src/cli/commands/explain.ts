@@ -1,19 +1,20 @@
 // cimiento explain <resource|error>. Plain language, with the knowledge base fix when the key is
 // an error code.
 
-import { ExitCode } from '../../core/errors'
-import { manifestExists } from '../../manifest'
+import { ERROR_CODES, ExitCode } from '../../core/errors'
+import { emptyProjectState } from '../../core/state'
+import { loadManifest, manifestExists } from '../../manifest'
 import { lookupCode } from '../../kb'
-import { explainKey } from '../../registry'
+import { buildProviders, collectSpecs, explainKey } from '../../registry'
+import { flagBool } from '../args'
 import { openProject, type Session } from '../context'
 
 export async function explainCommand(session: Session): Promise<number> {
+  const list = flagBool(session.args.flags, 'list')
   const key = session.args.positionals[0]
-  if (!key) {
-    if (session.json) session.printer.emit({ ok: false, command: 'explain', message: 'explain needs a resource id or an error code' })
-    else session.printer.line('Usage: cimiento explain <resource id or error code> [--lang es]')
-    return ExitCode.failed
-  }
+  if (list && key) return usage(session, `explain --list takes no resource id or error code, and ${key} was given`)
+  if (list) return listKeys(session)
+  if (!key) return usage(session, 'explain needs a resource id or an error code')
 
   const manifest = manifestExists(session.cwd) ? safeManifest(session) : undefined
   const text = explainKey(key, session.lang, manifest)
@@ -45,10 +46,38 @@ export async function explainCommand(session: Session): Promise<number> {
   return ExitCode.ok
 }
 
+function usage(session: Session, message: string): number {
+  if (session.json) session.printer.emit({ ok: false, command: 'explain', message })
+  else session.printer.line('Usage: cimiento explain <resource id or error code> [--lang es], or cimiento explain --list [--json]')
+  return ExitCode.failed
+}
+
 function safeManifest(session: Session) {
   try {
     return openProject(session, { dryRun: true }).manifest
   } catch {
     return undefined
   }
+}
+
+/** Listing needs only the manifest and static specs, never state, logins or live probes. */
+function listKeys(session: Session): number {
+  const errorCodes = [...new Set(ERROR_CODES)].sort()
+  const manifest = manifestExists(session.cwd) ? loadManifest(session.cwd).manifest : undefined
+  const resourceIds = manifest
+    ? [...new Set(collectSpecs(manifest, emptyProjectState(), buildProviders(manifest)).map((spec) => spec.id))].sort()
+    : []
+  if (session.json) {
+    session.printer.emit({ ok: true, command: 'explain', errorCodes, resourceIds })
+  } else {
+    session.printer.line(session.lang === 'es' ? 'Codigos de error:' : 'Error codes:')
+    for (const code of errorCodes) session.printer.line(`  ${code}`)
+    if (manifest) {
+      session.printer.line(session.lang === 'es' ? '\nRecursos seleccionados:' : '\nSelected resource ids:')
+      for (const id of resourceIds) session.printer.line(`  ${id}`)
+    } else {
+      session.printer.line(session.lang === 'es' ? '\nNo hay stack.yaml en esta carpeta.' : '\nNo stack.yaml in this folder.')
+    }
+  }
+  return ExitCode.ok
 }

@@ -309,6 +309,7 @@ Rules:
 | `cimiento down` | Destroys everything in state across providers, in reverse dependency order, after typed confirmation of the project name |
 | `cimiento domain add <domain>` / `domain remove` | Sets or clears `domain` in `stack.yaml` and applies only what follows from it: the domain on the hosting project, Supabase Auth URLs, Turnstile widget domains, and a check that the domain serves; a missing DNS record is a person step naming it (v2) |
 | `cimiento explain <resource|error>` | Plain-language explanation, `--lang es` |
+| `cimiento explain --list` | Every error code and the resource ids selected by `stack.yaml`, sorted and duplicate-free; `--json` emits `errorCodes` and `resourceIds`. Without a manifest, lists error codes only. Reads no project state and touches no provider account. |
 
 Global flags: `--guided`, `--json`, `--lang en|es`, `--yes` (skip confirmation, refused when billable items exist unless `--allow-billing`), `--only <provider>`, `--skip <provider>`.
 
